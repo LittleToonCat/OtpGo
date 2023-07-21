@@ -1,0 +1,22 @@
+dclass methods {
+	set1(uint32);
+	set2(int16 x);
+	set3(uint8 y);
+	set4(float64 t);
+	int8 t_int8;
+    int16 t_int16;
+};
+
+dclass constraints1 {
+	set1(uint8(0-100) v);
+};
+
+dclass constraints2 {
+    set2(string(8-16) msg);
+};
+
+dclass arrays {
+    set1(int8[]);
+    set2(int8[12]);
+    set3(int8[0-5]);
+}
