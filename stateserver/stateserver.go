@@ -6,6 +6,7 @@ import (
 	. "otpgo/util"
 	"fmt"
 	"github.com/apex/log"
+	dc "github.com/LittleToonCat/dcparser-go"
 )
 
 type StateServer struct {
@@ -13,7 +14,9 @@ type StateServer struct {
 
 	config  core.Role
 	log     *log.Entry
+	control Channel_t
 	objects map[Doid_t]*DistributedObject
+	mainObj *DistributedObject;
 }
 
 func NewStateServer(config core.Role) *StateServer {
@@ -28,11 +31,48 @@ func NewStateServer(config core.Role) *StateServer {
 	ss.Init(ss)
 
 	if Channel_t(config.Control) != INVALID_CHANNEL {
-		ss.SubscribeChannel(Channel_t(config.Control))
+		ss.control = Channel_t(config.Control)
+		ss.SubscribeChannel(Channel_t(ss.control))
 		ss.SubscribeChannel(BCHAN_STATESERVERS)
 	}
 
+	ss.registerObjects(config.Objects)
+
 	return ss
+}
+
+func (s *StateServer) registerObjects(objects []struct{ID int; Class string}) {
+	// Create an ObjectServer object to rep ourself.
+	dclass := core.DC.Get_class_by_name("ObjectServer")
+	if (dclass != dc.SwigcptrDCClass(0)) {
+		dg := NewDatagram()
+		dg.AddString("ObjectServer") // setName
+		dg.AddUint32(uint32(core.DC.Get_hash())) // setDcHash
+
+		dgi := NewDatagramIterator(&dg)
+		if ok, obj, err := NewDistributedObject(s, Doid_t(s.control), 0, 0, dclass, dgi, false, true); ok {
+			s.mainObj = obj
+		} else {
+			s.log.Errorf("Unable to create object; %s!", err.Error())
+		}
+	}
+
+	for _, obj := range objects {
+		dclass := core.DC.Get_class_by_name(obj.Class)
+		// Check if the method returns a NULL pointer
+		if dclass == dc.SwigcptrDCClass(0) {
+			s.log.Fatalf("For Configured class %d, class %s does not exist!", obj.ID, obj.Class)
+			return
+		}
+
+		// TODO: Configurable field values.  We have functions that parses
+		// human formatted data into binary.
+		requiredFields := make(FieldValues)
+		ramFields := make(FieldValues)
+
+		do := NewDistributedObjectWithData(s, Doid_t(obj.ID), 0, 0, dclass, requiredFields, ramFields)
+		s.objects[Doid_t(obj.ID)] = do
+	}
 }
 
 func (s *StateServer) handleGenerate(dgi *DatagramIterator, other bool) {
@@ -52,7 +92,7 @@ func (s *StateServer) handleGenerate(dgi *DatagramIterator, other bool) {
 	}
 
 	dclass := core.DC.Get_class(int(dc))
-	if ok, obj, err := NewDistributedObject(s, do, parent, zone, dclass, dgi, other); ok {
+	if ok, obj, err := NewDistributedObject(s, do, parent, zone, dclass, dgi, other, false); ok {
 		s.objects[do] = obj
 	} else {
 		s.log.Errorf("Unable to create object; %s!", err.Error())
@@ -96,6 +136,21 @@ func (s *StateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		s.handleGenerate(dgi, true)
 	case STATESERVER_DELETE_AI_OBJECTS:
 		s.handleDelete(dgi, sender)
+	case STATESERVER_OBJECT_GET_ALL:
+		context := dgi.ReadUint32()
+		dgi.ReadDoid()
+
+		if s.mainObj == nil {
+			s.log.Warn("Got GetAI but no main object.  Did you mean to send it to an object?")
+			return
+		}
+
+		dg = NewDatagram()
+		dg.AddServerHeader(sender, Channel_t(s.control), STATESERVER_OBJECT_GET_ALL_RESP)
+		dg.AddUint32(context)
+		s.mainObj.appendRequiredData(dg, false, false)
+		s.mainObj.appendOtherData(dg, false, false)
+		s.RouteDatagram(dg)
 	default:
 		s.log.Warnf("Received unknown msgtype=%d", msgType)
 	}

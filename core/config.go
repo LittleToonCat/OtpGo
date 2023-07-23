@@ -41,6 +41,10 @@ type Role struct {
 
 	// STATESERVER
 	Control int
+	Objects []struct {
+		ID        int
+		Class     string
+	}
 }
 
 type ServerConfig struct {

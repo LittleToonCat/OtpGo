@@ -1,13 +1,15 @@
 package stateserver
 
 import (
-	dc "github.com/LittleToonCat/dcparser-go"
+	"fmt"
 	"otpgo/messagedirector"
 	. "otpgo/util"
-	"fmt"
-	"github.com/apex/log"
 	"sort"
+	"strings"
 	"sync"
+
+	dc "github.com/LittleToonCat/dcparser-go"
+	"github.com/apex/log"
 )
 
 type FieldValues map[dc.DCField]dc.Vector_uchar
@@ -36,11 +38,46 @@ type DistributedObject struct {
 	zoneObjects map[Zone_t][]Doid_t
 }
 
-// TODO for database support
-func NewDistributedObjectWithData() {}
+func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
+	zone Zone_t, dclass dc.DCClass, requiredFields FieldValues,
+	ramFields FieldValues) *DistributedObject {
+	do := &DistributedObject{
+		stateserver:    ss,
+		do:             doid,
+		zone:           0,
+		dclass:         dclass,
+		zoneObjects:    make(map[Zone_t][]Doid_t),
+		requiredFields: requiredFields,
+		ramFields:      ramFields,
+		log: log.WithFields(log.Fields{
+			"name": fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
+		}),
+	}
+
+	do.Init(do)
+
+	do.log.Debug("Object instantiated ...")
+
+	do.SubscribeChannel(Channel_t(doid))
+	do.Lock()
+	do.handleLocationChange(parent, zone, 0)
+	do.wakeChildren()
+	do.Unlock()
+
+	if dgs, ok := messagedirector.ReplayPool[Channel_t(doid)]; ok {
+		for _, dg := range dgs {
+			dgi := NewDatagramIterator(&dg)
+			dgi.SeekPayload()
+			go do.HandleDatagram(dg, dgi)
+		}
+	}
+
+	return do
+}
 
 func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
-	zone Zone_t, dclass dc.DCClass, dgi *DatagramIterator, hasOther bool) (bool, *DistributedObject, error) {
+	zone Zone_t, dclass dc.DCClass, dgi *DatagramIterator, hasOther bool,
+	isMainObj bool) (bool, *DistributedObject, error) {
 	do := &DistributedObject{
 		stateserver:    ss,
 		do:             doid,
@@ -107,15 +144,25 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 	}
 
 	do.Init(do)
-	do.SubscribeChannel(Channel_t(doid))
 
 	do.log.Debug("Object instantiated ...")
 
-	do.Lock()
-	dgi.SeekPayload()
-	do.handleLocationChange(parent, zone, dgi.ReadChannel())
-	do.wakeChildren()
-	do.Unlock()
+	if !isMainObj {
+		do.SubscribeChannel(Channel_t(doid))
+		do.Lock()
+		dgi.SeekPayload()
+		do.handleLocationChange(parent, zone, dgi.ReadChannel())
+		do.wakeChildren()
+		do.Unlock()
+	}
+
+	if strings.HasSuffix(dclass.Get_name(), "District") {
+		// It's a District object, automatically assign the airecv channel to the sender of the
+		// generate message.
+		dgi.SeekPayload()
+		sender := dgi.ReadChannel()
+		do.handleAiChange(sender, sender, true)
+	}
 
 	// Replay datagrams we may have missed while generating
 	if dgs, ok := messagedirector.ReplayPool[Channel_t(doid)]; ok {
@@ -213,7 +260,13 @@ func (d *DistributedObject) sendLocationEntry(location Channel_t) {
 	d.RouteDatagram(dg)
 }
 
-func (d *DistributedObject) sendAiEntry(ai Channel_t) {
+func (d *DistributedObject) sendAiEntry(ai Channel_t, sender Channel_t) {
+
+	if ai == sender {
+		// Do not relay the entry back to sender
+		return
+	}
+	d.log.Debugf("Sending AI entry to %d", ai)
 	msgType := STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED
 	if len(d.ramFields) != 0 {
 		msgType = STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED_OTHER
@@ -308,6 +361,8 @@ func (d *DistributedObject) handleLocationChange(parent Doid_t, zone Zone_t, sen
 }
 
 func (d *DistributedObject) handleAiChange(ai Channel_t, sender Channel_t, explicit bool) {
+	d.log.Debugf("Changing AI channel to %d", ai)
+
 	var targets []Channel_t
 	oldAi := d.aiChannel
 	if ai == oldAi {
@@ -334,8 +389,7 @@ func (d *DistributedObject) handleAiChange(ai Channel_t, sender Channel_t, expli
 	d.RouteDatagram(dg)
 
 	if ai != INVALID_CHANNEL {
-		d.log.Debugf("Sending AI entry to %d", ai)
-		d.sendAiEntry(ai)
+		d.sendAiEntry(ai, sender)
 	}
 }
 
@@ -629,7 +683,6 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		d.handleAiChange(newChannel, sender, false)
 	case STATESERVER_OBJECT_SET_AI:
 		newChannel := dgi.ReadChannel()
-		d.log.Debugf("Changing AI channel to %d", newChannel)
 		d.handleAiChange(newChannel, sender, true)
 	case STATESERVER_OBJECT_GET_AI:
 		d.log.Debugf("Received AI query from %d", sender)

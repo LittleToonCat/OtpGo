@@ -90,11 +90,11 @@ dclass DistributedDBTypeTestObject {
 // The state server should generate this object with its control
 // channel to represent itself
 dclass ObjectServer {
-  setName(string serverName) airecv ram required;
-  setDcHash(uint32 hash) ram required;
+	setName(string serverName) airecv ram required;
+	setDcHash(uint32 hash) ram required;
 };
 
 // objects ending with "District" should have their AI recv
 // channel automatically set.
-dclass District {
+dclass District : DistributedTestObject1 {
 };

@@ -230,6 +230,45 @@ func TestStateServer_Airecv(t *testing.T) {
 	dg.AddDoid(101000002)
 	conn.Expect(t, *dg, false)
 
+	// OtpGo specific change:
+	// Objects ending in "District" will get their AI channel set based on sender.
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 1300, STATESERVER_CREATE_OBJECT_WITH_REQUIRED)
+	appendMeta(dg, 101000003, 5000, 1500, District)
+	dg.AddUint32(143)
+	conn.SendDatagram(*dg)
+	// If the AI channel matches the sender, it should not send a entry message.
+	conn.ExpectNone(t)
+
+	dg = (&TestDatagram{}).Create([]Channel_t{101000003}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg.AddDoid(101000003)
+	dg.AddUint16(SetBA1)
+	dg.AddUint16(0xF00D)
+	conn.SendDatagram(*dg)
+
+	// AI should receive the message
+	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(5000, 1500), 1300}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg.AddDoid(101000003)
+	dg.AddUint16(SetBA1)
+	dg.AddUint16(0xF00D)
+	conn.Expect(t, *dg, false)
+
+	// AI should not get its own reflected messages back
+	dg = (&TestDatagram{}).Create([]Channel_t{101000003}, 1300, STATESERVER_OBJECT_SET_FIELD)
+	dg.AddDoid(101000003)
+	dg.AddUint16(SetBA1)
+	dg.AddUint16(0xF00D)
+	conn.SendDatagram(*dg)
+
+	conn.ExpectNone(t)
+
+	// Test for AI notification of object deletion
+	deleteObject(conn, 5, 101000003)
+
+	// AI should receive the delete
+	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(5000, 1500), 1300}, 5, STATESERVER_OBJECT_DELETE_RAM)
+	dg.AddDoid(101000003)
+	conn.Expect(t, *dg, false)
+
 	conn.Close()
 }
 
@@ -1113,12 +1152,31 @@ func TestStateServer_Get(t *testing.T) {
 	conn := connect(0x69)
 	do := Channel_t(0x500)
 
+	// OtpGo specific change:
+	// Test for GetAll w/ the State Server's
+	// ObjectServer object.
+
+	// Send a GET_ALL request !!To the State Server!!
+	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 0x69, STATESERVER_OBJECT_GET_ALL)
+	dg.AddUint32(1)
+	dg.AddDoid(Doid_t(100100))
+	conn.SendDatagram(*dg)
+
+	// Expect all data from ObjectServer (setName and setDcHash) in response.
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, Channel_t(100100), STATESERVER_OBJECT_GET_ALL_RESP)
+	dg.AddUint32(1)
+	appendMeta(dg, Doid_t(100100), 0, 0, ObjectServer)
+	dg.AddString("ObjectServer")
+	dg.AddUint32(uint32(core.DC.Get_hash()))
+	dg.AddUint16(0)
+	conn.Expect(t, *dg, false)
+
 	// Test for GetAll w/ only required fields
 	// Create the object
 	instantiateObject(conn, 5, Doid_t(do), 0, 0, 0)
 
 	// Send a GET_ALL request
-	dg := (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_ALL)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_ALL)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	conn.SendDatagram(*dg)

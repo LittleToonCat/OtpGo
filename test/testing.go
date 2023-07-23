@@ -26,6 +26,8 @@ const (
 	Block
 	DistributedChunk
 	DistributedDBTypeTestObject
+	ObjectServer
+	District
 )
 
 const (
