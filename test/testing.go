@@ -2,7 +2,7 @@ package test
 
 import (
 	"otpgo/core"
-	"otpgo/eventlogger"
+	// "otpgo/eventlogger"
 	"otpgo/net"
 	. "otpgo/util"
 	"encoding/hex"
@@ -115,7 +115,7 @@ func (u *UpstreamHandler) HandleConnect(conn gonet.Conn) {
 
 func StartDaemon(config core.ServerConfig) {
 	core.Config = &config
-	eventlogger.StartEventLogger()
+	// eventlogger.StartEventLogger()
 
 }
 

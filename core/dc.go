@@ -8,8 +8,9 @@ import (
 var DC dcparser.DCFile = dcparser.NewDCFile()
 
 func LoadDC() (err error) {
-	DC.Clear()
-
+	if (len(Config.General.DC_Files) == 0) {
+		return fmt.Errorf("missing DC file configuration")
+	}
 	for _, conf := range Config.General.DC_Files {
 		ok := DC.Read(conf)
 		if !ok {

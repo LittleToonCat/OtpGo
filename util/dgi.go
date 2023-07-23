@@ -1,6 +1,7 @@
 package util
 
 import (
+	"github.com/LittleToonCat/dcparser-go"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -198,6 +199,18 @@ func (dgi *DatagramIterator) ReadFloat64() float64 {
 }
 
 func (dgi *DatagramIterator) ReadString() string {
+	sz := dgi.ReadUint16()
+	buff := make([]byte, sz)
+	if _, err := dgi.Read.Read(buff); err != nil {
+		dgi.panic(int8(sz))
+	}
+
+	dgi.offset += Dgsize_t(sz)
+	dgi.Read.Seek(int64(dgi.offset), io.SeekStart)
+	return string(buff)
+}
+
+func (dgi *DatagramIterator) ReadString32() string {
 	sz := dgi.ReadSize()
 	buff := make([]byte, sz)
 	if _, err := dgi.Read.Read(buff); err != nil {
@@ -210,6 +223,10 @@ func (dgi *DatagramIterator) ReadString() string {
 }
 
 func (dgi *DatagramIterator) ReadBlob() []uint8 {
+	return dgi.ReadData(Dgsize_t(dgi.ReadUint16()))
+}
+
+func (dgi *DatagramIterator) ReadBlob32() []uint8 {
 	return dgi.ReadData(dgi.ReadSize())
 }
 
@@ -222,18 +239,30 @@ func (dgi *DatagramIterator) ReadDatagram() *Datagram {
 
 func (dgi *DatagramIterator) ReadData(length Dgsize_t) []uint8 {
 	buff := make([]uint8, int32(length))
-	if n, err := dgi.Read.Read(buff); err != nil || n != int(length) {
-		dgi.panic(int8(length))
-	}
+	if (length > 0) {
+		if n, err := dgi.Read.Read(buff); err != nil || n != int(length) {
+			dgi.panic(int8(length))
+		}
 
-	dgi.offset += length
-	dgi.Read.Seek(int64(dgi.offset), io.SeekStart)
+		dgi.offset += length
+		dgi.Read.Seek(int64(dgi.offset), io.SeekStart)
+	}
 	return buff
 }
 
 func (dgi *DatagramIterator) ReadRemainder() []uint8 {
 	sz := Dgsize_t(dgi.Dg.Len()) - dgi.offset
 	return dgi.ReadData(sz)
+}
+
+func (dgi *DatagramIterator) ReadRemainderAsVector() dcparser.Vector_uchar {
+	remainder := dgi.ReadRemainder()
+
+	vector := dcparser.NewVector_uchar()
+	for _, b := range remainder {
+		vector.Add(b)
+	}
+	return vector
 }
 
 func (dgi *DatagramIterator) RecipientCount() uint8 {

@@ -1,6 +1,7 @@
 package util
 
 import (
+	"github.com/LittleToonCat/dcparser-go"
 	"bytes"
 	"encoding/binary"
 )
@@ -34,7 +35,20 @@ func (d *Datagram) AddZone(v Zone_t)        { binary.Write(d, binary.LittleEndia
 func (d *Datagram) AddBool(v bool)          { binary.Write(d, binary.LittleEndian, v) }
 func (d *Datagram) AddData(v []byte)        { d.Write(v) }
 func (d *Datagram) AddDatagram(v *Datagram) { d.Write(v.Bytes()) }
+func (d *Datagram) AddVector(v dcparser.Vector_uchar) {
+	data := []byte{}
+	for i := int64(0); i < v.Size(); i++ {
+		data = append(data, v.Get(int(i)))
+	}
+	d.Write((data))
+}
+
 func (d *Datagram) AddString(v string) {
+	d.AddUint16(uint16(len(v)))
+	d.Write([]byte(v))
+}
+
+func (d *Datagram) AddString32(v string) {
 	d.AddSize(Dgsize_t(len(v)))
 	d.Write([]byte(v))
 }
@@ -45,11 +59,21 @@ func (d *Datagram) AddLocation(parent Doid_t, zone Zone_t) {
 }
 
 func (d *Datagram) AddDataBlob(v []byte) {
+	d.AddUint16(uint16(len(v)))
+	d.Write(v)
+}
+
+func (d *Datagram) AddDataBlob32(v []byte) {
 	d.AddSize(Dgsize_t(len(v)))
 	d.Write(v)
 }
 
 func (d *Datagram) AddBlob(v *Datagram) {
+	d.AddUint16(uint16(v.Len()))
+	d.Write(v.Bytes())
+}
+
+func (d *Datagram) AddBlob32(v *Datagram) {
 	d.AddSize(Dgsize_t(v.Len()))
 	d.Write(v.Bytes())
 }
