@@ -6,7 +6,7 @@ import (
 	"otpgo/core"
 	. "otpgo/test"
 	. "otpgo/util"
-	"github.com/apex/log"
+	// "github.com/apex/log"
 	"os"
 	"testing"
 	"time"
@@ -17,8 +17,10 @@ var mainClient, client1, client2 *TestMDConnection
 func TestMain(m *testing.M) {
 	// SETUP
 	// Silence the (very annoying) logger while we're testing
-	log.SetHandler(log.HandlerFunc(func(*log.Entry) error { return nil }))
+	// log.SetHandler(log.HandlerFunc(func(*log.Entry) error { return nil }))
 	upstream := StartUpstream("127.0.0.1:57124")
+
+	time.Sleep(100 * time.Millisecond)
 
 	StartDaemon(
 		core.ServerConfig{MessageDirector: struct {
@@ -26,6 +28,8 @@ func TestMain(m *testing.M) {
 			Connect string
 		}{Bind: "127.0.0.1:57123", Connect: "127.0.0.1:57124"}})
 	Start()
+
+	time.Sleep(100 * time.Millisecond)
 
 	for {
 		if upstream.Server != nil {
@@ -592,6 +596,4 @@ func TestMD_Ranges(t *testing.T) {
 	client1.Close()
 	client2.Close()
 	mainClient.Close()
-
-	return
 }

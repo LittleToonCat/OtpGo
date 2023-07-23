@@ -7,6 +7,7 @@ import (
 	// "otpgo/eventlogger"
 	"otpgo/messagedirector"
 	"otpgo/util"
+	"otpgo/stateserver"
 	"fmt"
 	"github.com/apex/log"
 	"github.com/spf13/pflag"
@@ -106,6 +107,8 @@ Revision: INDEV
 		configPath = "."
 	}
 
+	mainLog.Info("Loading configuration file...")
+
 	if err := core.LoadConfig(configPath, configName); err != nil {
 		mainLog.Fatal(err.Error())
 	}
@@ -132,19 +135,20 @@ Revision: INDEV
 		})
 	}
 
-	// Instantiate roles (TODO)
-	// for _, role := range core.Config.Roles {
-	// 	switch role.Type {
-	// 	case "clientagent":
-	// 		clientagent.NewClientAgent(role)
-	// 	}
-	// }
+	// Instantiate roles
+	for _, role := range core.Config.Roles {
+		switch role.Type {
+		// case "clientagent":
+		// 	clientagent.NewClientAgent(role)
+		case "stateserver":
+			stateserver.NewStateServer(role)
+		}
+	}
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt)
-	select {
-	case sig := <-c:
-		mainLog.Fatal(fmt.Sprintf("Got %s signal. Aborting...", sig))
-		os.Exit(1)
-	}
+
+	sig := <-c
+	mainLog.Fatal(fmt.Sprintf("Got %s signal. Aborting...", sig))
+	os.Exit(1)
 }
