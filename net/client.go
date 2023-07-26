@@ -1,11 +1,11 @@
 package net
 
 import (
-	. "otpgo/util"
 	"bytes"
 	"encoding/binary"
 	"errors"
 	gonet "net"
+	. "otpgo/util"
 	"sync"
 	"time"
 )
@@ -55,22 +55,22 @@ func (c *Client) shutdown() {
 }
 
 func (c *Client) defragment() {
-	for c.buff.Len() > Dgsize {
+	for c.buff.Len() > Blobsize {
 		data := c.buff.Bytes()
-		sz := binary.LittleEndian.Uint32(data[0:Dgsize])
-		if c.buff.Len() >= int(sz+Dgsize) {
-			overreadSz := c.buff.Len() - int(sz) - int(Dgsize)
+		sz := binary.LittleEndian.Uint16(data[0:Blobsize])
+		if c.buff.Len() >= int(sz+Blobsize) {
+			overreadSz := c.buff.Len() - int(sz) - int(Blobsize)
 			dg := NewDatagram()
-			dg.Write(data[Dgsize : sz+Dgsize])
+			dg.Write(data[Blobsize : sz+Blobsize])
 			if 0 < overreadSz {
 				c.buff.Truncate(0)
-				c.buff.Write(data[sz+Dgsize : sz+Dgsize+uint32(overreadSz)])
+				c.buff.Write(data[sz+Blobsize : sz+Blobsize+uint16(overreadSz)])
 			} else {
 				// No overread
 				c.buff.Truncate(0)
 			}
 
-			go c.handler.ReceiveDatagram(dg)
+			c.handler.ReceiveDatagram(dg)
 		} else {
 			return
 		}
@@ -81,13 +81,13 @@ func (c *Client) processInput(len int, data []byte) {
 	c.Lock()
 
 	// Check if we have enough data for a single datagram
-	if c.buff.Len() == 0 && len >= Dgsize {
-		sz := binary.LittleEndian.Uint32(data[0:Dgsize])
-		if sz == uint32(len-Dgsize) {
+	if c.buff.Len() == 0 && len >= Blobsize {
+		sz := binary.LittleEndian.Uint16(data[0:Blobsize])
+		if sz == uint16(len-Blobsize) {
 			// We have enough data for a full datagram; send it off
 			dg := NewDatagram()
-			dg.Write(data[Dgsize:])
-			go c.handler.ReceiveDatagram(dg)
+			dg.Write(data[Blobsize:])
+			c.handler.ReceiveDatagram(dg)
 			c.Unlock()
 			return
 		}
@@ -110,12 +110,14 @@ func (c *Client) read() {
 }
 
 func (c *Client) SendDatagram(datagram Datagram) {
-	var dg Datagram
-	dg = NewDatagram()
+	if !c.Connected() {
+		return
+	}
+	dg := NewDatagram()
 
 	c.Lock()
 
-	dg.AddSize(Dgsize_t(datagram.Len()))
+	dg.AddUint16(uint16(datagram.Len()))
 	dg.Write(datagram.Bytes())
 
 	if _, err := c.tr.WriteDatagram(dg); err != nil {
@@ -142,8 +144,8 @@ func (c *Client) Close() {
 
 func (c *Client) disconnect(err error) {
 	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
 	c.tr.Close()
+	c.Mutex.Unlock()
 	c.handler.Terminate(err)
 }
 

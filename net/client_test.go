@@ -70,7 +70,7 @@ func TestClient_Read(t *testing.T) {
 
 func TestClient_Defragment(t *testing.T) {
 	dg1 := NewDatagram()
-	dg1.AddInt32(10)
+	dg1.AddUint16(10)
 	dg1.WriteString("hello ")
 	dg2 := NewDatagram()
 	dg2.WriteString("world")
@@ -99,5 +99,5 @@ func init() {
 		keepAlive: 60 * time.Second,
 	}
 	participant = &MDParticipantFake{}
-	netclient = NewClient(Transport(ssocket), participant)
+	netclient = NewClient(Transport(ssocket), participant, 1*time.Second)
 }

@@ -13,7 +13,7 @@ import (
 )
 
 // Maximum number of datagrams that can be added to the MD queue.
-const QUEUE_MAX = 1024
+const QUEUE_MAX = ^uint16(0)
 
 var MDLog *log.Entry
 var MD *MessageDirector
@@ -96,6 +96,7 @@ func (m *MessageDirector) queueLoop() {
 				defer func() {
 					if r := recover(); r != nil {
 						if _, ok := r.(DatagramIteratorEOF); ok {
+							MDLog.Error("Reached end of datagram")
 							// TODO
 						}
 						finish <- true
@@ -109,6 +110,8 @@ func (m *MessageDirector) queueLoop() {
 				for n := 0; uint8(n) < chanCount; n++ {
 					receivers = append(receivers, dgi.ReadChannel())
 				}
+
+				// MDLog.Debugf("Routing datagram to channels: %v", receivers)
 
 				// Send payload datagram to every available receiver
 				seekDgi := NewDatagramIterator(&obj.dg)

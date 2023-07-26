@@ -274,7 +274,7 @@ func (d *TestDatagram) CreateControl() *Datagram {
 
 func (d *TestDatagram) CreateAddChannel(ch Channel_t) *Datagram {
 	dg := NewDatagram()
-	dg.AddControlHeader(CONTROL_ADD_CHANNEL)
+	dg.AddControlHeader(CONTROL_SET_CHANNEL)
 	dg.AddChannel(ch)
 	d.DatagramIterator = NewDatagramIterator(&dg)
 	return d.Dg

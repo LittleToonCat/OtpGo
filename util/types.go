@@ -9,6 +9,7 @@ const Dgsize = 4   // size of uint32
 const Doidsize = 4 // size of uint32
 const Zonesize = 4 // size of uint32
 const Chansize = 8 // size of uint64
+const Blobsize = 2 // size of uint16
 
 const (
 	CHANNEL_MAX = ^Channel_t(0)
@@ -22,12 +23,12 @@ const INVALID_ZONE = Zone_t(0)
 
 const (
 	INVALID_CHANNEL    = Channel_t(0)
-	CONTROL_MESSAGE    = Channel_t(1)
 	BCHAN_CLIENTS      = Channel_t(10)
 	BCHAN_STATESERVERS = Channel_t(12)
 	BCHAN_DBSERVERS    = Channel_t(13)
 	PARENT_PREFIX      = Channel_t(1) << ZONE_BITS
 	DATABASE_PREFIX    = Channel_t(2) << ZONE_BITS
+	CONTROL_MESSAGE    = Channel_t(4001)
 )
 
 func LocationAsChannel(parent Doid_t, zone Zone_t) Channel_t {

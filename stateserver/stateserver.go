@@ -76,10 +76,10 @@ func (s *StateServer) registerObjects(objects []struct{ID int; Class string}) {
 }
 
 func (s *StateServer) handleGenerate(dgi *DatagramIterator, other bool) {
-	do := dgi.ReadDoid()
 	parent := dgi.ReadDoid()
 	zone := dgi.ReadZone()
 	dc := dgi.ReadUint16()
+	do := dgi.ReadDoid()
 
 	if _, ok := s.objects[do]; ok {
 		s.log.Warnf("Received generate for already-existing object ID=%d", do)
@@ -100,6 +100,21 @@ func (s *StateServer) handleGenerate(dgi *DatagramIterator, other bool) {
 }
 
 func (s *StateServer) handleDelete(dgi *DatagramIterator, sender Channel_t) {
+	do := dgi.ReadDoid()
+
+	if obj, ok := s.objects[do]; ok {
+		obj.annihilate(sender, true)
+		return
+	}
+
+	// Reply as not found
+	dg := NewDatagram()
+	dg.AddServerHeader(sender, s.control, STATESERVER_OBJECT_NOTFOUND)
+	dg.AddDoid(do)
+	s.RouteDatagram(dg)
+}
+
+func (s *StateServer) handleDeleteAi(dgi *DatagramIterator, sender Channel_t) {
 	var targets []Channel_t
 	ai := dgi.ReadChannel()
 
@@ -111,7 +126,7 @@ func (s *StateServer) handleDelete(dgi *DatagramIterator, sender Channel_t) {
 
 	if len(targets) > 0 {
 		dg := NewDatagram()
-		dg.AddMultipleServerHeader(targets, sender, STATESERVER_DELETE_AI_OBJECTS)
+		dg.AddMultipleServerHeader(targets, sender, STATESERVER_SHARD_REST)
 		dg.AddChannel(ai)
 		s.RouteDatagram(dg)
 	}
@@ -130,15 +145,14 @@ func (s *StateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	msgType := dgi.ReadUint16()
 
 	switch msgType {
-	case STATESERVER_CREATE_OBJECT_WITH_REQUIRED:
+	case STATESERVER_OBJECT_GENERATE_WITH_REQUIRED:
 		s.handleGenerate(dgi, false)
-	case STATESERVER_CREATE_OBJECT_WITH_REQUIRED_OTHER:
+	case STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER:
 		s.handleGenerate(dgi, true)
-	case STATESERVER_DELETE_AI_OBJECTS:
-		s.handleDelete(dgi, sender)
-	case STATESERVER_OBJECT_GET_ALL:
+	case STATESERVER_SHARD_REST:
+		s.handleDeleteAi(dgi, sender)
+	case STATESERVER_QUERY_OBJECT_ALL:
 		context := dgi.ReadUint32()
-		dgi.ReadDoid()
 
 		if s.mainObj == nil {
 			s.log.Warn("Got GetAI but no main object.  Did you mean to send it to an object?")
@@ -146,11 +160,13 @@ func (s *StateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 
 		dg = NewDatagram()
-		dg.AddServerHeader(sender, Channel_t(s.control), STATESERVER_OBJECT_GET_ALL_RESP)
+		dg.AddServerHeader(sender, Channel_t(s.control), STATESERVER_QUERY_OBJECT_ALL_RESP)
 		dg.AddUint32(context)
-		s.mainObj.appendRequiredData(dg, false, false)
+		s.mainObj.appendRequiredDataDoidLast(dg, false, false)
 		s.mainObj.appendOtherData(dg, false, false)
 		s.RouteDatagram(dg)
+	case STATESERVER_OBJECT_DELETE_RAM:
+		s.handleDelete(dgi, sender)
 	default:
 		s.log.Warnf("Received unknown msgtype=%d", msgType)
 	}

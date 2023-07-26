@@ -35,9 +35,24 @@ func appendMeta(dg *Datagram, doid Doid_t, parent Doid_t, zone Zone_t, dclass ui
 	}
 }
 
+func appendMetaDoidLast(dg *Datagram, doid Doid_t, parent Doid_t, zone Zone_t, dclass uint16) {
+	if parent != 6969 {
+		dg.AddDoid(parent)
+	}
+	if zone != 6969 {
+		dg.AddZone(zone)
+	}
+	if dclass != 6969 {
+		dg.AddUint16(dclass)
+	}
+	if doid != 6969 {
+		dg.AddDoid(doid)
+	}
+}
+
 func instantiateObject(conn *TestChannelConnection, sender Channel_t, doid Doid_t, parent Doid_t, zone Zone_t, required uint16) {
-	dg := (&TestDatagram{}).Create([]Channel_t{100100}, sender, STATESERVER_CREATE_OBJECT_WITH_REQUIRED)
-	appendMeta(dg, doid, parent, zone, DistributedTestObject1)
+	dg := (&TestDatagram{}).Create([]Channel_t{100100}, sender, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED)
+	appendMetaDoidLast(dg, doid, parent, zone, DistributedTestObject1)
 	dg.AddUint32(uint32(required))
 	conn.SendDatagram(*dg)
 	time.Sleep(10 * time.Millisecond)
@@ -96,7 +111,7 @@ func TestStateServer_CreateDelete(t *testing.T) {
 			dgi := (&TestDatagram{}).Set(dg)
 			msgType := dgi.MessageType()
 			// Object should tell the parent that it's arriving
-			if ok, why := dgi.MatchesHeader([]Channel_t{5000}, 5, STATESERVER_OBJECT_CHANGING_LOCATION, -1); ok {
+			if ok, why := dgi.MatchesHeader([]Channel_t{5000}, 5, STATESERVER_OBJECT_CHANGE_ZONE, -1); ok {
 				received = true
 				dgi.SeekPayload()
 				dgi.ReadChannel()                                  // Sender
@@ -124,7 +139,7 @@ func TestStateServer_CreateDelete(t *testing.T) {
 		ai.Expect(t, *dg, false)
 
 		dg = (&TestDatagram{}).Create([]Channel_t{ParentToChildren(101000000)},
-			101000000, STATESERVER_OBJECT_GET_LOCATION)
+			101000000, STATESERVER_OBJECT_LOCATE)
 		dg.AddUint32(STATESERVER_CONTEXT_WAKE_CHILDREN)
 		children.Expect(t, *dg, false)
 
@@ -132,7 +147,7 @@ func TestStateServer_CreateDelete(t *testing.T) {
 		deleteObject(ai, 5, 101000000)
 
 		// Object should inform the parent that it is leaving
-		dg = (&TestDatagram{}).Create([]Channel_t{5000}, 5, STATESERVER_OBJECT_CHANGING_LOCATION)
+		dg = (&TestDatagram{}).Create([]Channel_t{5000}, 5, STATESERVER_OBJECT_CHANGE_ZONE)
 		dg.AddDoid(101000000)
 		appendMeta(dg, 6969, INVALID_DOID, INVALID_ZONE, 6969) // New Location
 		appendMeta(dg, 6969, 5000, 1500, 6969)                 // Old Location
@@ -160,8 +175,8 @@ func TestStateServer_Broadcast(t *testing.T) {
 
 	// Broadcast for location test
 	// Start with the creation of a DTO2
-	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED)
-	appendMeta(dg, 101000001, 5000, 1500, DistributedTestObject2)
+	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED)
+	appendMetaDoidLast(dg, 101000001, 5000, 1500, DistributedTestObject2)
 	ai.SendDatagram(*dg)
 
 	// Ignore the entry message
@@ -169,14 +184,14 @@ func TestStateServer_Broadcast(t *testing.T) {
 	ai.Flush()
 
 	// Send an update to setB2
-	dg = (&TestDatagram{}).Create([]Channel_t{101000001}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{101000001}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(101000001)
 	dg.AddUint16(SetB2)
 	dg.AddUint32(0xDEADBEEF)
 	ai.SendDatagram(*dg)
 
 	// Object should broadcast the update
-	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(5000, 1500)}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(5000, 1500)}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(101000001)
 	dg.AddUint16(SetB2)
 	dg.AddUint32(0xDEADBEEF)
@@ -200,21 +215,21 @@ func TestStateServer_Airecv(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	conn.Flush()
 
-	dg = (&TestDatagram{}).Create([]Channel_t{101000002}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{101000002}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(101000002)
 	dg.AddUint16(SetBA1)
 	dg.AddUint16(0xF00D)
 	conn.SendDatagram(*dg)
 
 	// AI should receive the message
-	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(5000, 1500), 1300}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(5000, 1500), 1300}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(101000002)
 	dg.AddUint16(SetBA1)
 	dg.AddUint16(0xF00D)
 	conn.Expect(t, *dg, false)
 
 	// AI should not get its own reflected messages back
-	dg = (&TestDatagram{}).Create([]Channel_t{101000002}, 1300, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{101000002}, 1300, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(101000002)
 	dg.AddUint16(SetBA1)
 	dg.AddUint16(0xF00D)
@@ -232,28 +247,28 @@ func TestStateServer_Airecv(t *testing.T) {
 
 	// OtpGo specific change:
 	// Objects ending in "District" will get their AI channel set based on sender.
-	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 1300, STATESERVER_CREATE_OBJECT_WITH_REQUIRED)
-	appendMeta(dg, 101000003, 5000, 1500, District)
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 1300, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED)
+	appendMetaDoidLast(dg, 101000003, 5000, 1500, District)
 	dg.AddUint32(143)
 	conn.SendDatagram(*dg)
 	// If the AI channel matches the sender, it should not send a entry message.
 	conn.ExpectNone(t)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{101000003}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{101000003}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(101000003)
 	dg.AddUint16(SetBA1)
 	dg.AddUint16(0xF00D)
 	conn.SendDatagram(*dg)
 
 	// AI should receive the message
-	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(5000, 1500), 1300}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(5000, 1500), 1300}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(101000003)
 	dg.AddUint16(SetBA1)
 	dg.AddUint16(0xF00D)
 	conn.Expect(t, *dg, false)
 
 	// AI should not get its own reflected messages back
-	dg = (&TestDatagram{}).Create([]Channel_t{101000003}, 1300, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{101000003}, 1300, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(101000003)
 	dg.AddUint16(SetBA1)
 	dg.AddUint16(0xF00D)
@@ -296,9 +311,11 @@ func TestStateServer_SetAI(t *testing.T) {
 	obj1.Flush()
 
 	// DO #1 should announce its presence to AI #1
-	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, do1, STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do1), 0, 0, DistributedTestObject1)
+	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, do1, STATESERVER_OBJECT_ENTER_AI_RECV)
+	dg.AddUint32(0)
+	appendMetaDoidLast(dg, Doid_t(do1), 0, 0, DistributedTestObject1)
 	dg.AddUint32(1337)
+	dg.AddUint16(0)
 	ai1.Expect(t, *dg, false)
 	children1.ExpectNone(t)
 
@@ -318,9 +335,11 @@ func TestStateServer_SetAI(t *testing.T) {
 	ai1.Expect(t, *dg, false)
 
 	// It should also inform AI #2 that it is entering
-	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan}, do1, STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do1), 0, 0, DistributedTestObject1)
+	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan}, do1, STATESERVER_OBJECT_ENTER_AI_RECV)
+	dg.AddUint32(0)
+	appendMetaDoidLast(dg, Doid_t(do1), 0, 0, DistributedTestObject1)
 	dg.AddUint32(1337)
+	dg.AddUint16(0)
 	ai2.Expect(t, *dg, false)
 
 	// Test for child AI handling on creation
@@ -335,7 +354,7 @@ func TestStateServer_SetAI(t *testing.T) {
 		dgi := (&TestDatagram{}).Set(dg)
 		if ok, _ := dgi.MatchesHeader([]Channel_t{do1}, do2, STATESERVER_OBJECT_GET_AI, -1); ok {
 			context = dgi.ReadUint32()
-		} else if ok, _ := dgi.MatchesHeader([]Channel_t{do1}, 5, STATESERVER_OBJECT_CHANGING_LOCATION, -1); ok {
+		} else if ok, _ := dgi.MatchesHeader([]Channel_t{do1}, 5, STATESERVER_OBJECT_CHANGE_ZONE, -1); ok {
 			continue
 		} else {
 			t.Error("Received unexpected or non-matching header")
@@ -353,14 +372,16 @@ func TestStateServer_SetAI(t *testing.T) {
 	obj2.ExpectMany(t, []Datagram{*dg, *ack}, false, true)
 
 	// We should also receive a wake children message
-	dg = (&TestDatagram{}).Create([]Channel_t{ParentToChildren(Doid_t(do2))}, do2, STATESERVER_OBJECT_GET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{ParentToChildren(Doid_t(do2))}, do2, STATESERVER_OBJECT_LOCATE)
 	dg.AddUint32(STATESERVER_CONTEXT_WAKE_CHILDREN)
 	children2.Expect(t, *dg, false)
 
 	// DO #2 should the announce its presence to AI #2
-	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan}, do2, STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do2), Doid_t(do1), 1500, DistributedTestObject1)
+	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan}, do2, STATESERVER_OBJECT_ENTER_AI_RECV)
+	dg.AddUint32(0)
+	appendMetaDoidLast(dg, Doid_t(do2), Doid_t(do1), 1500, DistributedTestObject1)
 	dg.AddUint32(1337)
+	dg.AddUint16(0)
 	ai2.Expect(t, *dg, false)
 	children2.ExpectNone(t)
 
@@ -378,7 +399,7 @@ func TestStateServer_SetAI(t *testing.T) {
 	instantiateObject(conn, 5, Doid_t(do2), 0, 0, 1337)
 
 	// Set the location of DO #2 to a zone of the first object
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do1), 1500, 6969)
 	conn.SendDatagram(*dg)
 
@@ -396,7 +417,7 @@ func TestStateServer_SetAI(t *testing.T) {
 		dgi := (&TestDatagram{}).Set(dg)
 		if ok, _ := dgi.MatchesHeader([]Channel_t{do1}, do2, STATESERVER_OBJECT_GET_AI, -1); ok {
 			context = dgi.ReadUint32()
-		} else if ok, _ := dgi.MatchesHeader([]Channel_t{do1}, 5, STATESERVER_OBJECT_CHANGING_LOCATION, -1); ok {
+		} else if ok, _ := dgi.MatchesHeader([]Channel_t{do1}, 5, STATESERVER_OBJECT_CHANGE_ZONE, -1); ok {
 			continue
 		} else {
 			t.Error("Received unexpected or non-matching header")
@@ -404,9 +425,11 @@ func TestStateServer_SetAI(t *testing.T) {
 	}
 
 	// DO #2 should also announce its presence to AI #2
-	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan}, do2, STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do2), Doid_t(do1), 1500, DistributedTestObject1)
+	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan}, do2, STATESERVER_OBJECT_ENTER_AI_RECV)
+	dg.AddUint32(0)
+	appendMetaDoidLast(dg, Doid_t(do2), Doid_t(do1), 1500, DistributedTestObject1)
 	dg.AddUint32(1337)
+	dg.AddUint16(0)
 	ai2.Expect(t, *dg, false)
 	children2.ExpectNone(t)
 
@@ -427,9 +450,11 @@ func TestStateServer_SetAI(t *testing.T) {
 	ai2Expected = append(ai2Expected, *dg)
 
 	// It should also tell AI #2 that it is entering
-	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, do1, STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do1), 0, 0, DistributedTestObject1)
+	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, do1, STATESERVER_OBJECT_ENTER_AI_RECV)
+	dg.AddUint32(0)
+	appendMetaDoidLast(dg, Doid_t(do1), 0, 0, DistributedTestObject1)
 	dg.AddUint32(1337)
+	dg.AddUint16(0)
 	ai1Expected = append(ai1Expected, *dg)
 
 	// DO #2 will also tell AI #2 that it is changing AI
@@ -441,9 +466,11 @@ func TestStateServer_SetAI(t *testing.T) {
 	ai2Expected = append(ai2Expected, *dg)
 
 	// It should also tell AI #2 that it is entering
-	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, do2, STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do2), Doid_t(do1), 1500, DistributedTestObject1)
+	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, do2, STATESERVER_OBJECT_ENTER_AI_RECV)
+	dg.AddUint32(0)
+	appendMetaDoidLast(dg, Doid_t(do2), Doid_t(do1), 1500, DistributedTestObject1)
 	dg.AddUint32(1337)
+	dg.AddUint16(0)
 	ai1Expected = append(ai1Expected, *dg)
 
 	ai1.ExpectMany(t, ai1Expected, false, true)
@@ -488,8 +515,8 @@ func TestStateServer_SetAI(t *testing.T) {
 	ai1.Flush()
 
 	// Recreate the second object with an optional field
-	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED_OTHER)
-	appendMeta(dg, Doid_t(do2), 0, 0, DistributedTestObject1)
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER)
+	appendMetaDoidLast(dg, Doid_t(do2), 0, 0, DistributedTestObject1)
 	dg.AddUint32(1337) // setRequired1
 	dg.AddUint16(1)    // Optional fields
 	dg.AddUint16(SetBR1)
@@ -501,9 +528,10 @@ func TestStateServer_SetAI(t *testing.T) {
 	dg.AddChannel(ai1Chan)
 	conn.SendDatagram(*dg)
 
-	// Expect an ENTER_AI_WITH_REQUIRED_OTHER
-	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, do2, STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED_OTHER)
-	appendMeta(dg, Doid_t(do2), 0, 0, DistributedTestObject1)
+	// Expect an _ENTER_AI_RECV with other fields
+	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, do2, STATESERVER_OBJECT_ENTER_AI_RECV)
+	dg.AddUint32(0)
+	appendMetaDoidLast(dg, Doid_t(do2), 0, 0, DistributedTestObject1)
 	dg.AddUint32(1337)
 	dg.AddUint16(1)
 	dg.AddUint16(SetBR1)
@@ -539,7 +567,7 @@ func TestStateServer_Ram(t *testing.T) {
 	ai.RemoveChannel(LocationAsChannel(15000, 7000))
 
 	// Send a RAM update
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetBR1)
 	dg.AddString("Stussy S")
@@ -550,7 +578,7 @@ func TestStateServer_Ram(t *testing.T) {
 	ai.Flush()
 
 	// Move the DO to zone 4000
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, 15000, 4000, 6969)
 	ai.SendDatagram(*dg)
 
@@ -564,7 +592,7 @@ func TestStateServer_Ram(t *testing.T) {
 	entryDg.AddString("Stussy S")
 	// It will also send a CHANGING_LOCATION message to the parent
 	locDg := (&TestDatagram{}).Create([]Channel_t{15000, LocationAsChannel(15000, 4000)},
-		5, STATESERVER_OBJECT_CHANGING_LOCATION)
+		5, STATESERVER_OBJECT_CHANGE_ZONE)
 	locDg.AddDoid(Doid_t(do))
 	locDg.AddLocation(15000, 4000)
 	locDg.AddLocation(15000, 7000)
@@ -596,7 +624,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 	conn.ExpectNone(t)
 
 	// Set the object's location
-	dg := (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg := (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do1), 10000, 6969)
 	conn.SendDatagram(*dg)
 	time.Sleep(10 * time.Millisecond)
@@ -615,7 +643,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 	conn.ExpectNone(t)
 
 	// Move DO #2 into a zone of DO #3
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do3), 20000, 6969)
 	conn.SendDatagram(*dg)
 	time.Sleep(10 * time.Millisecond)
@@ -623,7 +651,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 
 	// DO #2 should announce its departure from its location
 	dg = (&TestDatagram{}).Create([]Channel_t{do1, LocationAsChannel(Doid_t(do1), 10000), do3},
-		5, STATESERVER_OBJECT_CHANGING_LOCATION)
+		5, STATESERVER_OBJECT_CHANGE_ZONE)
 	dg.AddDoid(Doid_t(do2))
 	appendMeta(dg, 6969, Doid_t(do3), 20000, 6969) // New location
 	appendMeta(dg, 6969, Doid_t(do1), 10000, 6969) // Old location
@@ -643,7 +671,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 	// Test for non-propagation of SetLocation
 	// Move DO #3 to a new zone
 	conn.AddChannel(ParentToChildren(Doid_t(do3)))
-	dg = (&TestDatagram{}).Create([]Channel_t{do3}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do3}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do1), 10000, 6969)
 	conn.SendDatagram(*dg)
 	time.Sleep(10 * time.Millisecond)
@@ -674,14 +702,14 @@ func TestStateServer_SetLocation(t *testing.T) {
 	conn.Flush()
 
 	// Change DO #2's location
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, INVALID_DOID, INVALID_ZONE, 6969)
 	conn.SendDatagram(*dg)
 	obj2.Flush()
 
 	// Expect a CHANGING_LOCATION message on the AI channel
 	dg = (&TestDatagram{}).Create([]Channel_t{aiChan, do3, LocationAsChannel(Doid_t(do3), 20000)},
-		5, STATESERVER_OBJECT_CHANGING_LOCATION)
+		5, STATESERVER_OBJECT_CHANGE_ZONE)
 	dg.AddDoid(Doid_t(do2))
 	appendMeta(dg, 6969, INVALID_DOID, INVALID_ZONE, 6969)
 	appendMeta(dg, 6969, Doid_t(do3), 20000, 6969)
@@ -705,7 +733,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 	// Give DO #2 an owner
 	ownerChan := Channel_t(0xFC)
 	conn.AddChannel(ownerChan)
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_OWNER)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_OWNER_RECV)
 	dg.AddChannel(ownerChan)
 	conn.SendDatagram(*dg)
 	time.Sleep(10 * time.Millisecond)
@@ -713,13 +741,13 @@ func TestStateServer_SetLocation(t *testing.T) {
 	conn.Flush()
 
 	// Change DO #2's location
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do1), 10000, 6969)
 	conn.SendDatagram(*dg)
 	obj2.Flush()
 
 	// Expect CHANGING_LOCATION on the owner channel
-	dg = (&TestDatagram{}).Create([]Channel_t{ownerChan, do1}, 5, STATESERVER_OBJECT_CHANGING_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{ownerChan, do1}, 5, STATESERVER_OBJECT_CHANGE_ZONE)
 	dg.AddDoid(Doid_t(do2))
 	appendMeta(dg, 6969, Doid_t(do1), 10000, 6969)
 	appendMeta(dg, 6969, INVALID_DOID, INVALID_ZONE, 6969)
@@ -731,7 +759,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 	obj1.Flush()
 
 	// Remove owner
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_OWNER)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_OWNER_RECV)
 	dg.AddChannel(0)
 	conn.SendDatagram(*dg)
 	time.Sleep(10 * time.Millisecond)
@@ -740,7 +768,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 
 	// Test for SetLocation w/ a ram+broadcast field
 	// Set a ram+broadcast field of DO #2
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do2))
 	dg.AddUint16(SetBR1)
 	dg.AddString("I really do hate writing unit tests!")
@@ -750,7 +778,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 	location1.Flush()
 
 	// Change DO #2's location
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do3), 20000, 6969)
 	conn.SendDatagram(*dg)
 
@@ -781,8 +809,8 @@ func TestStateServer_SetLocation(t *testing.T) {
 	location3.Flush()
 
 	// Recreate DO #2 with a ram, non-broadcast field
-	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED_OTHER)
-	appendMeta(dg, Doid_t(do2), 0, 0, DistributedTestObject3)
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER)
+	appendMetaDoidLast(dg, Doid_t(do2), 0, 0, DistributedTestObject3)
 	dg.AddUint32(0xF0000D) // setRequired1
 	dg.AddUint32(0xB0000B) // setRDB3
 	dg.AddUint16(1)        // Optional fields
@@ -791,7 +819,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	// Change DO #2's location
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do1), 10000, 6969)
 	conn.SendDatagram(*dg)
 
@@ -823,8 +851,8 @@ func TestStateServer_Inheritance(t *testing.T) {
 	conn := connect(LocationAsChannel(10000, 5000))
 
 	// Test for the creation of subclass objects
-	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do), 10000, 5000, DistributedTestObject3)
+	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED)
+	appendMetaDoidLast(dg, Doid_t(do), 10000, 5000, DistributedTestObject3)
 	dg.AddUint32(0xF0000D) // setRequired1
 	dg.AddUint32(0xB0000B) // setRDB3
 	conn.SendDatagram(*dg)
@@ -838,13 +866,13 @@ func TestStateServer_Inheritance(t *testing.T) {
 
 	// Test the broadcast messages
 	for _, field := range []uint16{SetRDB3, SetRequired1} {
-		dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELD)
+		dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 		dg.AddDoid(Doid_t(do))
 		dg.AddUint16(field)
 		dg.AddUint32(0xB000000B)
 		conn.SendDatagram(*dg)
 		dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(10000, 5000)},
-			5, STATESERVER_OBJECT_SET_FIELD)
+			5, STATESERVER_OBJECT_UPDATE_FIELD)
 		dg.AddDoid(Doid_t(do))
 		dg.AddUint16(field)
 		dg.AddUint32(0xB000000B)
@@ -852,7 +880,7 @@ func TestStateServer_Inheritance(t *testing.T) {
 	}
 
 	// This field should fail to update
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetB2)
 	dg.AddUint32(0xB000B)
@@ -882,7 +910,7 @@ func TestStateServer_Error(t *testing.T) {
 	conn.Expect(t, *dg, false)
 
 	// Send an update on an invalid field
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(0x1337)
 	dg.AddUint32(0)
@@ -892,7 +920,7 @@ func TestStateServer_Error(t *testing.T) {
 	conn.ExpectNone(t)
 
 	// Test for truncated updates
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetRequired1)
 	dg.AddUint16(0) // Should be 32-bit
@@ -908,43 +936,40 @@ func TestStateServer_Error(t *testing.T) {
 	conn.ExpectNone(t)
 
 	// Sanity check the values of the object to make sure they're unchanged
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_GET_ALL)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_QUERY_OBJECT_ALL)
 	dg.AddUint32(69)
-	dg.AddDoid(Doid_t(do))
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{5}, do, STATESERVER_OBJECT_GET_ALL_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{5}, do, STATESERVER_QUERY_OBJECT_ALL_RESP)
 	dg.AddUint32(69)
-	appendMeta(dg, Doid_t(do), 8000, 4000, DistributedTestObject1)
+	appendMetaDoidLast(dg, Doid_t(do), 8000, 4000, DistributedTestObject1)
 	dg.AddUint32(1337)
 	dg.AddUint16(0)
 	conn.Expect(t, *dg, false)
 
 	// Test creating an object w/o a required field
-	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do2), 8000, 4000, DistributedTestObject1)
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED)
+	appendMetaDoidLast(dg, Doid_t(do2), 8000, 4000, DistributedTestObject1)
 	conn.SendDatagram(*dg)
 
 	// Nothing should happen and SS should error
 	conn.ExpectNone(t)
 
 	// Verify that the object doesn't exist
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_GET_ALL)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_QUERY_OBJECT_ALL)
 	dg.AddUint32(69)
-	dg.AddDoid(Doid_t(do2))
 	conn.SendDatagram(*dg)
 	conn.ExpectNone(t)
 
 	// Test creating an object w/ an unrecognized class
-	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do2), 8000, 4000, 0x1337)
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED)
+	appendMetaDoidLast(dg, Doid_t(do2), 8000, 4000, 0x1337)
 	conn.SendDatagram(*dg)
 
 	conn.ExpectNone(t)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_GET_ALL)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_QUERY_OBJECT_ALL)
 	dg.AddUint32(69)
-	dg.AddDoid(Doid_t(do2))
 	conn.SendDatagram(*dg)
 	conn.ExpectNone(t)
 
@@ -960,7 +985,7 @@ func TestStateServer_SingleObjectAccessors(t *testing.T) {
 	instantiateObject(conn, 5, Doid_t(do), 0, 0, 0x1337)
 
 	// Test GetField with an invalid DO
-	dg := (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_GET_FIELD)
+	dg := (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_QUERY_FIELD)
 	dg.AddUint32(context)
 	dg.AddDoid(0xF00D)
 	dg.AddUint16(SetRequired1)
@@ -970,7 +995,7 @@ func TestStateServer_SingleObjectAccessors(t *testing.T) {
 	context++
 
 	// Test GetFields with an invalid DO
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_GET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddUint32(context)
 	dg.AddDoid(0xF00D)
 	dg.AddUint16(2)
@@ -981,30 +1006,21 @@ func TestStateServer_SingleObjectAccessors(t *testing.T) {
 	conn.ExpectNone(t)
 	context++
 
-	// Test GetAll with an invalid DO
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_GET_ALL)
-	dg.AddUint32(context)
-	dg.AddDoid(0xF00D)
-	conn.SendDatagram(*dg)
-
-	conn.ExpectNone(t)
-	context++
-
 	// Test SetField update with an invalid DO
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(0xF00D)
 	dg.AddUint16(SetRequired1)
 	dg.AddUint32(0xB00B)
 	conn.SendDatagram(*dg)
 
 	// Verify the field is unchanged
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_GET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_QUERY_FIELD)
 	dg.AddUint32(0xB0000B)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetRequired1)
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{5}, do, STATESERVER_OBJECT_GET_FIELD_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{5}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
 	dg.AddUint32(0xB0000B)
 	dg.AddBool(true)
 	dg.AddUint16(SetRequired1)
@@ -1012,7 +1028,7 @@ func TestStateServer_SingleObjectAccessors(t *testing.T) {
 	conn.Expect(t, *dg, false)
 
 	// Test SetFields with an invalid DO
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD_MULTIPLE)
 	dg.AddDoid(0xF00D)
 	dg.AddUint16(2)
 	dg.AddUint16(SetRequired1)
@@ -1022,13 +1038,13 @@ func TestStateServer_SingleObjectAccessors(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	// Verify the field is unchanged
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_GET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_QUERY_FIELD)
 	dg.AddUint32(0xB0000B)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetRequired1)
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{5}, do, STATESERVER_OBJECT_GET_FIELD_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{5}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
 	dg.AddUint32(0xB0000B)
 	dg.AddBool(true)
 	dg.AddUint16(SetRequired1)
@@ -1046,8 +1062,8 @@ func TestStateServer_CreateWithOther(t *testing.T) {
 	conn := connect(LocationAsChannel(6000, 3000))
 
 	// Instantiate a new DO with other fields
-	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED_OTHER)
-	appendMeta(dg, Doid_t(do1), 6000, 3000, DistributedTestObject1)
+	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER)
+	appendMetaDoidLast(dg, Doid_t(do1), 6000, 3000, DistributedTestObject1)
 	dg.AddUint32(0x1337)
 	dg.AddUint16(1)
 	dg.AddUint16(SetBR1)
@@ -1065,8 +1081,8 @@ func TestStateServer_CreateWithOther(t *testing.T) {
 	conn.Expect(t, *dg, false)
 
 	// Create another object with a non-ram field as OTHER
-	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED_OTHER)
-	appendMeta(dg, Doid_t(do2), 6000, 3000, DistributedTestObject1)
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER)
+	appendMetaDoidLast(dg, Doid_t(do2), 6000, 3000, DistributedTestObject1)
 	dg.AddUint32(0x1337)
 	dg.AddUint16(1)
 	dg.AddUint16(SetB1)
@@ -1095,11 +1111,11 @@ func TestStateServer_GetLocation(t *testing.T) {
 	instantiateObject(conn, 5, Doid_t(do3), 4000, 5000, 9)
 
 	for n := 1; n <= 3; n++ {
-		dg := (&TestDatagram{}).Create([]Channel_t{Channel_t(n * 100)}, 0x699, STATESERVER_OBJECT_GET_LOCATION)
+		dg := (&TestDatagram{}).Create([]Channel_t{Channel_t(n * 100)}, 0x699, STATESERVER_OBJECT_LOCATE)
 		dg.AddUint32(uint32(n))
 		conn.SendDatagram(*dg)
 
-		dg = (&TestDatagram{}).Create([]Channel_t{0x699}, Channel_t(Doid_t(n*100)), STATESERVER_OBJECT_GET_LOCATION_RESP)
+		dg = (&TestDatagram{}).Create([]Channel_t{0x699}, Channel_t(Doid_t(n*100)), STATESERVER_OBJECT_LOCATE_RESP)
 		dg.AddUint32(uint32(n))
 		appendMeta(dg, Doid_t(n*100), Doid_t((n*1000)+1000), Zone_t((n*1000)+2000), 6969)
 		conn.Expect(t, *dg, false)
@@ -1128,13 +1144,13 @@ func TestStateServer_DeleteAiObjects(t *testing.T) {
 	conn.Flush()
 
 	// Test reset with an invalid AI
-	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_DELETE_AI_OBJECTS)
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_SHARD_REST)
 	dg.AddChannel(200)
 	conn.SendDatagram(*dg)
 	conn.ExpectNone(t)
 
 	// Test our message with the correct AI
-	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_DELETE_AI_OBJECTS)
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_SHARD_REST)
 	dg.AddChannel(100)
 	conn.SendDatagram(*dg)
 
@@ -1157,15 +1173,14 @@ func TestStateServer_Get(t *testing.T) {
 	// ObjectServer object.
 
 	// Send a GET_ALL request !!To the State Server!!
-	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 0x69, STATESERVER_OBJECT_GET_ALL)
+	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 0x69, STATESERVER_QUERY_OBJECT_ALL)
 	dg.AddUint32(1)
-	dg.AddDoid(Doid_t(100100))
 	conn.SendDatagram(*dg)
 
 	// Expect all data from ObjectServer (setName and setDcHash) in response.
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, Channel_t(100100), STATESERVER_OBJECT_GET_ALL_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, Channel_t(100100), STATESERVER_QUERY_OBJECT_ALL_RESP)
 	dg.AddUint32(1)
-	appendMeta(dg, Doid_t(100100), 0, 0, ObjectServer)
+	appendMetaDoidLast(dg, Doid_t(100100), 0, 0, ObjectServer)
 	dg.AddString("ObjectServer")
 	dg.AddUint32(uint32(core.DC.Get_hash()))
 	dg.AddUint16(0)
@@ -1176,28 +1191,27 @@ func TestStateServer_Get(t *testing.T) {
 	instantiateObject(conn, 5, Doid_t(do), 0, 0, 0)
 
 	// Send a GET_ALL request
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_ALL)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_QUERY_OBJECT_ALL)
 	dg.AddUint32(1)
-	dg.AddDoid(Doid_t(do))
 	conn.SendDatagram(*dg)
 
 	// Expect all data in the response
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_GET_ALL_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_QUERY_OBJECT_ALL_RESP)
 	dg.AddUint32(1)
-	appendMeta(dg, Doid_t(do), 0, 0, DistributedTestObject1)
+	appendMetaDoidLast(dg, Doid_t(do), 0, 0, DistributedTestObject1)
 	dg.AddUint32(0)
 	dg.AddUint16(0)
 	conn.Expect(t, *dg, false)
 
 	// Test for GetField on a valid field w/ a set value
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_QUERY_FIELD)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetRequired1)
 	conn.SendDatagram(*dg)
 
 	// Expect response
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_GET_FIELD_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(SetRequired1)
@@ -1205,34 +1219,34 @@ func TestStateServer_Get(t *testing.T) {
 	conn.Expect(t, *dg, false)
 
 	// Test for GetField on a valid field w/ no set value
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_QUERY_FIELD)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetBR1)
 	conn.SendDatagram(*dg)
 
 	// Expect failure
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_GET_FIELD_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
 	dg.AddUint32(1)
 	dg.AddBool(false)
 	conn.Expect(t, *dg, false)
 
 	// Test for GetField on an invalid field
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_QUERY_FIELD)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(0x1337)
 	conn.SendDatagram(*dg)
 
 	// Expect failure
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_GET_FIELD_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
 	dg.AddUint32(1)
 	dg.AddBool(false)
 	conn.Expect(t, *dg, false)
 
 	// Test for GetFields with set values
 	// Set a second field
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetBR1)
 	dg.AddString("coronavirus gonna get me o_o")
@@ -1241,7 +1255,7 @@ func TestStateServer_Get(t *testing.T) {
 	// Let our SET_FIELD get sent first
 	time.Sleep(10 * time.Millisecond)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(2)
@@ -1249,7 +1263,7 @@ func TestStateServer_Get(t *testing.T) {
 	dg.AddUint16(SetBR1)
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_GET_FIELDS_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(2)
@@ -1260,7 +1274,7 @@ func TestStateServer_Get(t *testing.T) {
 	conn.Expect(t, *dg, false)
 
 	// Test for GetFields with set and unset fields
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(2)
@@ -1268,7 +1282,7 @@ func TestStateServer_Get(t *testing.T) {
 	dg.AddUint16(SetBRA1)
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_GET_FIELDS_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(1)
@@ -1277,7 +1291,7 @@ func TestStateServer_Get(t *testing.T) {
 	conn.Expect(t, *dg, false)
 
 	// Test for GetFields with only unset fields
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(2)
@@ -1285,14 +1299,14 @@ func TestStateServer_Get(t *testing.T) {
 	dg.AddUint16(SetBRO1)
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_GET_FIELDS_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(0)
 	conn.Expect(t, *dg, false)
 
 	// Test for GetFields with only invalid fields
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(2)
@@ -1300,13 +1314,13 @@ func TestStateServer_Get(t *testing.T) {
 	dg.AddUint16(SetDb3)
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_GET_FIELDS_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
 	dg.AddUint32(1)
 	dg.AddBool(false)
 	conn.Expect(t, *dg, false)
 
 	// Test for GetFields with mixed valid/invalid fields
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_GET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 0x69, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(2)
@@ -1314,7 +1328,7 @@ func TestStateServer_Get(t *testing.T) {
 	dg.AddUint16(SetRequired1)
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_GET_FIELDS_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
 	dg.AddUint32(1)
 	dg.AddBool(false)
 	conn.Expect(t, *dg, false)
@@ -1329,8 +1343,8 @@ func TestStateServer_SetField(t *testing.T) {
 	conn, location := connect(120), connect(LocationAsChannel(6000, 3000))
 	do := Channel_t(0x888)
 
-	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do), 6000, 3000, DistributedTestObject3)
+	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED)
+	appendMetaDoidLast(dg, Doid_t(do), 6000, 3000, DistributedTestObject3)
 	dg.AddUint32(0) // setRequired1
 	dg.AddUint32(0) // setRDB3
 	conn.SendDatagram(*dg)
@@ -1339,7 +1353,7 @@ func TestStateServer_SetField(t *testing.T) {
 	location.Flush()
 
 	// Send a multi-field update two broadcast and one ram field
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD_MULTIPLE)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(3)
 	dg.AddUint16(SetDb3)
@@ -1353,14 +1367,13 @@ func TestStateServer_SetField(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Verify that the ram fields are set
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 120, STATESERVER_OBJECT_GET_ALL)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 120, STATESERVER_QUERY_OBJECT_ALL)
 	dg.AddUint32(1)
-	dg.AddDoid(Doid_t(do))
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{120}, do, STATESERVER_OBJECT_GET_ALL_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{120}, do, STATESERVER_QUERY_OBJECT_ALL_RESP)
 	dg.AddUint32(1)
-	appendMeta(dg, Doid_t(do), 6000, 3000, DistributedTestObject3)
+	appendMetaDoidLast(dg, Doid_t(do), 6000, 3000, DistributedTestObject3)
 	dg.AddUint32(0xDEADBEEF)
 	dg.AddUint32(0)
 	dg.AddUint16(1)
@@ -1384,7 +1397,7 @@ func TestStateServer_Ownrecv(t *testing.T) {
 	instantiateObject(conn, 5, Doid_t(do), 2000, 1000, 0)
 
 	// Set the object's owner
-	dg := (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_OWNER)
+	dg := (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_OWNER_RECV)
 	dg.AddChannel(owner)
 	conn.SendDatagram(*dg)
 
@@ -1393,21 +1406,21 @@ func TestStateServer_Ownrecv(t *testing.T) {
 	conn.Flush()
 
 	// Set an ownrecv field
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetBRO1)
 	dg.AddUint32(0xF005BA11) // FOOTBALL o_o
 	conn.SendDatagram(*dg)
 
 	// See if owner channel & location receives it
-	dg = (&TestDatagram{}).Create([]Channel_t{location, owner}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{location, owner}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetBRO1)
 	dg.AddUint32(0xF005BA11)
 	conn.Expect(t, *dg, false)
 
 	// Test that client should not get its messages reflected back
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, owner, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, owner, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetBRO1)
 	dg.AddUint32(0xF005BA11)
@@ -1437,36 +1450,38 @@ func TestStateServer_SetOwner(t *testing.T) {
 	instantiateObject(conn, 5, Doid_t(do1), 2, 1, 0)
 
 	// Set the owner
-	dg := (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_SET_OWNER)
+	dg := (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_SET_OWNER_RECV)
 	dg.AddChannel(own1Chan)
 	conn.SendDatagram(*dg)
 
 	// The object should send an ENTER_OWNER
-	dg = (&TestDatagram{}).Create([]Channel_t{own1Chan}, do1, STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED)
+	dg = (&TestDatagram{}).Create([]Channel_t{own1Chan}, do1, STATESERVER_OBJECT_ENTER_OWNER_RECV)
 	appendMeta(dg, Doid_t(do1), 2, 1, DistributedTestObject1)
 	dg.AddUint32(0)
+	dg.AddUint16(0) // 0 optional fields
 	own1.Expect(t, *dg, false)
 
 	// Test for SetOwner w/ an owner
-	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_SET_OWNER)
+	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_SET_OWNER_RECV)
 	dg.AddChannel(own2Chan)
 	conn.SendDatagram(*dg)
 
 	// Expect a CHANGING_OWNER message
-	dg = (&TestDatagram{}).Create([]Channel_t{own1Chan}, 5, STATESERVER_OBJECT_CHANGING_OWNER)
+	dg = (&TestDatagram{}).Create([]Channel_t{own1Chan}, 5, STATESERVER_OBJECT_CHANGE_OWNER_RECV)
 	dg.AddDoid(Doid_t(do1))
 	dg.AddChannel(own2Chan) // New owner
 	dg.AddChannel(own1Chan) // Old owner
 	own1.Expect(t, *dg, false)
 	// It should enter the new owner
-	dg = (&TestDatagram{}).Create([]Channel_t{own2Chan}, do1, STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED)
+	dg = (&TestDatagram{}).Create([]Channel_t{own2Chan}, do1, STATESERVER_OBJECT_ENTER_OWNER_RECV)
 	appendMeta(dg, Doid_t(do1), 2, 1, DistributedTestObject1)
 	dg.AddUint32(0)
+	dg.AddUint16(0) // 0 optional fields
 	own2.Expect(t, *dg, false)
 
 	// Test for SetOwner w/ owner fields and non-owner, non-broadcast fields
-	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED_OTHER)
-	appendMeta(dg, Doid_t(do2), 2, 1, DistributedTestObject3)
+	dg = (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER)
+	appendMetaDoidLast(dg, Doid_t(do2), 2, 1, DistributedTestObject3)
 	dg.AddUint32(0) // setRequired1
 	dg.AddUint32(0) // setRDB3
 	dg.AddUint16(3) // 3 optional fields
@@ -1480,12 +1495,12 @@ func TestStateServer_SetOwner(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_OWNER)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_OWNER_RECV)
 	dg.AddChannel(own1Chan)
 	conn.SendDatagram(*dg)
 
 	// It should enter the new owner with only broadcast and/or ownrecv fields
-	dg = (&TestDatagram{}).Create([]Channel_t{own1Chan}, do2, STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED_OTHER)
+	dg = (&TestDatagram{}).Create([]Channel_t{own1Chan}, do2, STATESERVER_OBJECT_ENTER_OWNER_RECV)
 	dg.AddDoid(Doid_t(do2))
 	dg.AddLocation(2, 1)
 	dg.AddUint16(DistributedTestObject3)
@@ -1514,8 +1529,8 @@ func TestStateServer_Molecular(t *testing.T) {
 
 	// Test for broadcast of a molecular field
 	// Create an object
-	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED)
-	appendMeta(dg, Doid_t(do), 2500, 5000, DistributedTestObject4)
+	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED)
+	appendMetaDoidLast(dg, Doid_t(do), 2500, 5000, DistributedTestObject4)
 	dg.AddUint32(4)     // setX
 	dg.AddUint32(8)     // setY
 	dg.AddUint32(0x100) // setUnrelated
@@ -1532,7 +1547,7 @@ func TestStateServer_Molecular(t *testing.T) {
 	location.Expect(t, *dg, false)
 
 	// Send a molecular update
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetXyz)
 	dg.AddUint32(50)
@@ -1541,7 +1556,7 @@ func TestStateServer_Molecular(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	// The molecular field should be broadcast
-	dg = (&TestDatagram{}).Create([]Channel_t{locationChan}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{locationChan}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(SetXyz)
 	dg.AddUint32(50)
@@ -1551,14 +1566,13 @@ func TestStateServer_Molecular(t *testing.T) {
 
 	// Test for molecular SetField updating individual values
 	// Inspect the object to see if its fields are updated
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 1337, STATESERVER_OBJECT_GET_ALL)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 1337, STATESERVER_QUERY_OBJECT_ALL)
 	dg.AddUint32(1)
-	dg.AddDoid(Doid_t(do))
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{1337}, do, STATESERVER_OBJECT_GET_ALL_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{1337}, do, STATESERVER_QUERY_OBJECT_ALL_RESP)
 	dg.AddUint32(1)
-	appendMeta(dg, Doid_t(do), 2500, 5000, DistributedTestObject4)
+	appendMetaDoidLast(dg, Doid_t(do), 2500, 5000, DistributedTestObject4)
 	dg.AddUint32(50)
 	dg.AddUint32(60)
 	dg.AddUint32(0x100)
@@ -1567,7 +1581,7 @@ func TestStateServer_Molecular(t *testing.T) {
 	conn.Expect(t, *dg, false)
 
 	// Test for molecular SetField with ram, non-required fields
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(Set123)
 	dg.AddUint8(1) // setOne
@@ -1576,7 +1590,7 @@ func TestStateServer_Molecular(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	// The molecular should be broacast
-	dg = (&TestDatagram{}).Create([]Channel_t{locationChan}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{locationChan}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(Set123)
 	dg.AddUint8(1) // setOne
@@ -1585,14 +1599,13 @@ func TestStateServer_Molecular(t *testing.T) {
 	location.Expect(t, *dg, false)
 
 	// GET_ALL should return all of the individual fields
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 1337, STATESERVER_OBJECT_GET_ALL)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 1337, STATESERVER_QUERY_OBJECT_ALL)
 	dg.AddUint32(1)
-	dg.AddDoid(Doid_t(do))
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{1337}, do, STATESERVER_OBJECT_GET_ALL_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{1337}, do, STATESERVER_QUERY_OBJECT_ALL_RESP)
 	dg.AddUint32(1)
-	appendMeta(dg, Doid_t(do), 2500, 5000, DistributedTestObject4)
+	appendMetaDoidLast(dg, Doid_t(do), 2500, 5000, DistributedTestObject4)
 	dg.AddUint32(50)
 	dg.AddUint32(60)
 	dg.AddUint32(0x100)
@@ -1607,7 +1620,7 @@ func TestStateServer_Molecular(t *testing.T) {
 	conn.Expect(t, *dg, false)
 
 	// Test for molecular & atomic mixed GetFields
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 1337, STATESERVER_OBJECT_GET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 1337, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddUint32(1)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(5) // Field count
@@ -1618,7 +1631,7 @@ func TestStateServer_Molecular(t *testing.T) {
 	dg.AddUint16(SetX)
 	conn.SendDatagram(*dg)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{1337}, do, STATESERVER_OBJECT_GET_FIELDS_RESP)
+	dg = (&TestDatagram{}).Create([]Channel_t{1337}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(5)
@@ -1705,7 +1718,7 @@ func TestStateServer_GetZonesObjects(t *testing.T) {
 
 	// Verify GET_OBJECTS with updates
 	// Move DO #4
-	dg := (&TestDatagram{}).Create([]Channel_t{do4}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg := (&TestDatagram{}).Create([]Channel_t{do4}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do0), 930, 6969)
 	conn.SendDatagram(*dg)
 
@@ -1716,7 +1729,7 @@ func TestStateServer_GetZonesObjects(t *testing.T) {
 	checkObjects([]oz{oz{do1, 912}, oz{do3, 930}, oz{do4, 930}}, []Zone_t{912, 930})
 
 	// Move DO #3 away
-	dg = (&TestDatagram{}).Create([]Channel_t{do3}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do3}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do1), 930, 6969)
 	conn.SendDatagram(*dg)
 	checkObjects([]oz{oz{do1, 912}, oz{do4, 930}}, []Zone_t{912, 930})
@@ -1727,7 +1740,7 @@ func TestStateServer_GetZonesObjects(t *testing.T) {
 	parent := Doid_t(4321)
 
 	// Move DO #4 and DO #5 into a zone under our parent
-	dg = (&TestDatagram{}).Create([]Channel_t{do4, do5}, 5, STATESERVER_OBJECT_SET_LOCATION)
+	dg = (&TestDatagram{}).Create([]Channel_t{do4, do5}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, parent, 1000, 6969)
 	conn.SendDatagram(*dg)
 
@@ -1884,8 +1897,8 @@ func TestStateServer_Clrecv(t *testing.T) {
 	conn := connect(LocationAsChannel(0xB00B, 0xF00D))
 
 	// Create a DistributedChunk
-	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_CREATE_OBJECT_WITH_REQUIRED_OTHER)
-	appendMeta(dg, Doid_t(do), 0xB00B, 0xF00D, DistributedChunk)
+	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER)
+	appendMetaDoidLast(dg, Doid_t(do), 0xB00B, 0xF00D, DistributedChunk)
 	dg.AddUint16(12)   // blockList size
 	dg.AddUint32(10) // blockList[0].x
 	dg.AddUint32(20) // blockList[0].y
@@ -1915,7 +1928,7 @@ func TestStateServer_Clrecv(t *testing.T) {
 	conn.Expect(t, *dg, false)
 
 	// Update the object with new values
-	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_FIELDS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_UPDATE_FIELD_MULTIPLE)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(3)
 	dg.AddUint16(BlockList)
@@ -1937,7 +1950,7 @@ func TestStateServer_Clrecv(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	// Only the broadcast field should be sent to the location
-	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(0xB00B, 0xF00D)}, 5, STATESERVER_OBJECT_SET_FIELD)
+	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(0xB00B, 0xF00D)}, 5, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(Doid_t(do))
 	dg.AddUint16(NewBlock)
 	dg.AddUint32(1000) // lastBlock.x

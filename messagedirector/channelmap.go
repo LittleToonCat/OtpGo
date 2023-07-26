@@ -344,7 +344,7 @@ func (r *RangeMap) Send(ch Channel_t, data *MDDatagram) {
 					found = true
 					if !data.HasSent(sub.participant.Subscriber()) {
 						data.sent = append(data.sent, sub.participant.Subscriber())
-						go sub.participant.HandleDatagram(*data.dg.Dg, data.dg.Copy())
+						sub.participant.HandleDatagram(*data.dg.Dg, data.dg.Copy())
 					}
 				}
 			}
@@ -449,6 +449,7 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 
 	if subs.Count() == 0 {
 		channelMap.subscriptions.Delete(ch)
+		MDLog.Debugf("Unsubscribed to channel %d", ch)
 		MD.RemoveChannel(ch)
 	}
 }
@@ -470,13 +471,16 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 		return
 	}
 
+
 	loaded, _ := c.subscriptions.LoadOrStore(ch, &SubscriptionMap{})
 	subs := loaded.(*SubscriptionMap)
 	subs.Store(p, true)
 	subs.Increment()
 	p.channels = append(p.channels, ch)
 
+
 	if subs.Count() == 1 {
+		MDLog.Debugf("Subscribed to channel %d", ch)
 		MD.AddChannel(ch)
 	}
 }
@@ -489,7 +493,7 @@ func (c *ChannelMap) Send(ch Channel_t, data *MDDatagram) {
 			if data.sender == nil || sub.participant.Subscriber() != data.sender.Subscriber() {
 				if !data.HasSent(sub.participant.Subscriber()) {
 					data.sent = append(data.sent, sub.participant.Subscriber())
-					go sub.participant.HandleDatagram(*data.dg.Dg, data.dg.Copy())
+					sub.participant.HandleDatagram(*data.dg.Dg, data.dg.Copy())
 				}
 			}
 			return true

@@ -30,7 +30,7 @@ func NewMDUpstream(md *MessageDirector, address string) *MDUpstream {
 
 func (m *MDUpstream) SubscribeChannel(ch Channel_t) {
 	dg := NewDatagram()
-	dg.AddControlHeader(CONTROL_ADD_CHANNEL)
+	dg.AddControlHeader(CONTROL_SET_CHANNEL)
 	dg.AddChannel(ch)
 	m.client.SendDatagram(dg)
 }
@@ -63,6 +63,9 @@ func (m *MDUpstream) HandleDatagram(datagram Datagram, dgi *DatagramIterator) {
 }
 
 func (m *MDUpstream) ReceiveDatagram(datagram Datagram) {
+	if len(MD.Queue) == cap(MD.Queue) {
+		MDLog.Fatal("Queue is full!")
+	}
 	MD.Queue <- struct {
 		dg Datagram
 		md MDParticipant

@@ -49,6 +49,9 @@ func (m *MDParticipantBase) Subscriber() *Subscriber {
 }
 
 func (m *MDParticipantBase) RouteDatagram(datagram Datagram) {
+	if len(MD.Queue) == cap(MD.Queue) {
+		MDLog.Fatal("Queue is full!")
+	}
 	MD.Queue <- struct {
 		dg Datagram
 		md MDParticipant
@@ -129,7 +132,7 @@ type MDNetworkParticipant struct {
 func NewMDParticipant(conn gonet.Conn) *MDNetworkParticipant {
 	participant := &MDNetworkParticipant{conn: conn}
 	participant.MDParticipantBase.Init(participant)
-	socket := net.NewSocketTransport(conn, 60*time.Second, 4096)
+	socket := net.NewSocketTransport(conn, 0, 4096)
 
 	participant.client = net.NewClient(socket, participant, 60*time.Second)
 	return participant
@@ -156,7 +159,7 @@ func (m *MDNetworkParticipant) ReceiveDatagram(dg Datagram) {
 	if channels == 1 && dgi.ReadChannel() == CONTROL_MESSAGE {
 		msg := dgi.ReadUint16()
 		switch msg {
-		case CONTROL_ADD_CHANNEL:
+		case CONTROL_SET_CHANNEL:
 			m.SubscribeChannel(dgi.ReadChannel())
 		case CONTROL_REMOVE_CHANNEL:
 			m.UnsubscribeChannel(dgi.ReadChannel())
@@ -165,7 +168,7 @@ func (m *MDNetworkParticipant) ReceiveDatagram(dg Datagram) {
 		case CONTROL_REMOVE_RANGE:
 			m.UnsubscribeRange(Range{dgi.ReadChannel(), dgi.ReadChannel()})
 		case CONTROL_ADD_POST_REMOVE:
-			m.AddPostRemove(dgi.ReadChannel(), *dgi.ReadDatagram())
+			m.AddPostRemove(0, *dgi.ReadDatagram())
 		case CONTROL_CLEAR_POST_REMOVES:
 			m.ClearPostRemoves(dgi.ReadChannel())
 		case CONTROL_SET_CON_NAME:

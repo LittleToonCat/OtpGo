@@ -34,7 +34,6 @@ type DistributedObject struct {
 	explicitAi         bool
 	parentSynchronized bool
 
-	context     uint32
 	zoneObjects map[Zone_t][]Doid_t
 }
 
@@ -196,6 +195,26 @@ func (d *DistributedObject) appendRequiredData(dg Datagram, client bool, owner b
 	}
 }
 
+func (d *DistributedObject) appendRequiredDataDoidLast(dg Datagram, client bool, owner bool) {
+	dg.AddLocation(d.parent, d.zone)
+	dg.AddUint16(uint16(d.dclass.Get_number()))
+	dg.AddDoid(d.do)
+	count := d.dclass.Get_num_inherited_fields()
+	for i := 0; i < int(count); i++ {
+		field := d.dclass.Get_inherited_field(i)
+		if molecular, ok := field.As_molecular_field().(dc.DCMolecularField); ok {
+			if (molecular != dc.SwigcptrDCMolecularField(0)) {
+				continue
+			}
+		}
+
+		if field.Is_required() && (!client || field.Is_broadcast() ||
+			field.Is_clrecv() || (owner && field.Is_ownrecv())) {
+			dg.AddVector(d.requiredFields[field])
+		}
+	}
+}
+
 func (d *DistributedObject) appendOtherData(dg Datagram, client bool, owner bool) {
 	if client {
 		var broadcastFields []dc.DCField
@@ -267,30 +286,21 @@ func (d *DistributedObject) sendAiEntry(ai Channel_t, sender Channel_t) {
 		return
 	}
 	d.log.Debugf("Sending AI entry to %d", ai)
-	msgType := STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED
-	if len(d.ramFields) != 0 {
-		msgType = STATESERVER_OBJECT_ENTER_AI_WITH_REQUIRED_OTHER
-	}
+	msgType := STATESERVER_OBJECT_ENTER_AI_RECV
 	dg := NewDatagram()
 	dg.AddServerHeader(ai, Channel_t(d.do), uint16(msgType))
-	d.appendRequiredData(dg, false, false)
-	if len(d.ramFields) != 0 {
-		d.appendOtherData(dg, false, false)
-	}
+	dg.AddUint32(0) // Dummy context
+	d.appendRequiredDataDoidLast(dg, false, false)
+	d.appendOtherData(dg, false, false)
 	d.RouteDatagram(dg)
 }
 
 func (d *DistributedObject) sendOwnerEntry(owner Channel_t) {
-	msgType := STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED
-	if len(d.ramFields) != 0 {
-		msgType = STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED_OTHER
-	}
+	msgType := STATESERVER_OBJECT_ENTER_OWNER_RECV
 	dg := NewDatagram()
 	dg.AddServerHeader(owner, Channel_t(d.do), uint16(msgType))
 	d.appendRequiredData(dg, true, true)
-	if len(d.ramFields) != 0 {
-		d.appendOtherData(dg, true, true)
-	}
+	d.appendOtherData(dg, true, true)
 	d.RouteDatagram(dg)
 }
 
@@ -329,9 +339,11 @@ func (d *DistributedObject) handleLocationChange(parent Doid_t, zone Zone_t, sen
 				// Retrieve parent AI
 				dg := NewDatagram()
 				dg.AddServerHeader(Channel_t(parent), Channel_t(d.do), STATESERVER_OBJECT_GET_AI)
-				dg.AddUint32(d.context)
+				// dg.AddUint32(d.context)
+				// Send our sender as the context
+				dg.AddUint32(uint32(sender)) // prob a bad idea to convert this but...
 				d.RouteDatagram(dg)
-				d.context++
+				// d.context++
 			}
 			targets = append(targets, Channel_t(parent))
 		} else if !d.explicitAi {
@@ -347,7 +359,7 @@ func (d *DistributedObject) handleLocationChange(parent Doid_t, zone Zone_t, sen
 
 	// Broadcast location change message
 	dg := NewDatagram()
-	dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_CHANGING_LOCATION)
+	dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_CHANGE_ZONE)
 	dg.AddDoid(d.do)
 	dg.AddLocation(parent, zone)
 	dg.AddLocation(oldParent, oldZone)
@@ -399,7 +411,7 @@ func (d *DistributedObject) annihilate(sender Channel_t, notifyParent bool) {
 		targets = append(targets, LocationAsChannel(d.parent, d.zone))
 		if notifyParent {
 			dg := NewDatagram()
-			dg.AddServerHeader(Channel_t(d.parent), sender, STATESERVER_OBJECT_CHANGING_LOCATION)
+			dg.AddServerHeader(Channel_t(d.parent), sender, STATESERVER_OBJECT_CHANGE_ZONE)
 			dg.AddDoid(d.do)
 			dg.AddLocation(INVALID_DOID, 0)
 			dg.AddLocation(d.parent, d.zone)
@@ -450,7 +462,7 @@ func (d *DistributedObject) deleteChildren(sender Channel_t) {
 
 func (d *DistributedObject) wakeChildren() {
 	dg := NewDatagram()
-	dg.AddServerHeader(ParentToChildren(d.do), Channel_t(d.do), STATESERVER_OBJECT_GET_LOCATION)
+	dg.AddServerHeader(ParentToChildren(d.do), Channel_t(d.do), STATESERVER_OBJECT_LOCATE)
 	dg.AddUint32(STATESERVER_CONTEXT_WAKE_CHILDREN)
 	d.RouteDatagram(dg)
 }
@@ -568,7 +580,7 @@ func (d *DistributedObject) finishHandleUpdate(field dc.DCField, packedData dc.V
 
 	if len(targets) != 0 {
 		dg := NewDatagram()
-		dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_SET_FIELD)
+		dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_UPDATE_FIELD)
 		dg.AddDoid(d.do)
 		dg.AddUint16(uint16(field.Get_number()))
 		dg.AddVector(packedData)
@@ -636,7 +648,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	msgType := dgi.ReadUint16()
 
 	switch msgType {
-	case STATESERVER_DELETE_AI_OBJECTS:
+	case STATESERVER_SHARD_REST:
 		if d.aiChannel != dgi.ReadChannel() {
 			d.log.Warnf("Received reset for wrong AI channel!")
 			return
@@ -656,13 +668,13 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		} else if do == d.parent {
 			d.annihilate(sender, false)
 		}
-	case STATESERVER_OBJECT_SET_FIELD:
+	case STATESERVER_OBJECT_UPDATE_FIELD:
 		if d.do != dgi.ReadDoid() {
 			break
 		}
 
 		d.handleOneUpdate(dgi, sender)
-	case STATESERVER_OBJECT_SET_FIELDS:
+	case STATESERVER_OBJECT_UPDATE_FIELD_MULTIPLE:
 		if d.do != dgi.ReadDoid() {
 			break
 		}
@@ -693,7 +705,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		dg.AddChannel(d.aiChannel)
 		d.RouteDatagram(dg)
 	case STATESERVER_OBJECT_GET_AI_RESP:
-		dgi.ReadUint32() // Context
+		context := dgi.ReadUint32()
 		parent := dgi.ReadDoid()
 		d.log.Debugf("Received AI query response from %d", parent)
 		if parent != d.parent {
@@ -705,8 +717,8 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		if d.explicitAi {
 			return
 		}
-		d.handleAiChange(ai, sender, false)
-	case STATESERVER_OBJECT_CHANGING_LOCATION:
+		d.handleAiChange(ai, Channel_t(context), false)
+	case STATESERVER_OBJECT_CHANGE_ZONE:
 		child := dgi.ReadDoid()
 		newParent := dgi.ReadDoid()
 		newZone := dgi.ReadZone()
@@ -759,21 +771,21 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			d.log.Debugf("Parent acknowledged my location change!")
 			d.parentSynchronized = true
 		}
-	case STATESERVER_OBJECT_SET_LOCATION:
+	case STATESERVER_OBJECT_SET_ZONE:
 		newParent := dgi.ReadDoid()
 		newZone := dgi.ReadZone()
 		d.log.Debugf("Updating location; parent=%d, zone=%d", newParent, newZone)
 		d.handleLocationChange(newParent, newZone, sender)
-	case STATESERVER_OBJECT_GET_LOCATION:
+	case STATESERVER_OBJECT_LOCATE:
 		context := dgi.ReadUint32()
 
 		dg := NewDatagram()
-		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_GET_LOCATION_RESP)
+		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_LOCATE_RESP)
 		dg.AddUint32(context)
 		dg.AddDoid(d.do)
 		dg.AddLocation(d.parent, d.zone)
 		d.RouteDatagram(dg)
-	case STATESERVER_OBJECT_GET_LOCATION_RESP:
+	case STATESERVER_OBJECT_LOCATE_RESP:
 		if dgi.ReadUint32() != STATESERVER_CONTEXT_WAKE_CHILDREN {
 			d.log.Warnf("Received unexpected GET_LOCATION_RESP from %d", dgi.ReadUint32())
 			return
@@ -786,19 +798,16 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		if parent == d.do {
 			d.zoneObjects[zone] = append(d.zoneObjects[zone], Doid_t(do))
 		}
-	case STATESERVER_OBJECT_GET_ALL:
+	case STATESERVER_QUERY_OBJECT_ALL:
 		context := dgi.ReadUint32()
-		if dgi.ReadDoid() != d.do {
-			return
-		}
 
 		dg = NewDatagram()
-		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_GET_ALL_RESP)
+		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_QUERY_OBJECT_ALL_RESP)
 		dg.AddUint32(context)
-		d.appendRequiredData(dg, false, false)
+		d.appendRequiredDataDoidLast(dg, false, false)
 		d.appendOtherData(dg, false, false)
 		d.RouteDatagram(dg)
-	case STATESERVER_OBJECT_GET_FIELD:
+	case STATESERVER_OBJECT_QUERY_FIELD:
 		context := dgi.ReadUint32()
 		if dgi.ReadDoid() != d.do {
 			return
@@ -809,14 +818,14 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		success := d.handleOneGet(&field, fieldId, false, false)
 
 		dg := NewDatagram()
-		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_GET_FIELD_RESP)
+		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_QUERY_FIELD_RESP)
 		dg.AddUint32(context)
 		dg.AddBool(success)
 		if success {
 			dg.AddDatagram(&field)
 		}
 		d.RouteDatagram(dg)
-	case STATESERVER_OBJECT_GET_FIELDS:
+	case STATESERVER_OBJECT_QUERY_FIELDS:
 		context := dgi.ReadUint32()
 		if dgi.ReadDoid() != d.do {
 			return
@@ -845,7 +854,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 
 		dg := NewDatagram()
-		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_GET_FIELDS_RESP)
+		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_QUERY_FIELDS_RESP)
 		dg.AddUint32(context)
 		dg.AddBool(success)
 		if success {
@@ -853,7 +862,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			dg.AddDatagram(&fields)
 		}
 		d.RouteDatagram(dg)
-	case STATESERVER_OBJECT_SET_OWNER:
+	case STATESERVER_OBJECT_SET_OWNER_RECV:
 		newOwner := dgi.ReadChannel()
 		if newOwner == d.ownerChannel {
 			d.log.Debugf("Received owner change, but owner is the same.")
@@ -864,7 +873,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		if d.ownerChannel != INVALID_CHANNEL {
 			dg := NewDatagram()
-			dg.AddServerHeader(d.ownerChannel, sender, STATESERVER_OBJECT_CHANGING_OWNER)
+			dg.AddServerHeader(d.ownerChannel, sender, STATESERVER_OBJECT_CHANGE_OWNER_RECV)
 			dg.AddDoid(d.do)
 			dg.AddChannel(newOwner)
 			dg.AddChannel(d.ownerChannel)
