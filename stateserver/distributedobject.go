@@ -63,13 +63,13 @@ func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
 	do.wakeChildren()
 	do.Unlock()
 
-	if dgs, ok := messagedirector.ReplayPool[Channel_t(doid)]; ok {
-		for _, dg := range dgs {
-			dgi := NewDatagramIterator(&dg)
-			dgi.SeekPayload()
-			go do.HandleDatagram(dg, dgi)
-		}
-	}
+	// if dgs, ok := messagedirector.ReplayPool[Channel_t(doid)]; ok {
+	// 	for _, dg := range dgs {
+	// 		dgi := NewDatagramIterator(&dg)
+	// 		dgi.SeekPayload()
+	// 		go do.HandleDatagram(dg, dgi)
+	// 	}
+	// }
 
 	return do
 }
@@ -164,13 +164,13 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 	}
 
 	// Replay datagrams we may have missed while generating
-	if dgs, ok := messagedirector.ReplayPool[Channel_t(doid)]; ok {
-		for _, dg := range dgs {
-			dgi := NewDatagramIterator(&dg)
-			dgi.SeekPayload()
-			go do.HandleDatagram(dg, dgi)
-		}
-	}
+	// if dgs, ok := messagedirector.ReplayPool[Channel_t(doid)]; ok {
+	// 	for _, dg := range dgs {
+	// 		dgi := NewDatagramIterator(&dg)
+	// 		dgi.SeekPayload()
+	// 		go do.HandleDatagram(dg, dgi)
+	// 	}
+	// }
 
 	return true, do, nil
 }
