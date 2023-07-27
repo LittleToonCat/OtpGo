@@ -63,13 +63,14 @@ func (m *MDUpstream) HandleDatagram(datagram Datagram, dgi *DatagramIterator) {
 }
 
 func (m *MDUpstream) ReceiveDatagram(datagram Datagram) {
-	if len(MD.Queue) == cap(MD.Queue) {
-		MDLog.Fatal("Queue is full!")
+	MD.queueLock.Lock()
+	MD.Queue = append(MD.Queue, QueueEntry{datagram, nil})
+	MD.queueLock.Unlock()
+
+	select {
+	case MD.shouldProcess <- true:
+	default:
 	}
-	MD.Queue <- struct {
-		dg Datagram
-		md MDParticipant
-	}{datagram, nil}
 }
 
 func (m *MDUpstream) Terminate(err error) {

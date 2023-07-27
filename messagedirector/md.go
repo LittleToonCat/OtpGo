@@ -12,8 +12,10 @@ import (
 	"sync"
 )
 
-// Maximum number of datagrams that can be added to the MD queue.
-const QUEUE_MAX = ^uint16(0)
+type QueueEntry struct {
+	dg Datagram
+	md MDParticipant
+}
 
 var MDLog *log.Entry
 var MD *MessageDirector
@@ -28,12 +30,14 @@ type MessageDirector struct {
 	// as well. The MD will keep track of them and what channels they subscribe and route data to them.
 	participants []MDParticipant
 
-	// MD participants may directly queue datagarams to be routed by inserting it into the
-	// queue channel, where they will be processed asynchronously
-	Queue chan struct {
-		dg Datagram
-		md MDParticipant
-	}
+	// MD participants may directly queue datagarams to be routed by appending it into the
+	// queue slice, where they will be processed asynchronously
+	Queue []QueueEntry
+	queueLock sync.Mutex
+
+	// RouteDatagram will insert to this channel to let the queue loop know there are
+	// datagrams to be processed.
+	shouldProcess chan bool
 
 	// If an MD is configurated to be upstream, it will connect to the downstream MD and route channelmap
 	// events through it. Clients subscribing to channels that reside in other parts of the network will
@@ -49,10 +53,8 @@ func init() {
 
 func Start() {
 	MD = &MessageDirector{}
-	MD.Queue = make(chan struct {
-		dg Datagram
-		md MDParticipant
-	}, QUEUE_MAX)
+	MD.Queue = make([]QueueEntry, 0)
+	MD.shouldProcess = make(chan bool)
 	MD.participants = make([]MDParticipant, 0)
 	MD.Handler = MD
 
@@ -83,6 +85,15 @@ func Start() {
 	go MD.Start(bindAddr, errChan)
 }
 
+func (m *MessageDirector) getDatagramFromQueue() QueueEntry {
+	m.queueLock.Lock()
+	defer m.queueLock.Unlock()
+
+	obj := MD.Queue[0]
+	MD.Queue = MD.Queue[1:]
+	return obj
+}
+
 func (m *MessageDirector) queueLoop() {
 	finish := make(chan bool)
 	signalCh := make(chan os.Signal, 1)
@@ -90,44 +101,47 @@ func (m *MessageDirector) queueLoop() {
 
 	for {
 		select {
-		case obj := <-MD.Queue:
-			go func() {
-				// We are running in a goroutine so that our main read loop will not crash if a datagram EOF is thrown.
-				defer func() {
-					if r := recover(); r != nil {
-						if _, ok := r.(DatagramIteratorEOF); ok {
-							MDLog.Error("Reached end of datagram")
-							// TODO
+		case <-MD.shouldProcess:
+			for len(MD.Queue) > 0 {
+				obj := m.getDatagramFromQueue()
+				go func() {
+					// We are running in a goroutine so that our main read loop will not crash if a datagram EOF is thrown.
+					defer func() {
+						if r := recover(); r != nil {
+							if _, ok := r.(DatagramIteratorEOF); ok {
+								MDLog.Error("Reached end of datagram")
+								// TODO
+							}
+							finish <- true
 						}
-						finish <- true
+					}()
+
+					// Iterate the datagram for receivers
+					var receivers []Channel_t
+					dgi := NewDatagramIterator(&obj.dg)
+					chanCount := dgi.ReadUint8()
+					for n := 0; uint8(n) < chanCount; n++ {
+						receivers = append(receivers, dgi.ReadChannel())
 					}
+
+					// MDLog.Debugf("Routing datagram to channels: %v", receivers)
+
+					// Send payload datagram to every available receiver
+					seekDgi := NewDatagramIterator(&obj.dg)
+					seekDgi.Seek(dgi.Tell())
+					mdDg := &MDDatagram{dg: seekDgi, sender: obj.md}
+					for _, recv := range receivers {
+						channelMap.Send(recv, mdDg)
+					}
+
+					// Send message upstream if necessary
+					if obj.md != nil && m.upstream != nil {
+						m.upstream.HandleDatagram(obj.dg, nil)
+					}
+					finish <- true
 				}()
-
-				// Iterate the datagram for receivers
-				var receivers []Channel_t
-				dgi := NewDatagramIterator(&obj.dg)
-				chanCount := dgi.ReadUint8()
-				for n := 0; uint8(n) < chanCount; n++ {
-					receivers = append(receivers, dgi.ReadChannel())
-				}
-
-				// MDLog.Debugf("Routing datagram to channels: %v", receivers)
-
-				// Send payload datagram to every available receiver
-				seekDgi := NewDatagramIterator(&obj.dg)
-				seekDgi.Seek(dgi.Tell())
-				mdDg := &MDDatagram{dg: seekDgi, sender: obj.md}
-				for _, recv := range receivers {
-					channelMap.Send(recv, mdDg)
-				}
-
-				// Send message upstream if necessary
-				if obj.md != nil && m.upstream != nil {
-					m.upstream.HandleDatagram(obj.dg, nil)
-				}
-				finish <- true
-			}()
-			<-finish
+				<-finish
+			}
 		case <-signalCh:
 			return
 		case <-core.StopChan:

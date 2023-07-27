@@ -49,13 +49,14 @@ func (m *MDParticipantBase) Subscriber() *Subscriber {
 }
 
 func (m *MDParticipantBase) RouteDatagram(datagram Datagram) {
-	if len(MD.Queue) == cap(MD.Queue) {
-		MDLog.Fatal("Queue is full!")
+	MD.queueLock.Lock()
+	MD.Queue = append(MD.Queue, QueueEntry{datagram, m})
+	MD.queueLock.Unlock()
+
+	select {
+	case MD.shouldProcess <- true:
+	default:
 	}
-	MD.Queue <- struct {
-		dg Datagram
-		md MDParticipant
-	}{datagram, m}
 }
 
 func (m *MDParticipantBase) PostRemove() {
