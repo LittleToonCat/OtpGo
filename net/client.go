@@ -102,7 +102,7 @@ func (c *Client) processInput(len int, data []byte) {
 func (c *Client) read() {
 	buff := make([]byte, BUFF_SIZE)
 	if n, err := c.tr.Read(buff); err == nil {
-		go c.processInput(n, buff[0:n])
+		c.processInput(n, buff[0:n])
 		c.read()
 	} else {
 		c.disconnect(err)
