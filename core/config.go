@@ -1,7 +1,7 @@
 package core
 
 import (
-	"github.com/LittleToonCat/dcparser-go"
+	dc "github.com/LittleToonCat/dcparser-go"
 	"otpgo/util"
 	"fmt"
 	"github.com/spf13/viper"
@@ -13,7 +13,7 @@ var StopChan chan bool // For test purposes
 
 type Uberdog struct {
 	Id        util.Doid_t
-	Class     dcparser.DCClass
+	Class     dc.DCClass
 }
 
 var Uberdogs []Uberdog

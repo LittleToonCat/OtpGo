@@ -1,7 +1,7 @@
 package util
 
 import (
-	"github.com/LittleToonCat/dcparser-go"
+	dc "github.com/LittleToonCat/dcparser-go"
 	"bytes"
 	"encoding/binary"
 )
@@ -35,7 +35,7 @@ func (d *Datagram) AddZone(v Zone_t)        { binary.Write(d, binary.LittleEndia
 func (d *Datagram) AddBool(v bool)          { binary.Write(d, binary.LittleEndian, v) }
 func (d *Datagram) AddData(v []byte)        { d.Write(v) }
 func (d *Datagram) AddDatagram(v *Datagram) { d.Write(v.Bytes()) }
-func (d *Datagram) AddVector(v dcparser.Vector_uchar) {
+func (d *Datagram) AddVector(v dc.Vector_uchar) {
 	data := []byte{}
 	for i := int64(0); i < v.Size(); i++ {
 		data = append(data, v.Get(int(i)))

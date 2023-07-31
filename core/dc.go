@@ -1,11 +1,11 @@
 package core
 
 import (
-	"github.com/LittleToonCat/dcparser-go"
+	dc "github.com/LittleToonCat/dcparser-go"
 	"fmt"
 )
 
-var DC dcparser.DCFile = dcparser.NewDCFile()
+var DC dc.DCFile = dc.NewDCFile()
 
 func LoadDC() (err error) {
 	if (len(Config.General.DC_Files) == 0) {
