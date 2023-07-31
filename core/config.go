@@ -45,6 +45,19 @@ type Role struct {
 		ID        int
 		Class     string
 	}
+
+	// DATABASE SERVER
+	Generate struct {
+		Min int
+		Max int
+	}
+	Backend struct {
+		Type      string
+
+		// MONGO BACKEND
+		Server    string
+		Database  string
+	}
 }
 
 type ServerConfig struct {

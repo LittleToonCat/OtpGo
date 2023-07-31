@@ -66,8 +66,6 @@ func deleteObject(conn *TestChannelConnection, sender Channel_t, doid Doid_t) {
 
 func TestMain(m *testing.M) {
 	// SETUP
-	// Silence the (very annoying) logger while we're testing
-	// log.SetHandler(log.HandlerFunc(func(*log.Entry) error { return nil }))
 	log.SetLevel(log.DebugLevel)
 
 	StartDaemon(

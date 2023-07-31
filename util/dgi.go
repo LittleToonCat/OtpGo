@@ -1,7 +1,7 @@
 package util
 
 import (
-	"github.com/LittleToonCat/dcparser-go"
+	dc "github.com/LittleToonCat/dcparser-go"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -226,6 +226,16 @@ func (dgi *DatagramIterator) ReadBlob() []uint8 {
 	return dgi.ReadData(Dgsize_t(dgi.ReadUint16()))
 }
 
+func (dgi *DatagramIterator) ReadVector() dc.Vector_uchar {
+	data := dgi.ReadBlob()
+
+	vector := dc.NewVector_uchar()
+	for _, b := range data {
+		vector.Add(b)
+	}
+	return vector
+}
+
 func (dgi *DatagramIterator) ReadBlob32() []uint8 {
 	return dgi.ReadData(dgi.ReadSize())
 }
@@ -255,10 +265,10 @@ func (dgi *DatagramIterator) ReadRemainder() []uint8 {
 	return dgi.ReadData(sz)
 }
 
-func (dgi *DatagramIterator) ReadRemainderAsVector() dcparser.Vector_uchar {
+func (dgi *DatagramIterator) ReadRemainderAsVector() dc.Vector_uchar {
 	remainder := dgi.ReadRemainder()
 
-	vector := dcparser.NewVector_uchar()
+	vector := dc.NewVector_uchar()
 	for _, b := range remainder {
 		vector.Add(b)
 	}

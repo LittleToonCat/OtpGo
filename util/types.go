@@ -23,7 +23,7 @@ const INVALID_ZONE = Zone_t(0)
 
 const (
 	INVALID_CHANNEL    = Channel_t(0)
-	BCHAN_CLIENTS      = Channel_t(10)
+	BCHAN_CLIENTS      = Channel_t(4014) // From AIMsgTypes.py
 	BCHAN_STATESERVERS = Channel_t(12)
 	BCHAN_DBSERVERS    = Channel_t(13)
 	PARENT_PREFIX      = Channel_t(1) << ZONE_BITS

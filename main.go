@@ -4,6 +4,7 @@ import (
 	"github.com/LittleToonCat/dcparser-go"
 	// "otpgo/clientagent"
 	"otpgo/core"
+	"otpgo/database"
 	// "otpgo/eventlogger"
 	"otpgo/messagedirector"
 	"otpgo/util"
@@ -140,6 +141,8 @@ Revision: INDEV
 		switch role.Type {
 		// case "clientagent":
 		// 	clientagent.NewClientAgent(role)
+		case "database":
+			database.NewDatabaseServer(role)
 		case "stateserver":
 			stateserver.NewStateServer(role)
 		}
