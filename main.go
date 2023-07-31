@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/LittleToonCat/dcparser-go"
+	dc "github.com/LittleToonCat/dcparser-go"
 	// "otpgo/clientagent"
 	"otpgo/core"
 	"otpgo/database"
@@ -11,6 +11,7 @@ import (
 	"otpgo/stateserver"
 	"fmt"
 	"github.com/apex/log"
+	"github.com/carlmjohnson/versioninfo"
 	"github.com/spf13/pflag"
 	"os"
 	"os/signal"
@@ -67,8 +68,8 @@ https://github.com/LittleToonCat/OtpGo
 (Based on the unfinished AstronGo project by nosyliam)
 https://github.com/nosyliam/AstronGo
 
-Revision: INDEV
-`)
+Revision: %s
+`, versioninfo.Revision)
 		os.Exit(1)
 	}
 	if *loglevelPtr != "" {
@@ -125,7 +126,7 @@ Revision: INDEV
 	for _, ud := range core.Config.Uberdogs {
 		class := core.DC.Get_class_by_name(ud.Class)
 		// Check if the method returns a NULL pointer
-		if class == dcparser.SwigcptrDCClass(0) {
+		if class == dc.SwigcptrDCClass(0) {
 			mainLog.Fatalf("For UberDOG %d, class %s does not exist!", ud.ID, ud.Class)
 			return
 		}
