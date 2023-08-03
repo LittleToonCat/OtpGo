@@ -85,6 +85,8 @@ func TestMain(m *testing.M) {
 
 	NewStateServer(core.Role{Control: 100100})
 
+	NewDatabaseStateServer(core.Role{Database: 1200, Ranges: struct{Min Channel_t; Max Channel_t}{9000, 9999}})
+
 	code := m.Run()
 
 	// TEARDOWN
@@ -1960,4 +1962,155 @@ func TestStateServer_Clrecv(t *testing.T) {
 	deleteObject(conn, 5, Doid_t(do))
 	time.Sleep(10 * time.Millisecond)
 	conn.Close()
+}
+
+func TestDatabaseStateServer_Activate(t *testing.T) {
+	shard := connect(5)
+	database := connect(1200)
+
+	do1 := Channel_t(9001)
+	do2 := Channel_t(9002)
+
+	shard.AddChannel(LocationAsChannel(80000, 100))
+
+	dg := (&TestDatagram{}).Create([]Channel_t{do1}, 5, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
+	shard.SendDatagram(*dg)
+
+	// Expect values to be retrieved from the database
+	dg = (&TestDatagram{}).Create([]Channel_t{1200}, do1, DBSERVER_GET_STORED_VALUES)
+	dg.AddUint32(0) // Context
+	dg.AddDoid(9001)
+	dg.AddUint16(2) // 2 required db fields.
+	dg.AddString("setRDB3")
+	dg.AddString("setRDbD5")
+
+	database.Expect(t, *dg, false)
+
+	// Send back to the DBSS with some required values
+	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 1200, DBSERVER_GET_STORED_VALUES_RESP)
+	dg.AddUint32(0) // Context
+	dg.AddDoid(9001)
+	dg.AddUint16(2) // 2 required db fields.
+	dg.AddString("setRDB3")
+	dg.AddString("setRDbD5")
+	dg.AddUint8(0) // Return code
+
+	// setRDB3
+	dg.AddUint16(4) // uint32 size
+	dg.AddUint32(3117)
+	dg.AddBool(true)
+
+	// setRDbD5
+	dg.AddUint16(1) // uint8 size
+	dg.AddUint8(97)
+	dg.AddBool(true)
+
+	database.SendDatagram(*dg)
+
+	// See if it announces its entry into 100.
+	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(80000, 100)}, do1, STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED)
+	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
+	dg.AddUint32(78) // setRequired1
+	dg.AddUint32(3117) // setRDB3
+	shard.Expect(t, *dg, false)
+
+	// Try to activate an already active object.
+	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
+	shard.SendDatagram(*dg)
+
+	// This object is already active, so this should be ignored.
+	shard.ExpectNone(t)
+	database.ExpectNone(t)
+
+	// Remove object from ram
+	deleteObject(shard, 5, 9001)
+	time.Sleep(100 * time.Millisecond)
+	shard.Flush()
+
+	// Test for Activate on Database object with other fields
+	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER)
+	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
+	dg.AddUint16(2) // Two other fields:
+	dg.AddUint16(SetRequired1)
+	dg.AddUint32(0x00a49de2)
+	dg.AddUint16(SetBR1)
+	dg.AddString("V ybir Whar")
+	shard.SendDatagram(*dg)
+
+	// Expect values to be retrieved from the database
+	dg = (&TestDatagram{}).Create([]Channel_t{1200}, do1, DBSERVER_GET_STORED_VALUES)
+	dg.AddUint32(1) // Context (increased by one)
+	dg.AddDoid(9001)
+	dg.AddUint16(2) // 2 required db fields.
+	dg.AddString("setRDB3")
+	dg.AddString("setRDbD5")
+
+	database.Expect(t, *dg, false)
+
+	// Send back to the DBSS with some required values
+	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 1200, DBSERVER_GET_STORED_VALUES_RESP)
+	dg.AddUint32(1) // Context
+	dg.AddDoid(9001)
+	dg.AddUint16(2) // 2 fields.
+	dg.AddString("setRequired1")
+	dg.AddString("setRDB3")
+	dg.AddUint8(0) // Return code.
+
+	// setRequired1
+	dg.AddUint16(4) // uint32 size
+	dg.AddUint32(0x12345678)
+	dg.AddBool(true)
+
+	// setRDB3
+	dg.AddUint16(4) // uint32 size
+	dg.AddUint32(3117)
+	dg.AddBool(true)
+
+	database.SendDatagram(*dg)
+
+	// See if it announces its entry into 100.
+	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(80000, 100)}, do1, STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER)
+	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
+	dg.AddUint32(0x00a49de2) // setRequired1
+	dg.AddUint32(3117) // setRDB3
+	dg.AddUint16(1) // One other field:
+	dg.AddUint16(SetBR1)
+	dg.AddString("V ybir Whar")
+	shard.Expect(t, *dg, false)
+
+	// Remove object from ram
+	deleteObject(shard, 5, 9001)
+	time.Sleep(100 * time.Millisecond)
+	shard.Flush()
+
+	// Test for Activate on non-existent Database object
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+	appendMeta(dg, 9002, 80000, 100, DistributedTestObject5)
+	shard.SendDatagram(*dg)
+
+	// Expect values to be retrieved from the database
+	dg = (&TestDatagram{}).Create([]Channel_t{1200}, do2, DBSERVER_GET_STORED_VALUES)
+	dg.AddUint32(2) // Context (increased by one)
+	dg.AddDoid(9002)
+	dg.AddUint16(2) // 2 required db fields.
+	dg.AddString("setRDB3")
+	dg.AddString("setRDbD5")
+
+	database.Expect(t, *dg, false)
+
+	// Send back to the DBSS with a failure.
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 1200, DBSERVER_GET_STORED_VALUES_RESP)
+	dg.AddUint32(2) // Context
+	dg.AddDoid(9002)
+	dg.AddUint16(2) // 2 fields.
+	dg.AddString("setRDB3")
+	dg.AddString("setRDbD5")
+	dg.AddUint8(1) // Return code.
+
+	database.SendDatagram(*dg)
+
+	// Expect no entry messages
+	shard.ExpectNone(t)
 }

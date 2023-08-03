@@ -46,6 +46,13 @@ type Role struct {
 		Class     string
 	}
 
+	// DBSS
+	Ranges struct {
+		Min util.Channel_t
+		Max util.Channel_t
+	}
+	Database util.Channel_t
+
 	// DATABASE SERVER
 	Generate struct {
 		Min int

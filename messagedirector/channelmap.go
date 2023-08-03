@@ -5,7 +5,6 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
-	// "time"
 )
 
 // TODO: Rewrite everything for efficiency
@@ -421,11 +420,17 @@ func (c *ChannelMap) SubscribeRange(p *Subscriber, rng Range) {
 
 	c.ranges.Add(rng, p)
 	p.ranges = c.ranges.Ranges(p)
+
+	MDLog.Debugf("Subscribed to range %d - %d", rng.Min, rng.Max)
+
 }
 
 func (c *ChannelMap) UnsubscribeRange(p *Subscriber, rng Range) {
 	c.ranges.Remove(rng, p)
 	p.ranges = c.ranges.Ranges(p)
+
+	MDLog.Debugf("Unsubscribed to range %d - %d", rng.Min, rng.Max)
+
 }
 
 func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
@@ -447,9 +452,10 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 		c.ranges.Remove(Range{ch, ch}, p)
 	}
 
+	MDLog.Debugf("Unsubscribed to channel %d", ch)
+
 	if subs.Count() == 0 {
 		channelMap.subscriptions.Delete(ch)
-		MDLog.Debugf("Unsubscribed to channel %d", ch)
 		MD.RemoveChannel(ch)
 	}
 }
@@ -478,9 +484,9 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 	subs.Increment()
 	p.channels = append(p.channels, ch)
 
+	MDLog.Debugf("Subscribed to channel %d", ch)
 
 	if subs.Count() == 1 {
-		MDLog.Debugf("Subscribed to channel %d", ch)
 		MD.AddChannel(ch)
 	}
 }
@@ -499,10 +505,8 @@ func (c *ChannelMap) Send(ch Channel_t, data *MDDatagram) {
 			return true
 		})
 		data.sendLock.Unlock()
-	} else {
-		// Default to range lookup
-		c.ranges.Send(ch, data)
 	}
+	c.ranges.Send(ch, data)
 
 }
 

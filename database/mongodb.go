@@ -238,7 +238,14 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 			if !ok {
 				// Use default value instead if there is any.
 				if field.Has_default_value() {
-					data = field.Get_default_value()
+					// HACK: Because Get_default_value returns a pointer which will
+					// become lost when accidentally deleted, we'd have to copy it.
+					// into a new blob instance.
+					value := field.Get_default_value()
+					data = dc.NewVector_uchar()
+					for i := int64(0); i < value.Size(); i++ {
+						data.Add(value.Get(int(i)))
+					}
 				} else {
 					// Move on.
 					continue
@@ -324,12 +331,36 @@ func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 	err := b.objects.FindOne(context.Background(), filter).Decode(&object)
 	if err != nil {
 		b.db.log.Errorf("Failed to retrieve object %d from database: %s", doId, err.Error())
+
+		// Reply with an error.
+		dg := NewDatagram()
+		dg.AddServerHeader(sender, b.db.control, DBSERVER_GET_STORED_VALUES_RESP)
+		dg.AddUint32(ctx)
+		dg.AddDoid(doId)
+		dg.AddUint16(uint16(len(fields)))
+		for _, field := range fields {
+			dg.AddString(field)
+		}
+		dg.AddUint8(1) // Error code
+		b.db.RouteDatagram(dg)
 		return
 	}
 
 	dclass := core.DC.Get_class_by_name(object.Class)
 	if dclass == dc.SwigcptrDCClass(0) {
 		b.db.log.Errorf("Class %s for object %d does not exist!", object.Class, doId)
+
+		// Reply with an error.
+		dg := NewDatagram()
+		dg.AddServerHeader(sender, b.db.control, DBSERVER_GET_STORED_VALUES_RESP)
+		dg.AddUint32(ctx)
+		dg.AddDoid(doId)
+		dg.AddUint16(uint16(len(fields)))
+		for _, field := range fields {
+			dg.AddString(field)
+		}
+		dg.AddUint8(2) // Error code
+		b.db.RouteDatagram(dg)
 		return
 	}
 
@@ -347,6 +378,12 @@ func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 		dcField := dclass.Get_field_by_name(field)
 		if dcField == dc.SwigcptrDCField(0) {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, object.Class)
+			continue
+		}
+
+		if field == "DcObjectType" {
+			// Return dclass type
+			packedData[field] = dcField.Parse_string(object.Class)
 			continue
 		}
 

@@ -144,6 +144,8 @@ Revision: %s
 		// 	clientagent.NewClientAgent(role)
 		case "database":
 			database.NewDatabaseServer(role)
+		case "dbss":
+			stateserver.NewDatabaseStateServer(role)
 		case "stateserver":
 			stateserver.NewStateServer(role)
 		}

@@ -20,13 +20,8 @@ type StateServer struct {
 }
 
 func NewStateServer(config core.Role) *StateServer {
-	ss := &StateServer{
-		config:  config,
-		objects: make(map[Doid_t]*DistributedObject),
-		log: log.WithFields(log.Fields{
-			"name": fmt.Sprintf("StateServer (%d)", config.Control),
-		}),
-	}
+	ss := &StateServer{}
+	ss.InitStateServer(config, fmt.Sprintf("StateServer (%d)", config.Control))
 
 	ss.Init(ss)
 
@@ -39,6 +34,14 @@ func NewStateServer(config core.Role) *StateServer {
 	ss.registerObjects(config.Objects)
 
 	return ss
+}
+
+func (s *StateServer) InitStateServer(config core.Role, logName string) {
+	s.config = config
+	s.objects = map[Doid_t]*DistributedObject{}
+	s.log = log.WithFields(log.Fields{
+		"name": logName,
+	})
 }
 
 func (s *StateServer) registerObjects(objects []struct{ID int; Class string}) {
@@ -67,13 +70,22 @@ func (s *StateServer) registerObjects(objects []struct{ID int; Class string}) {
 
 		// TODO: Configurable field values.  We have functions that parses
 		// human formatted data into binary.
-		requiredFields := make(FieldValues)
-		ramFields := make(FieldValues)
+		requiredFields := FieldValues{}
+		ramFields := FieldValues{}
 
 		do := NewDistributedObjectWithData(s, Doid_t(obj.ID), 0, 0, dclass, requiredFields, ramFields)
 		s.objects[Doid_t(obj.ID)] = do
 	}
 }
+
+func (s *StateServer) CreateDistributedObjectWithData( doid Doid_t, parent Doid_t,
+	zone Zone_t, dclass dc.DCClass, requiredFields FieldValues,
+	ramFields FieldValues) *DistributedObject {
+		do := NewDistributedObjectWithData(s, doid, parent, zone, dclass, requiredFields, ramFields)
+		s.objects[doid] = do
+
+		return do
+	}
 
 func (s *StateServer) handleGenerate(dgi *DatagramIterator, other bool) {
 	parent := dgi.ReadDoid()
