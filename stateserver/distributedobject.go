@@ -470,10 +470,18 @@ func (d *DistributedObject) wakeChildren() {
 func (d *DistributedObject) saveField(field dc.DCField, data dc.Vector_uchar) bool {
 	if field.Is_required() {
 		d.log.Debugf("Storing REQUIRED field \"%s\": %s", field.Get_name(), field.Format_data(data))
+		if oldData, ok := d.requiredFields[field]; ok {
+			// Clean up old data.
+			dc.DeleteVector_uchar(oldData)
+		}
 		d.requiredFields[field] = data
 		return true
 	} else if field.Is_ram() {
 		d.log.Debugf("Storing RAM field \"%s\": %s", field.Get_name(), field.Format_data(data))
+		if oldData, ok := d.ramFields[field]; ok {
+			// Clean up old data.
+			dc.DeleteVector_uchar(oldData)
+		}
 		d.ramFields[field] = data
 		return true
 	}
