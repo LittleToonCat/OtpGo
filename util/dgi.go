@@ -200,6 +200,9 @@ func (dgi *DatagramIterator) ReadFloat64() float64 {
 
 func (dgi *DatagramIterator) ReadString() string {
 	sz := dgi.ReadUint16()
+	if sz == 0 {
+		return ""
+	}
 	buff := make([]byte, sz)
 	if _, err := dgi.Read.Read(buff); err != nil {
 		dgi.panic(int8(sz))
@@ -212,6 +215,9 @@ func (dgi *DatagramIterator) ReadString() string {
 
 func (dgi *DatagramIterator) ReadString32() string {
 	sz := dgi.ReadSize()
+	if sz == 0 {
+		return ""
+	}
 	buff := make([]byte, sz)
 	if _, err := dgi.Read.Read(buff); err != nil {
 		dgi.panic(int8(sz))
@@ -322,4 +328,8 @@ func (dgi *DatagramIterator) Skip(len Dgsize_t) {
 
 	dgi.offset += len
 	dgi.Read.Seek(int64(dgi.offset), io.SeekStart)
+}
+
+func (dgi *DatagramIterator) RemainingSize() Dgsize_t {
+	return Dgsize_t(dgi.Dg.Len()) + dgi.offset
 }

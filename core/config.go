@@ -27,6 +27,7 @@ type Role struct {
 	Tuning  struct {
 		Interest_Timeout int
 	}
+	Lua_File          string
 	Client struct {
 		Add_Interest      string
 		Write_Buffer_Size int

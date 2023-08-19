@@ -53,6 +53,12 @@ roles:
       #manual_dc_hash: 0xABCD1234
       version: "FooGame v7.0"
 
+      # A path to a Lua file that the CA will load and use containing both regular
+      # and game-specific message handling and logic.  For example, "ToontownClient.lua"
+      # would contain logic that are specific to and handles messages sent by Disney's
+      # Toontown Online client.
+      lua_file: ToontownClient.lua
+
       # "haproxy" can be turned on to indicate that incoming connections will
       # be prefixed with HAProxy's PROXY protocol, and the client address
       # should be read from this instead.
@@ -78,16 +84,6 @@ roles:
         # must provide a valid client certificate or be disconnected.
         cert_authority: FooAuthority.pem
         max_verify_depth: 2 # Defaults to 6; ignored if cert_authority is not present
-      client:
-        # Type declares which client this client agent should generate when it receives a new
-        # connection.  For example, "ToontownClient" accepts connections and messages
-        # sent by the Disney's Toontown Online client.
-        type: ToontownClient
-        # Relocate allows a client to send a ClientObjectLocation message to the server to
-        # indicate it would like to change the location of an object owned by that client.
-        # This is a feature specific to the Astron client, a custom client class
-        # could define its own set of configuration values.
-        relocate: true # Default: false
       # Channels defines the range of channels this clientagent can assign to Clients
       channels:
           min: 100100

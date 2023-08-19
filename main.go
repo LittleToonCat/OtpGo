@@ -2,7 +2,7 @@ package main
 
 import (
 	dc "github.com/LittleToonCat/dcparser-go"
-	// "otpgo/clientagent"
+	"otpgo/clientagent"
 	"otpgo/core"
 	"otpgo/database"
 	// "otpgo/eventlogger"
@@ -140,8 +140,8 @@ Revision: %s
 	// Instantiate roles
 	for _, role := range core.Config.Roles {
 		switch role.Type {
-		// case "clientagent":
-		// 	clientagent.NewClientAgent(role)
+		case "clientagent":
+			clientagent.NewClientAgent(role)
 		case "database":
 			database.NewDatabaseServer(role)
 		case "dbss":
