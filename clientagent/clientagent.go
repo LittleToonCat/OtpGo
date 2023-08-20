@@ -83,6 +83,14 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	RegisterDatagramIteratorType(ca.L)
 	RegisterClientType(ca.L)
 
+	// Set globals
+	ca.L.SetGlobal("SERVER_VERSION", lua.LString(ca.config.Version))
+	if ca.config.DC_Hash != 0 {
+		ca.L.SetGlobal("DC_HASH", lua.LNumber(ca.config.DC_Hash))
+	} else {
+		ca.L.SetGlobal("DC_HASH", lua.LNumber(core.DC.Get_hash()))
+	}
+
 	ca.log.Infof("Running Lua script: %s", ca.config.Lua_File)
 	if err := ca.L.DoFile(ca.config.Lua_File); err != nil {
 		ca.log.Fatal(err.Error())

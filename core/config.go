@@ -24,6 +24,7 @@ type Role struct {
 	// CLIENT
 	Bind    string
 	Version string
+	DC_Hash int
 	Tuning  struct {
 		Interest_Timeout int
 	}

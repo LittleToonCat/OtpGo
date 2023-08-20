@@ -769,7 +769,7 @@ func (c *Client) init(config core.Role, conn gonet.Conn) {
 
 	socket := net.NewSocketTransport(conn,
 		time.Duration(config.Client.Keepalive)*time.Second, config.Client.Write_Buffer_Size)
-	c.client = net.NewClient(socket, c, time.Duration(config.Client.Keepalive)*time.Second)
+	c.client = net.NewClient(socket, c, time.Duration(5)*time.Second)
 
 	if !c.client.Local() {
 		// event := eventlogger.NewLoggedEvent("client-connected", "")

@@ -2,6 +2,7 @@ package clientagent
 
 import (
     "github.com/yuin/gopher-lua"
+	. "otpgo/util"
 )
 
 // Client wrappers for Lua
@@ -36,6 +37,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"sendDisconnect": LuaSendDisconnect,
 	"handleHeartbeat": LuaHandleHeartbeat,
 	"handleDisconnect": LuaHandleDisconnect,
+	"sendDatagram": LuaSendDatagram,
 }
 
 func LuaGetSetAuthenticated(L *lua.LState) int {
@@ -69,5 +71,12 @@ func LuaHandleDisconnect(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	client.cleanDisconnect = true
 	client.handleDisconnect()
+	return 1
+}
+
+func LuaSendDatagram(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	dg := CheckDatagram(L, 2)
+	go client.client.SendDatagram(*dg)
 	return 1
 }
