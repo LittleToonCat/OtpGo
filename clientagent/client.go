@@ -1046,3 +1046,14 @@ func (c *Client) handleInterestDone(interestId uint16, context uint32) {
 	resp.AddUint16(interestId)
 	c.client.SendDatagram(resp)
 }
+
+func (c *Client) SetChannel(channel Channel_t) {
+	if (c.channel == channel) {
+		return
+	}
+	if (c.channel != c.allocatedChannel) {
+		c.UnsubscribeChannel(c.channel)
+	}
+	c.channel = channel
+	c.SubscribeChannel(channel)
+}
