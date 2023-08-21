@@ -331,5 +331,5 @@ func (dgi *DatagramIterator) Skip(len Dgsize_t) {
 }
 
 func (dgi *DatagramIterator) RemainingSize() Dgsize_t {
-	return Dgsize_t(dgi.Dg.Len()) + dgi.offset
+	return Dgsize_t(dgi.Dg.Len()) - dgi.offset
 }

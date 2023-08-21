@@ -150,6 +150,7 @@ func LuaAddString(L *lua.LState) int {
 }
 
 var DatagramIteratorMethods = map[string]lua.LGFunction{
+	"getRemainingSize": LuaGetRemainingSize,
 	"readInt8": LuaReadInt8,
 	"readUint8": LuaReadUint8,
 	"readInt16": LuaReadInt16,
@@ -221,5 +222,12 @@ func LuaReadString(L *lua.LState) int {
 	dgi := CheckDatagramIterator(L, 1)
 	v := dgi.ReadString()
 	L.Push(lua.LString(v))
+	return 1
+}
+
+func LuaGetRemainingSize(L *lua.LState) int {
+	dgi := CheckDatagramIterator(L, 1)
+	size := dgi.RemainingSize()
+	L.Push(lua.LNumber(size))
 	return 1
 }

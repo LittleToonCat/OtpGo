@@ -31,6 +31,7 @@ type ClientAgent struct {
 
 	rng             messagedirector.Range
 	interestTimeout int
+	database        Channel_t
 
 	L *lua.LState
 }
@@ -60,6 +61,7 @@ func (c *ChannelTracker) free(ch Channel_t) {
 func NewClientAgent(config core.Role) *ClientAgent {
 	ca := &ClientAgent{
 		config: config,
+		database: config.Database,
 		log: log.WithFields(log.Fields{
 			"name": fmt.Sprintf("ClientAgent (%s)", config.Bind),
 		}),
@@ -118,7 +120,7 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	return ca
 }
 
-func (c *ClientAgent) CallLuaFunction(fn lua.LValue, args ...lua.LValue) (error) {
+func (c *ClientAgent) CallLuaFunction(fn lua.LValue, client *Client, args ...lua.LValue) {
 	c.Lock()
 	err := c.L.CallByParam(lua.P{
 		Fn: fn,
@@ -127,9 +129,13 @@ func (c *ClientAgent) CallLuaFunction(fn lua.LValue, args ...lua.LValue) (error)
 	}, args...)
 	c.Unlock()
 	if err != nil {
-		return err
+		if client != nil {
+			client.log.Errorf("Lua error:\n%s", err.Error())
+			client.sendDisconnect(CLIENT_DISCONNECT_GENERIC, "Lua error has occured.", true)
+		} else {
+			c.log.Errorf("Lua error:\n%s", err.Error())
+		}
 	}
-	return nil
 }
 
 func (c *ClientAgent) HandleConnect(conn gonet.Conn) {

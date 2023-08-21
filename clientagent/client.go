@@ -1,17 +1,20 @@
 package clientagent
 
 import (
+	"errors"
 	"otpgo/core"
 	// "otpgo/eventlogger"
+	"fmt"
+	gonet "net"
 	"otpgo/messagedirector"
 	"otpgo/net"
 	. "otpgo/util"
-	"fmt"
-	"github.com/apex/log"
-	gonet "net"
 	"sync"
 	"time"
+
 	dc "github.com/LittleToonCat/dcparser-go"
+	"github.com/apex/log"
+	lua "github.com/yuin/gopher-lua"
 )
 
 type ClientState int
@@ -63,11 +66,16 @@ type Client struct {
 	ca     *ClientAgent
 	log    *log.Entry
 
+	userTable *lua.LTable
+
 	allocatedChannel Channel_t
 	channel          Channel_t
 	state            ClientState
 	authenticated    bool
+
 	context          uint32
+	createContextMap map[uint32]func(doId Doid_t)
+	getContextMap    map[uint32]func(doId Doid_t, dgi *DatagramIterator)
 
 	queue         []Datagram
 	queueLock     sync.Mutex
@@ -103,6 +111,8 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 		queue: []Datagram{},
 		shouldProcess: make(chan bool),
 		stopChan: make(chan bool),
+		createContextMap: map[uint32]func(doId Doid_t){},
+		getContextMap: map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
 		authenticated: false,
 		visibleObjects: map[Doid_t]VisibleObject{},
 		declaredObjects: map[Doid_t]DeclaredObject{},
@@ -134,14 +144,14 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	return c
 }
 
-func (c *Client) sendDisconnect(reason uint16, error string, security bool) {
+func (c *Client) sendDisconnect(reason uint16, message string, security bool) {
 	// TODO: Implement security loglevel
 	// var eventType string
 	if security {
-		c.log.Errorf("[SECURITY] Ejecting client (%s): %s", reason, error)
+		c.log.Errorf("[SECURITY] Ejecting client (%s): %s", reason, message)
 		// eventType = "client-ejected-security"
 	} else {
-		c.log.Errorf("Ejecting client (%s): %s", reason, error)
+		c.log.Errorf("Ejecting client (%s): %s", reason, message)
 		// eventType = "client-ejected"
 	}
 
@@ -154,11 +164,11 @@ func (c *Client) sendDisconnect(reason uint16, error string, security bool) {
 		resp := NewDatagram()
 		resp.AddUint16(CLIENT_GO_GET_LOST)
 		resp.AddUint16(reason)
-		resp.AddString(error)
+		resp.AddString(message)
 		c.client.SendDatagram(resp)
 
 		c.cleanDisconnect = true
-		c.handleDisconnect()
+		c.Terminate(errors.New(message))
 	}
 }
 
@@ -444,7 +454,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		c.sendDisconnect(reason, error, false)
 	case CLIENTAGENT_DROP:
 		c.lock.Lock()
-		c.handleDisconnect()
+		c.Terminate(errors.New("Dropped"))
 		c.lock.Unlock()
 	case CLIENTAGENT_SET_STATE:
 		c.state = ClientState(dgi.ReadUint16())
@@ -641,6 +651,11 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case STATESERVER_OBJECT_GET_ZONE_COUNT_RESP:
 	case STATESERVER_OBJECT_SET_ZONE:
 	case STATESERVER_OBJECT_CHANGE_OWNER_RECV:
+	case DBSERVER_CREATE_STORED_OBJECT_RESP:
+		context, code, doId := dgi.ReadUint32(), dgi.ReadUint8(), dgi.ReadDoid()
+		c.handleCreateDatabaseResp(context, code, doId)
+	case DBSERVER_GET_STORED_VALUES_RESP:
+		c.handleGetStoredValuesResp(dgi)
 	default:
 		c.log.Errorf("Received unknown server msgtype %d", msgType)
 	}
@@ -793,7 +808,7 @@ func (c *Client) startHeartbeat() {
 	}
 }
 
-func (c *Client) handleDisconnect() {
+func (c *Client) Terminate(err error) {
 	// if !c.cleanDisconnect && !c.client.Local() {
 	// 	event := eventlogger.NewLoggedEvent("client-lost", "")
 	// 	event.Add("remote_address", c.conn.RemoteAddr().String())
@@ -858,13 +873,10 @@ func (c *Client) queueLoop() {
 					}()
 
 					// Pass the datagram over to Lua to handle:
-					if err := c.ca.CallLuaFunction(c.ca.L.GetGlobal("receiveDatagram"),
+					c.ca.CallLuaFunction(c.ca.L.GetGlobal("receiveDatagram"), c,
 					// Arguments:
 					NewLuaClient(c.ca.L, c),
-					NewLuaDatagramIteratorFromExisting(c.ca.L, dgi)); err != nil {
-						c.log.Errorf("Lua error:\n%s", err.Error())
-						c.sendDisconnect(CLIENT_DISCONNECT_GENERIC, "Lua error when handling message", true)
-					}
+					NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
 					finish <- true
 				}()
 
@@ -884,6 +896,70 @@ func (c *Client) queueLoop() {
 
 func (c *Client) handleHeartbeat() {
 	c.heartbeat = time.NewTicker(time.Duration(c.config.Client.Heartbeat_Timeout) * time.Second)
+}
+
+func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string]dc.Vector_uchar, callback func(doId Doid_t)) {
+	c.createContextMap[c.context] = callback
+
+	dg := NewDatagram()
+	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_CREATE_STORED_OBJECT)
+	dg.AddUint32(c.context)
+	dg.AddString("") // Unknown
+	dg.AddUint16(objectType)
+	dg.AddUint16(uint16(len(packedValues)))
+
+	for name, value := range packedValues {
+		dg.AddString(name)
+		dg.AddUint16(uint16(value.Size()))
+		dg.AddVector(value)
+		dc.DeleteVector_uchar(value)
+	}
+	c.RouteDatagram(dg)
+	c.context++
+}
+
+func (c *Client) handleCreateDatabaseResp(context uint32, code uint8, doId Doid_t) {
+	callback, ok := c.createContextMap[context]
+	if !ok {
+		c.log.Warnf("Got CreateDatabaseRsp with missing context %d", context)
+		return
+	}
+
+	if code > 0 {
+		c.log.Warnf("CreateDatabaseResp returned an error!")
+	}
+
+	callback(doId)
+	delete(c.createContextMap, context)
+}
+
+func (c *Client) getDatabaseValues(doId Doid_t, fields []string, callback func(doId Doid_t, dgi *DatagramIterator)) {
+	c.getContextMap[c.context] = callback
+
+	dg := NewDatagram()
+	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_GET_STORED_VALUES)
+	dg.AddUint32(c.context)
+	dg.AddDoid(doId)
+	dg.AddUint16(uint16(len(fields)))
+	for _, name := range fields {
+		dg.AddString(name)
+	}
+	c.RouteDatagram(dg)
+	c.context++
+}
+
+func (c *Client) handleGetStoredValuesResp(dgi *DatagramIterator) {
+	context := dgi.ReadUint32()
+	doId := dgi.ReadDoid()
+
+	callback, ok := c.getContextMap[context]
+	if !ok {
+		c.log.Warnf("Got GetStoredResp with missing context %d", context)
+		return
+	}
+
+	callback(doId, dgi)
+	delete(c.getContextMap, context)
 }
 
 func (c *Client) handleAddOwnership(do Doid_t, parent Doid_t, zone Zone_t, dc uint16, dgi *DatagramIterator) {
