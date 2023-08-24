@@ -45,6 +45,8 @@ var ClientMethods = map[string]lua.LGFunction{
 	"handleDisconnect": LuaHandleDisconnect,
 	"sendDatagram": LuaSendDatagram,
 	"sendDisconnect": LuaSendDisconnect,
+	"subscribeChannel": LuaSubscribeChannel,
+	"setChannel": LuaSetChannel,
 	"userTable": LuaGetSetUserTable,
 }
 
@@ -235,5 +237,19 @@ func LuaGetSetUserTable(L *lua.LState) int {
 		}
 		L.Push(client.userTable)
 	}
+	return 1
+}
+
+func LuaSubscribeChannel(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	channel := Channel_t(L.CheckInt(2))
+	client.SubscribeChannel(channel)
+	return 1
+}
+
+func LuaSetChannel(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	channel := Channel_t(L.CheckInt(2))
+	client.SetChannel(channel)
 	return 1
 }
