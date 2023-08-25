@@ -42,8 +42,10 @@ var ClientMethods = map[string]lua.LGFunction{
 	"createDatabaseObject": LuaCreateDatabaseObject,
 	"getDatabaseValues": LuaGetDatabaseValues,
 	"handleAddInterest": LuaHandleAddInterest,
-	"handleHeartbeat": LuaHandleHeartbeat,
 	"handleDisconnect": LuaHandleDisconnect,
+	"handleHeartbeat": LuaHandleHeartbeat,
+	"handleRemoveInterest": LuaHandleRemoveInterest,
+	"handleUpdateField": LuaHandleUpdateField,
 	"sendDatagram": LuaSendDatagram,
 	"sendDisconnect": LuaSendDisconnect,
 	"subscribeChannel": LuaSubscribeChannel,
@@ -243,19 +245,65 @@ func LuaGetSetUserTable(L *lua.LState) int {
 
 func LuaHandleAddInterest(L *lua.LState) int {
 	client := CheckClient(L, 1)
-	handle := uint16(L.CheckInt(2))
-	context := uint32(L.CheckInt(3))
-	parent := Doid_t(L.CheckInt(4))
-	zonesTable := L.CheckTable(5)
 
-	zones := make([]Zone_t, 0)
-	zonesTable.ForEach(func(_, l2 lua.LValue) {
-		zone := l2.(lua.LNumber)
-		zones = append(zones, Zone_t(zone))
-	})
+	var handle uint16
+	var context uint32
+	var parent Doid_t
+	zones := []Zone_t{}
+
+	if L.GetTop() == 2 {
+		// client:handleAddInterest(dgi)
+		dgi := CheckDatagramIterator(L, 2)
+		handle = dgi.ReadUint16()
+		context = dgi.ReadUint32()
+		parent = dgi.ReadDoid()
+		for dgi.RemainingSize() > 0 {
+			zones = append(zones, dgi.ReadZone())
+		}
+	} else {
+		// client:handleAddInterest(handle, context, parent, {zone...})
+		handle = uint16(L.CheckInt(2))
+		context = uint32(L.CheckInt(3))
+		parent = Doid_t(L.CheckInt(4))
+		zonesTable := L.CheckTable(5)
+
+		zonesTable.ForEach(func(_, l2 lua.LValue) {
+			zone := l2.(lua.LNumber)
+			zones = append(zones, Zone_t(zone))
+		})
+	}
 
 	i := client.buildInterest(handle, parent, zones)
 	client.addInterest(i, context, 0)
+
+	return 1
+}
+
+func LuaHandleRemoveInterest(L *lua.LState) int {
+	client := CheckClient(L, 1)
+
+	var handle uint16
+	var context uint32
+
+	if L.GetTop() == 2 {
+		// client:handleRemoveInterest(dgi)
+		dgi := CheckDatagramIterator(L, 2)
+		handle = dgi.ReadUint16()
+		context = uint32(0)
+		if dgi.RemainingSize() == Dgsize {
+			context = dgi.ReadUint32()
+		}
+	} else {
+		// client:handleRemoveInterest(handle, context)
+		handle = uint16(L.CheckInt(2))
+		context = uint32(L.CheckInt(3))
+	}
+
+	if i, ok := client.interests[handle]; ok {
+		client.removeInterest(i, context)
+	} else {
+		client.sendDisconnect(CLIENT_DISCONNECT_GENERIC, fmt.Sprintf("Attempted to remove non-existant interest: %d", handle), true)
+	}
 
 	return 1
 }
@@ -271,5 +319,15 @@ func LuaSetChannel(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	channel := Channel_t(L.CheckInt(2))
 	client.SetChannel(channel)
+	return 1
+}
+
+func LuaHandleUpdateField(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	dgi := CheckDatagramIterator(L, 2)
+
+	do, field := dgi.ReadDoid(), dgi.ReadUint16()
+	client.handleClientUpdateField(do, field, dgi)
+
 	return 1
 }

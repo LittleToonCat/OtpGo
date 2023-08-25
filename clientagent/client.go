@@ -277,9 +277,11 @@ func (c *Client) addInterest(i Interest, context uint32, caller Channel_t) {
 	c.RouteDatagram(resp)
 }
 
-func (c *Client) removeInterest(i Interest, context uint32, caller Channel_t) {
+func (c *Client) removeInterest(i Interest, context uint32) {
 	var zones []Zone_t
 
+	// Check if other interest exists with the same location,
+	// we don't want to close them if there are.
 	for _, zone := range i.zones {
 		if len(c.lookupInterests(i.parent, zone)) == 1 {
 			zones = append(zones, zone)
@@ -287,7 +289,7 @@ func (c *Client) removeInterest(i Interest, context uint32, caller Channel_t) {
 	}
 
 	c.closeZones(i.parent, zones)
-	c.notifyInterestDone(i.id, []Channel_t{caller})
+	// c.notifyInterestDone(i.id, []Channel_t{caller})
 	c.handleInterestDone(i.id, context)
 
 	delete(c.interests, i.id)
@@ -558,7 +560,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		if sender != c.channel {
 			field := dgi.ReadUint16()
-			c.handleSetField(do, field, dgi)
+			c.handleUpdateField(do, field, dgi)
 		}
 	// case STATESERVER_OBJECT_UPDATE_FIELD_MULTIPLE:
 	// 	do := dgi.ReadDoid()
@@ -571,7 +573,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 	// 	if sender != c.channel {
 	// 		fields := dgi.ReadUint16()
-	// 		c.handleSetField(do, fields, dgi)
+	// 		c.handleUpdateField(do, fields, dgi)
 	// 	}
 	case STATESERVER_OBJECT_DELETE_RAM:
 		do := dgi.ReadDoid()
@@ -1011,7 +1013,59 @@ func (c *Client) handleRemoveOwnership(do Doid_t) {
 	c.client.SendDatagram(resp)
 }
 
-func (c *Client) handleSetField(do Doid_t, field uint16, dgi *DatagramIterator) {
+func (c *Client) isFieldSendable(do Doid_t, field dc.DCField) bool {
+	if _, ok := c.ownedObjects[do]; ok && field.Is_ownsend() {
+		return true
+	} else if fields, ok := c.sendableFields[do]; ok {
+		for _, v := range fields {
+			if v == uint16(field.Get_number()) {
+				return true
+			}
+		}
+	}
+
+	return field.Is_clsend()
+}
+
+func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramIterator) {
+	dclass := c.lookupObject(do)
+	if dclass == nil {
+		c.sendDisconnect(CLIENT_DISCONNECT_MISSING_OBJECT, fmt.Sprintf("Attempted to send field update to unknown object: %d", do), true)
+		return
+	}
+
+	dcField := dclass.Get_field_by_index(int(field))
+	if dcField == dc.SwigcptrDCField(0) {
+		c.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_FIELD, fmt.Sprintf("Attempted to send field update to %s(%d) with unknown field: %d", dclass.Get_name(), do, field), true)
+		return
+	}
+
+	if !c.isFieldSendable(do, dcField) {
+		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Attempted to send unsendable field %s", dcField.Get_name()), true)
+		return
+	}
+
+	packedData := dgi.ReadRemainderAsVector()
+	defer dc.DeleteVector_uchar(packedData)
+
+	if !dcField.Validate_ranges(packedData) {
+		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Got truncated update for field %s", dcField.Get_name()), true)
+		return
+	}
+
+	c.log.Debugf("Got client \"%s\" update for object %s(%d): %s", dcField.Get_name(), dclass.Get_name(), do, dcField.Format_data(packedData))
+
+	// Send the message over to the object.
+	dg := NewDatagram()
+	dg.AddServerHeader(Channel_t(do), c.channel, STATESERVER_OBJECT_UPDATE_FIELD)
+	dg.AddDoid(do)
+	dg.AddUint16(field)
+	dg.AddVector(packedData)
+
+	c.RouteDatagram(dg)
+}
+
+func (c *Client) handleUpdateField(do Doid_t, field uint16, dgi *DatagramIterator) {
 	resp := NewDatagram()
 	resp.AddUint16(CLIENT_OBJECT_UPDATE_FIELD)
 	resp.AddDoid(do)
@@ -1023,8 +1077,8 @@ func (c *Client) handleSetField(do Doid_t, field uint16, dgi *DatagramIterator) 
 func (c *Client) handleRemoveInterest(id uint16, context uint32) {
 	resp := NewDatagram()
 	resp.AddUint16(CLIENT_REMOVE_INTEREST)
-	resp.AddUint32(context)
 	resp.AddUint16(id)
+	resp.AddUint32(context)
 	c.client.SendDatagram(resp)
 }
 
