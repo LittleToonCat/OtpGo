@@ -996,6 +996,22 @@ func (c *Client) handleGetStoredValuesResp(dgi *DatagramIterator) {
 	delete(c.getContextMap, context)
 }
 
+func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string]dc.Vector_uchar) {
+	dg := NewDatagram()
+	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_SET_STORED_VALUES)
+	dg.AddDoid(doId)
+	dg.AddUint16(uint16(len(packedValues)))
+
+	for name, value := range packedValues {
+		dg.AddString(name)
+		dg.AddUint16(uint16(value.Size()))
+		dg.AddVector(value)
+		dc.DeleteVector_uchar(value)
+	}
+
+	c.RouteDatagram(dg)
+}
+
 func (c *Client) handleAddOwnership(do Doid_t, parent Doid_t, zone Zone_t, dc uint16, dgi *DatagramIterator) {
 	resp := NewDatagram()
 	resp.AddUint16(uint16(CLIENT_CREATE_OBJECT_REQUIRED_OTHER_OWNER))

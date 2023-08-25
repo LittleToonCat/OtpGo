@@ -41,6 +41,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"authenticated": LuaGetSetAuthenticated,
 	"createDatabaseObject": LuaCreateDatabaseObject,
 	"getDatabaseValues": LuaGetDatabaseValues,
+	"setDatabaseValues": LuaSetDatabaseValues,
 	"handleAddInterest": LuaHandleAddInterest,
 	"handleDisconnect": LuaHandleDisconnect,
 	"handleHeartbeat": LuaHandleHeartbeat,
@@ -226,6 +227,46 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 	}
 
 	client.getDatabaseValues(doId, fields, callbackFunc)
+	return 1
+}
+
+func LuaSetDatabaseValues(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	doId := Doid_t(L.CheckInt(2))
+	clsName := L.CheckString(3)
+	fields := L.CheckTable(4)
+
+	cls := core.DC.Get_class_by_name(clsName)
+	if cls == dc.SwigcptrDCClass(0) {
+		L.ArgError(2, "Class not found.")
+		return 0
+	}
+
+	packer := dc.NewDCPacker()
+	defer dc.DeleteDCPacker(packer)
+
+	packedFields := map[string]dc.Vector_uchar{}
+	// TODO: string dictionary sanity check
+	fields.ForEach(func(l1, data lua.LValue) {
+		name := string(l1.(lua.LString))
+		field := cls.Get_field_by_name(name)
+		if field == dc.SwigcptrDCField(0) {
+			L.ArgError(3, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", name, clsName))
+			return
+		}
+		packer.Begin_pack(field)
+		core.PackLuaValue(packer, data)
+		if !packer.End_pack() {
+			L.ArgError(3, "Pack failed!")
+			return
+		}
+
+		packedFields[name] = packer.Get_bytes()
+		packer.Clear_data()
+	})
+
+	client.setDatabaseValues(doId, packedFields)
+
 	return 1
 }
 
