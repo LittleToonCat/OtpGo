@@ -199,7 +199,7 @@ func (c *Client) annihilate() {
 	}
 
 	for _, int := range c.pendingInterests {
-		int.finish()
+		go int.finish()
 	}
 
 	c.Cleanup()
@@ -215,22 +215,12 @@ func (c *Client) lookupInterests(parent Doid_t, zone Zone_t) []Interest {
 	return interests
 }
 
-func (c *Client) buildInterest(dgi *DatagramIterator, multiple bool) Interest {
+func (c *Client) buildInterest(id uint16, parent Doid_t, zones []Zone_t) Interest {
 	int := Interest{
-		id:     dgi.ReadUint16(),
-		parent: dgi.ReadDoid(),
+		id:     id,
+		parent: parent,
+		zones:  zones,
 	}
-
-	count := uint16(1)
-	if multiple {
-		count = dgi.ReadUint16()
-	}
-
-	for count != 0 {
-		int.zones = append(int.zones, dgi.ReadZone())
-		count--
-	}
-
 	return int
 }
 
@@ -384,7 +374,7 @@ func (c *Client) lookupObject(do Doid_t) dc.DCClass {
 func (c *Client) tryQueuePending(do Doid_t, dg Datagram) bool {
 	if context, ok := c.pendingObjects[do]; ok {
 		if iop, ok := c.pendingInterests[context]; ok {
-			iop.pendingQueue <- dg
+			iop.pendingQueue = append(iop.pendingQueue, dg)
 			return true
 		}
 	}
@@ -459,28 +449,23 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case CLIENTAGENT_SET_STATE:
 		c.state = ClientState(dgi.ReadUint16())
 	case CLIENTAGENT_ADD_INTEREST:
-		c.context++
-		int := c.buildInterest(dgi, false)
-		c.handleAddInterest(int, c.context)
-		c.addInterest(int, c.context, sender)
+		// c.context++
+		// int := c.buildInterest(dgi, false)
+		// c.handleAddInterest(int, c.context)
+		// c.addInterest(int, c.context, sender)
 	case CLIENTAGENT_ADD_INTEREST_MULTIPLE:
-		c.context++
-		int := c.buildInterest(dgi, true)
-		c.handleAddInterest(int, c.context)
-		c.addInterest(int, c.context, sender)
+		// c.context++
+		// int := c.buildInterest(dgi, true)
+		// c.handleAddInterest(int, c.context)
+		// c.addInterest(int, c.context, sender)
 	case CLIENTAGENT_REMOVE_INTEREST:
-		c.context++
-		id := dgi.ReadUint16()
-		int := c.interests[id]
-		c.handleRemoveInterest(id, c.context)
-		c.removeInterest(int, c.context, sender)
+		// c.context++
+		// id := dgi.ReadUint16()
+		// int := c.interests[id]
+		// c.handleRemoveInterest(id, c.context)
+		// c.removeInterest(int, c.context, sender)
 	case CLIENTAGENT_SET_CLIENT_ID:
-		if c.channel != c.allocatedChannel {
-			c.UnsubscribeChannel(c.channel)
-		}
-
-		c.channel = dgi.ReadChannel()
-		c.SubscribeChannel(c.channel)
+		c.SetChannel(dgi.ReadChannel())
 	case CLIENTAGENT_SEND_DATAGRAM:
 		c.client.SendDatagram(dg)
 	case CLIENTAGENT_OPEN_CHANNEL:
@@ -638,19 +623,50 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED:
 		fallthrough
 	case STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER:
+		offset := dgi.Tell()
 		do, parent, zone := dgi.ReadDoid(), dgi.ReadDoid(), dgi.ReadZone()
 		for id, iop := range c.pendingInterests {
 			if iop.parent == parent && iop.hasZone(zone) {
-				iop.pendingQueue <- dg
+				iop.pendingQueue = append(iop.pendingQueue, dg)
 				c.pendingObjects[do] = id
+				return
 			}
+		}
+		for _, iop := range c.interests {
+			if iop.parent == parent && iop.hasZone(zone) {
+				dgi.Seek(offset)
+				c.handleObjectEntrance(dgi, msgType == STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER)
+			}
+		}
+	case STATESERVER_OBJECT_GET_ZONE_COUNT_RESP:
+		fallthrough
+	case STATESERVER_OBJECT_GET_ZONES_COUNT_RESP:
+		context := dgi.ReadUint32()
+		if iop, ok := c.pendingInterests[context]; ok {
+			total := dgi.ReadUint32()
+			iop.setExpected(int(total))
+		} else {
+			c.log.Warnf("Got zone count for unknown interest: %d", context)
 		}
 	case STATESERVER_OBJECT_ENTER_INTEREST_WITH_REQUIRED:
 		fallthrough
 	case STATESERVER_OBJECT_ENTER_INTEREST_WITH_REQUIRED_OTHER:
-	case STATESERVER_OBJECT_GET_ZONE_COUNT_RESP:
+		context := dgi.ReadUint32()
+		if iop, ok := c.pendingInterests[context]; ok {
+			if !iop.finished {
+				iop.generateQueue = append(iop.generateQueue, dg)
+				if iop.ready() {
+					go iop.finish()
+				}
+			} else {
+				// Message arrived late, announce generate.
+				c.handleObjectEntrance(dgi, msgType == STATESERVER_OBJECT_ENTER_INTEREST_WITH_REQUIRED_OTHER)
+			}
+		}
 	case STATESERVER_OBJECT_SET_ZONE:
+		c.log.Warn("TODO: STATESERVER_OBJECT_SET_ZONE")
 	case STATESERVER_OBJECT_CHANGE_OWNER_RECV:
+		c.log.Warn("TODO: STATESERVER_OBJECT_CHANGE_OWNER_RECV")
 	case DBSERVER_CREATE_STORED_OBJECT_RESP:
 		context, code, doId := dgi.ReadUint32(), dgi.ReadUint8(), dgi.ReadDoid()
 		c.handleCreateDatabaseResp(context, code, doId)
@@ -666,6 +682,9 @@ type InterestOperation struct {
 	finished bool
 	total    int
 
+	timeout      *time.Ticker
+	finishedChan chan bool
+
 	client         *Client
 	interestId     uint16
 	clientContext  uint32
@@ -675,8 +694,8 @@ type InterestOperation struct {
 	zones   []Zone_t
 	callers []Channel_t
 
-	generateQueue chan Datagram
-	pendingQueue  chan Datagram
+	generateQueue []Datagram
+	pendingQueue  []Datagram
 }
 
 func NewInterestOperation(client *Client, timeout int, interestId uint16,
@@ -688,17 +707,23 @@ func NewInterestOperation(client *Client, timeout int, interestId uint16,
 		requestContext: requestContext,
 		parent:         parent,
 		zones:          zones,
-		generateQueue:  make(chan Datagram, 100),
-		pendingQueue:   make(chan Datagram, 100),
+		timeout:        time.NewTicker(time.Duration(timeout) * time.Second),
+		finishedChan:   make(chan bool),
+		generateQueue:  []Datagram{},
+		pendingQueue:   []Datagram{},
 		callers:        []Channel_t{caller},
 	}
 
 	// Timeout
 	go func() {
-		time.Sleep(time.Duration(timeout) * time.Second)
-		if !iop.finished {
-			client.log.Warnf("Interest operation timed out; forcing")
-			iop.finish()
+		select {
+		case <-iop.timeout.C:
+			if !iop.finished {
+				client.log.Warnf("Interest operation timed out; forcing finish.")
+				iop.finish()
+			}
+		case <-iop.finishedChan:
+			return
 		}
 	}()
 
@@ -718,6 +743,9 @@ func (i *InterestOperation) setExpected(total int) {
 	if !i.hasTotal {
 		i.total = total
 		i.hasTotal = true
+		if i.ready() {
+			go i.finish()
+		}
 	}
 }
 
@@ -731,11 +759,13 @@ func (i *InterestOperation) finish() {
 	i.client.Lock()
 	defer i.client.Unlock()
 
-	close(i.generateQueue)
-	close(i.pendingQueue)
 	i.finished = true
+	i.timeout.Stop()
+	go func() {
+		i.finishedChan <- true
+	}()
 
-	for generate := range i.generateQueue {
+	for _, generate := range i.generateQueue {
 		dgi := NewDatagramIterator(&generate)
 		dgi.SeekPayload()
 		dgi.Skip(Chansize) // Skip sender
@@ -746,6 +776,7 @@ func (i *InterestOperation) finish() {
 		dgi.Skip(Dgsize) // Skip request context
 		i.client.handleObjectEntrance(dgi, other)
 	}
+	i.generateQueue = nil
 
 	// Send out interest done messages
 	i.client.notifyInterestDone(i.interestId, i.callers)
@@ -753,11 +784,12 @@ func (i *InterestOperation) finish() {
 
 	// Delete the IOP
 	delete(i.client.pendingInterests, i.requestContext)
-	for dg := range i.pendingQueue {
+	for _, dg := range i.pendingQueue {
 		dgi := NewDatagramIterator(&dg)
 		dgi.SeekPayload()
 		i.client.HandleDatagram(dg, dgi)
 	}
+	i.pendingQueue = nil
 }
 
 type InterestPermission int
@@ -1040,10 +1072,17 @@ func (c *Client) handleAddObject(do Doid_t, parent Doid_t, zone Zone_t, dc uint1
 }
 
 func (c *Client) handleInterestDone(interestId uint16, context uint32) {
+	lFunc := c.ca.L.GetGlobal("handleInterestDone")
+	if lFunc.Type() == lua.LTFunction {
+		// Call the Lua function instead of sending the
+		// built-in response.
+		c.ca.CallLuaFunction(lFunc, c, lua.LNumber(interestId), lua.LNumber(context))
+		return
+	}
 	resp := NewDatagram()
 	resp.AddUint16(CLIENT_DONE_INTEREST_RESP)
-	resp.AddUint32(context)
 	resp.AddUint16(interestId)
+	resp.AddUint32(context)
 	c.client.SendDatagram(resp)
 }
 

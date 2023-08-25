@@ -41,6 +41,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"authenticated": LuaGetSetAuthenticated,
 	"createDatabaseObject": LuaCreateDatabaseObject,
 	"getDatabaseValues": LuaGetDatabaseValues,
+	"handleAddInterest": LuaHandleAddInterest,
 	"handleHeartbeat": LuaHandleHeartbeat,
 	"handleDisconnect": LuaHandleDisconnect,
 	"sendDatagram": LuaSendDatagram,
@@ -237,6 +238,25 @@ func LuaGetSetUserTable(L *lua.LState) int {
 		}
 		L.Push(client.userTable)
 	}
+	return 1
+}
+
+func LuaHandleAddInterest(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	handle := uint16(L.CheckInt(2))
+	context := uint32(L.CheckInt(3))
+	parent := Doid_t(L.CheckInt(4))
+	zonesTable := L.CheckTable(5)
+
+	zones := make([]Zone_t, 0)
+	zonesTable.ForEach(func(_, l2 lua.LValue) {
+		zone := l2.(lua.LNumber)
+		zones = append(zones, Zone_t(zone))
+	})
+
+	i := client.buildInterest(handle, parent, zones)
+	client.addInterest(i, context, 0)
+
 	return 1
 }
 

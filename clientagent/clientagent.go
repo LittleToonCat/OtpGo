@@ -74,6 +74,10 @@ func NewClientAgent(config core.Role) *ClientAgent {
 		return nil
 	}
 
+	if ca.config.Tuning.Interest_Timeout == 0 {
+		ca.config.Tuning.Interest_Timeout = 5
+	}
+
 	ca.interestTimeout = config.Tuning.Interest_Timeout
 
 	// Init Lua state
