@@ -69,7 +69,7 @@ func UnpackDataToBsonArray(unpacker dc.DCPacker, array *bson.A) {
 		*array = append(*array, data)
 	default:
 		// More nested fields, nest call this exact function.
-		var nestedArray bson.A
+		nestedArray := bson.A{}
 		unpacker.Push()
 		for unpacker.More_nested_fields() {
 			UnpackDataToBsonArray(unpacker, &nestedArray)
@@ -108,7 +108,7 @@ func UnpackDataToBsonDocument(unpacker dc.DCPacker, name string, doc *bson.D) {
 		// class parameter, or a switch case).
 		//
 		// We'll have to create an BSON array for these types.
-		var array bson.A
+		array := bson.A{}
 		unpacker.Push()
 		for unpacker.More_nested_fields() {
 			UnpackDataToBsonArray(unpacker, &array)
@@ -133,8 +133,8 @@ func PackBsonValue(packer dc.DCPacker, value interface{}) {
 	case dc.PT_int64:
 		fallthrough
 	case dc.PT_uint64:
-		if intValue, ok := value.(int); ok {
-			packer.Pack_int(intValue)
+		if intValue, ok := value.(int32); ok {
+			packer.Pack_int(int(intValue))
 		} else if int64Value, ok := value.(int64); ok {
 			packer.Pack_int64(int64Value)
 		}
