@@ -185,7 +185,7 @@ func (c *Client) annihilate() {
 		return
 	}
 
-	c.ca.Tracker.free(c.channel)
+	c.ca.Tracker.free(c.allocatedChannel)
 
 	// Delete all session object
 	for len(c.sessionObjects) > 0 {
