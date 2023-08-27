@@ -143,6 +143,9 @@ func PackBsonValue(packer dc.DCPacker, value interface{}) {
 			packer.Pack_string(stringValue)
 		}
 	case dc.PT_blob:
+		if binData, ok := value.(primitive.Binary); ok {
+			packer.Pack_string(string(binData.Data))
+		}
 	default:
 		array := value.(bson.A)
 		packer.Push()

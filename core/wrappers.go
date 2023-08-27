@@ -23,8 +23,9 @@ func UnpackDataToLuaValue(unpacker dc.DCPacker, L *lua.LState) lua.LValue {
 	case dc.PT_uint64:
 		value = lua.LNumber(unpacker.Unpack_uint64().(uint64))
 	case dc.PT_string:
-		value = lua.LString(unpacker.Unpack_string().(string))
+		fallthrough
 	case dc.PT_blob:
+		value = lua.LString(unpacker.Unpack_string().(string))
 	default:
 		// If we reached here, that means it is a list
 		// of nested fields (e.g. an array type, an atomic field, a
