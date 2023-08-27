@@ -462,12 +462,16 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 
 func (c *ChannelMap) UnsubscribeAll(p *Subscriber) {
 	if len(p.ranges) > 0 {
-		for _, rng := range p.ranges {
+		oldRanges := make([]Range, len(p.ranges))
+		copy(oldRanges, p.ranges)
+		for _, rng := range oldRanges {
 			c.UnsubscribeRange(p, rng)
 		}
 	}
 
-	for _, ch := range p.channels {
+	oldChannels := make([]Channel_t, len(p.channels))
+	copy(oldChannels, p.channels)
+	for _, ch := range oldChannels {
 		c.UnsubscribeChannel(p, ch)
 	}
 }
