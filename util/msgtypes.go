@@ -93,6 +93,7 @@ const (
 	STATESERVER_OBJECT_ENTER_OWNER_RECV                   = 2068
 	STATESERVER_OBJECT_CHANGE_OWNER_RECV                  = 2069
 	STATESERVER_OBJECT_SET_OWNER_RECV                     = 2070
+	STATESERVER_OBJECT_SET_OWNER_RECV_WITH_ALL            = 2075
 	STATESERVER_OBJECT_GET_OWNER                          = 2064
 	STATESERVER_OBJECT_GET_OWNER_RESP                     = 2065
 	// StateServer parent-method messages

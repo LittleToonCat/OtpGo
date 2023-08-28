@@ -295,12 +295,12 @@ func (d *DistributedObject) sendAiEntry(ai Channel_t, sender Channel_t) {
 	d.RouteDatagram(dg)
 }
 
-func (d *DistributedObject) sendOwnerEntry(owner Channel_t) {
+func (d *DistributedObject) sendOwnerEntry(owner Channel_t, client bool) {
 	msgType := STATESERVER_OBJECT_ENTER_OWNER_RECV
 	dg := NewDatagram()
 	dg.AddServerHeader(owner, Channel_t(d.do), uint16(msgType))
-	d.appendRequiredData(dg, true, true)
-	d.appendOtherData(dg, true, true)
+	d.appendRequiredData(dg, client, client)
+	d.appendOtherData(dg, client, client)
 	d.RouteDatagram(dg)
 }
 
@@ -753,7 +753,20 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				}
 			}
 
-			d.zoneObjects[newZone] = append(d.zoneObjects[newZone], child)
+			alreadyContains := false
+			if slice, ok := d.zoneObjects[newZone]; ok {
+				for _, zoneDo := range slice {
+					if child == zoneDo {
+						alreadyContains = true
+						break
+					}
+				}
+			}
+			if alreadyContains {
+				d.log.Debugf("STATESERVER_OBJECT_CHANGE_ZONE: zoneObjects[%d] already contains %d!", newZone, child)
+			} else {
+				d.zoneObjects[newZone] = append(d.zoneObjects[newZone], child)
+			}
 
 			dg := NewDatagram()
 			dg.AddServerHeader(Channel_t(child), Channel_t(d.do), STATESERVER_OBJECT_LOCATION_ACK)
@@ -799,12 +812,20 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			return
 		}
 
-		do := dgi.ReadUint32()
+		do := dgi.ReadDoid()
 		parent := dgi.ReadDoid()
 		zone := dgi.ReadZone()
 
 		if parent == d.do {
-			d.zoneObjects[zone] = append(d.zoneObjects[zone], Doid_t(do))
+			if slice, ok := d.zoneObjects[zone]; ok {
+				for _, zoneDo := range slice {
+					if do == zoneDo {
+						d.log.Debugf("STATESERVER_OBJECT_LOCATE_RESP: zoneObjects[%d] already contains %d!", zone, do)
+						return
+					}
+				}
+			}
+			d.zoneObjects[zone] = append(d.zoneObjects[zone], do)
 		}
 	case STATESERVER_QUERY_OBJECT_ALL:
 		context := dgi.ReadUint32()
@@ -871,6 +892,8 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 		d.RouteDatagram(dg)
 	case STATESERVER_OBJECT_SET_OWNER_RECV:
+		fallthrough
+	case STATESERVER_OBJECT_SET_OWNER_RECV_WITH_ALL:
 		newOwner := dgi.ReadChannel()
 		if newOwner == d.ownerChannel {
 			d.log.Debugf("Received owner change, but owner is the same.")
@@ -891,7 +914,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		d.ownerChannel = newOwner
 
 		if newOwner != INVALID_CHANNEL {
-			d.sendOwnerEntry(newOwner)
+			d.sendOwnerEntry(newOwner, msgType == STATESERVER_OBJECT_SET_OWNER_RECV)
 		}
 	case STATESERVER_OBJECT_GET_ZONE_OBJECTS:
 		fallthrough
@@ -950,7 +973,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		var zones []Zone_t
 		context := dgi.ReadUint32()
 
-		for zone, _ := range d.zoneObjects {
+		for zone := range d.zoneObjects {
 			zones = append(zones, zone)
 		}
 		sort.Slice(zones, func(i, j int) bool {
