@@ -38,6 +38,7 @@ func CheckClient(L *lua.LState, n int) *Client {
 }
 
 var ClientMethods = map[string]lua.LGFunction{
+	"addSessionObject": LuaAddSessionObject,
 	"authenticated": LuaGetSetAuthenticated,
 	"createDatabaseObject": LuaCreateDatabaseObject,
 	"getDatabaseValues": LuaGetDatabaseValues,
@@ -47,10 +48,15 @@ var ClientMethods = map[string]lua.LGFunction{
 	"handleHeartbeat": LuaHandleHeartbeat,
 	"handleRemoveInterest": LuaHandleRemoveInterest,
 	"handleUpdateField": LuaHandleUpdateField,
+	"objectSetOwner": LuaObjectSetOwner,
+	"sendActivateObject": LuaSendActivateObject,
 	"sendDatagram": LuaSendDatagram,
 	"sendDisconnect": LuaSendDisconnect,
+	"setLocation": LuaSetLocation,
 	"subscribeChannel": LuaSubscribeChannel,
+	"subscribePuppetChannel": LuaSubscribePuppetChannel,
 	"setChannel": LuaSetChannel,
+	"unsubscribePuppetChannel": LuaUnsubscribePuppetChannel,
 	"userTable": LuaGetSetUserTable,
 }
 
@@ -358,8 +364,36 @@ func LuaSubscribeChannel(L *lua.LState) int {
 
 func LuaSetChannel(L *lua.LState) int {
 	client := CheckClient(L, 1)
-	channel := Channel_t(L.CheckInt(2))
+
+	var channel Channel_t
+	if L.GetTop() == 2 {
+		// client:setChannel(channel)
+		channel = Channel_t(L.CheckInt64(2))
+	} else {
+		// client:setChannel(accountId, avatarId)
+		account := L.CheckInt(2)
+		avatar := L.CheckInt(3)
+		channel = Channel_t(account) << 32 | Channel_t(avatar)
+	}
 	client.SetChannel(channel)
+	return 1
+}
+
+func LuaSubscribePuppetChannel(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	do := Channel_t(L.CheckInt(2))
+	puppetType := Channel_t(L.CheckInt(3))
+
+	client.SubscribeChannel(do + puppetType << 32)
+	return 1
+}
+
+func LuaUnsubscribePuppetChannel(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	do := Channel_t(L.CheckInt(2))
+	puppetType := Channel_t(L.CheckInt(3))
+
+	client.UnsubscribeChannel(do + puppetType << 32)
 	return 1
 }
 
@@ -370,5 +404,80 @@ func LuaHandleUpdateField(L *lua.LState) int {
 	do, field := dgi.ReadDoid(), dgi.ReadUint16()
 	client.handleClientUpdateField(do, field, dgi)
 
+	return 1
+}
+
+func LuaSendActivateObject(L * lua.LState) int {
+	client := CheckClient(L, 1)
+	do := Doid_t(L.CheckInt(2))
+	className := L.CheckString(3)
+
+	dclass := core.DC.Get_class_by_name(className)
+	if dclass == dc.SwigcptrDCClass(0) {
+		L.ArgError(3, "Class does not exist.")
+		return 0
+	}
+
+	dg := NewDatagram()
+	dg.AddServerHeader(Channel_t(do), client.channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+	dg.AddDoid(do)
+	dg.AddLocation(0, 0)
+	dg.AddUint16(uint16(dclass.Get_number()))
+	client.RouteDatagram(dg)
+	return 1
+}
+
+func LuaObjectSetOwner(L * lua.LState) int {
+	client := CheckClient(L, 1)
+	do := Doid_t(L.CheckInt(2))
+	all := L.CheckBool(3)
+
+	msgType := uint16(STATESERVER_OBJECT_SET_OWNER_RECV)
+	if all {
+		msgType = STATESERVER_OBJECT_SET_OWNER_RECV_WITH_ALL
+	}
+
+	dg := NewDatagram()
+	dg.AddServerHeader(Channel_t(do), client.channel, msgType)
+	dg.AddChannel(client.channel)
+	client.RouteDatagram(dg)
+	return 1
+}
+
+func LuaAddSessionObject(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	do := Doid_t(L.CheckInt(2))
+
+	for _, d := range client.sessionObjects {
+		if d == do {
+			client.log.Warnf("Received add sesion object with existing ID=%d", do)
+		}
+	}
+
+	client.log.Debugf("Added session object with ID %d", do)
+	client.sessionObjects = append(client.sessionObjects, do)
+	return 1
+}
+
+func LuaSetLocation(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	dgi := CheckDatagramIterator(L, 2)
+
+	do := dgi.ReadDoid()
+	parent := dgi.ReadDoid()
+	zone := dgi.ReadZone()
+
+	if obj, ok := client.ownedObjects[do]; ok {
+		obj.parent = parent
+		obj.zone = zone
+
+		dg := NewDatagram()
+		dg.AddServerHeader(Channel_t(do), client.channel, STATESERVER_OBJECT_SET_ZONE)
+		dg.AddDoid(parent)
+		dg.AddZone(zone)
+		client.RouteDatagram(dg)
+	} else {
+		client.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_RELOCATE, fmt.Sprintf("Attempted to move un-owned object %d", do), true)
+	}
 	return 1
 }

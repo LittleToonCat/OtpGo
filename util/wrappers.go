@@ -84,6 +84,7 @@ var DatagramMethods = map[string]lua.LGFunction{
 	"addInt64": LuaAddInt64,
 	"addBool": LuaAddBool,
 	"addString": LuaAddString,
+	"addData": LuaAddData,
 }
 
 func LuaAddInt8(L *lua.LState) int {
@@ -149,6 +150,13 @@ func LuaAddString(L *lua.LState) int {
 	return 1
 }
 
+func LuaAddData(L * lua.LState) int {
+	dg := CheckDatagram(L, 1)
+	v := L.CheckString(2)
+	dg.AddData([]byte(v))
+	return 1
+}
+
 var DatagramIteratorMethods = map[string]lua.LGFunction{
 	"getRemainingSize": LuaGetRemainingSize,
 	"readInt8": LuaReadInt8,
@@ -160,6 +168,7 @@ var DatagramIteratorMethods = map[string]lua.LGFunction{
 	"readInt64": LuaReadInt64,
 	"readBool": LuaReadBool,
 	"readString": LuaReadString,
+	"readRemainder": LuaReadRemainder,
 }
 
 func LuaReadInt8(L *lua.LState) int {
@@ -229,5 +238,12 @@ func LuaGetRemainingSize(L *lua.LState) int {
 	dgi := CheckDatagramIterator(L, 1)
 	size := dgi.RemainingSize()
 	L.Push(lua.LNumber(size))
+	return 1
+}
+
+func LuaReadRemainder(L *lua.LState) int {
+	dgi := CheckDatagramIterator(L, 1)
+	remainder := dgi.ReadRemainder()
+	L.Push(lua.LString(remainder))
 	return 1
 }
