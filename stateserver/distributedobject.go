@@ -109,7 +109,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 			}
 			unpacker.Begin_unpack(field)
 			do.requiredFields[field] = unpacker.Unpack_literal_value().(dc.Vector_uchar)
-			if unpacker.End_unpack() {
+			if unpacker.End_unpack() && field.Validate_ranges(do.requiredFields[field]) {
 				do.log.Debugf("Stored REQUIRED field \"%s\": %s", field.Get_name(), field.Format_data(do.requiredFields[field]))
 			} else {
 				return false, nil, fmt.Errorf("received truncated data for REQUIRED field \"%s\"", field.Get_name())
@@ -135,10 +135,11 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 				continue
 			}
 			do.ramFields[field] = unpacker.Unpack_literal_value().(dc.Vector_uchar)
-			if !unpacker.End_unpack() {
+			if unpacker.End_unpack() && field.Validate_ranges(do.ramFields[field]) {
+				do.log.Debugf("Stored optional RAM field \"%s\": %s", field.Get_name(), field.Format_data(do.ramFields[field]))
+			} else {
 				return false, nil, fmt.Errorf("received truncated data for OTHER field \"%s\"", field.Get_name())
 			}
-			do.log.Debugf("Stored optional RAM field \"%s\": %s", field.Get_name(), field.Format_data(do.ramFields[field]))
 		}
 	}
 
