@@ -28,17 +28,17 @@ type DatabaseStateServer struct {
 	StateServer
 
 	database Channel_t
-	loading map[Doid_t]LoadingObject
+	loading map[Doid_t]*LoadingObject
 	context uint32
-	contextToLoading map[uint32]LoadingObject
+	contextToLoading map[uint32]*LoadingObject
 }
 
 func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
 	dbss := &DatabaseStateServer{
 		database: config.Database,
-		loading: map[Doid_t]LoadingObject{},
+		loading: map[Doid_t]*LoadingObject{},
 		context: 0,
-		contextToLoading: map[uint32]LoadingObject{},
+		contextToLoading: map[uint32]*LoadingObject{},
 	}
 	dbss.InitStateServer(config, fmt.Sprintf("DBSS (%d - %d)", dbss.config.Ranges.Min, dbss.config.Ranges.Max))
 
@@ -53,6 +53,8 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 	do := dgi.ReadDoid()
 	parent := dgi.ReadDoid()
 	zone := dgi.ReadZone()
+
+	s.log.Debugf("Received activate for object=%d", do)
 
 	if _, ok := s.objects[do]; ok {
 		s.log.Warnf("Received activate for already-active object with id %d", do)
@@ -82,6 +84,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 		fieldUpdates: FieldValues{},
 
 		context: s.context,
+		dgQueue: []Datagram{},
 	}
 
 	if other {
@@ -120,8 +123,8 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 		}
 	}
 
-	s.loading[do] = obj
-	s.contextToLoading[s.context] = obj
+	s.loading[do] = &obj
+	s.contextToLoading[s.context] = &obj
 
 	// Populate names of required fields to fetch.
 	required := make([]string, 0)
@@ -164,7 +167,7 @@ func (s * DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
 	do := dgi.ReadDoid()
 	if obj.do != do {
 		s.log.Warnf("Received GetStoredValues for wrong DOID! %d != %d", obj.do, do)
-		s.finalizeLoading(&obj)
+		s.finalizeLoading(obj)
 		return
 	}
 
@@ -182,7 +185,7 @@ func (s * DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
 			s.log.Errorf("GetStoredValues failed for DOID %d", do)
 		}
 
-		s.finalizeLoading(&obj)
+		s.finalizeLoading(obj)
 		return
 	}
 
@@ -280,6 +283,7 @@ func (s * DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
 		obj.requiredFields, obj.ramFields)
 
 	// Replay the datagrams to the object
+	s.log.Debugf("Replaying %d datagrams to object", len(obj.dgQueue))
 	for _, dg := range obj.dgQueue {
 		dgi := NewDatagramIterator(&dg)
 		dgi.SeekPayload()
@@ -292,7 +296,7 @@ func (s * DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
 		delete(obj.fieldUpdates, field)
 	}
 
-	s.finalizeLoading(&obj)
+	s.finalizeLoading(obj)
 }
 
 func (s *DatabaseStateServer) finalizeLoading(obj *LoadingObject) {
@@ -450,9 +454,9 @@ func (s *DatabaseStateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator)
 	case STATESERVER_OBJECT_UPDATE_FIELD_MULTIPLE:
 		s.handleMultipleUpdates(dgi)
 	case DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS:
-		s.handleActivate(dgi, false)
+		fallthrough
 	case DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER:
-		s.handleActivate(dgi, true)
+		s.handleActivate(dgi, msgType == DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER)
 	case DBSS_OBJECT_GET_ACTIVATED:
 		context := dgi.ReadUint32()
 		doId := dgi.ReadDoid()
@@ -468,8 +472,9 @@ func (s *DatabaseStateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator)
 		// Store it in the loading object datagram queue.
 		for _, receiver := range receivers {
 			if obj, ok := s.loading[Doid_t(receiver)]; ok {
-				obj.dgQueue = append(obj.dgQueue, *dgi.Dg)
-			}
+				obj.dgQueue = append(obj.dgQueue, dg)
+				s.log.Debugf("Queued message of type=%d", msgType)
+	}
 		}
 		s.log.Debugf("Ignoring message of type=%d", msgType)
 	}
