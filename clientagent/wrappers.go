@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"otpgo/core"
 	. "otpgo/util"
+	"slices"
 
 	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/yuin/gopher-lua"
@@ -305,7 +306,10 @@ func LuaHandleAddInterest(L *lua.LState) int {
 		context = dgi.ReadUint32()
 		parent = dgi.ReadDoid()
 		for dgi.RemainingSize() > 0 {
-			zones = append(zones, dgi.ReadZone())
+			zone := dgi.ReadZone()
+			if !slices.Contains(zones, zone) {
+				zones = append(zones, zone)
+			}
 		}
 	} else {
 		// client:handleAddInterest(handle, context, parent, {zone...})
@@ -315,8 +319,10 @@ func LuaHandleAddInterest(L *lua.LState) int {
 		zonesTable := L.CheckTable(5)
 
 		zonesTable.ForEach(func(_, l2 lua.LValue) {
-			zone := l2.(lua.LNumber)
-			zones = append(zones, Zone_t(zone))
+			zone := Zone_t(l2.(lua.LNumber))
+			if !slices.Contains(zones, zone) {
+				zones = append(zones, zone)
+			}
 		})
 	}
 
