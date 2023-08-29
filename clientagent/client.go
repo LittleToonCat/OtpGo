@@ -503,11 +503,11 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 
 		delete(c.declaredObjects, do)
-	case CLIENTAGENT_SET_FIELDS_SENDABLE:
-		do, count := dgi.ReadDoid(), dgi.ReadUint16()
+	case CLIENT_SET_FIELD_SENDABLE:
+		do := dgi.ReadDoid()
 
 		var fields []uint16
-		for count != 0 {
+		for dgi.RemainingSize() >= Blobsize {
 			fields = append(fields, dgi.ReadUint16())
 		}
 		c.sendableFields[do] = fields
@@ -934,7 +934,7 @@ func (c *Client) queueLoop() {
 
 				<-finish
 				if len(dgi.ReadRemainder()) != 0 {
-					c.sendDisconnect(CLIENT_DISCONNECT_OVERSIZED_DATAGRAM, "Datagram contains excess datc.", true)
+					c.sendDisconnect(CLIENT_DISCONNECT_OVERSIZED_DATAGRAM, "Datagram contains excess data.", true)
 				}
 				c.lock.Unlock()
 			}
