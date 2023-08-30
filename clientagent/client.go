@@ -3,6 +3,7 @@ package clientagent
 import (
 	"errors"
 	"otpgo/core"
+	"slices"
 	"sort"
 
 	// "otpgo/eventlogger"
@@ -359,11 +360,9 @@ func (c *Client) lookupObject(do Doid_t) dc.DCClass {
 		return obj.dc
 	}
 
-	for i := range c.seenObjects {
-		if c.seenObjects[i] == do {
-			if obj, ok := c.visibleObjects[do]; ok {
-				return obj.dc
-			}
+	if slices.Contains(c.seenObjects, do) {
+		if obj, ok := c.visibleObjects[do]; ok {
+			return obj.dc
 		}
 	}
 
@@ -559,6 +558,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				return
 			}
 			c.log.Warnf("Received server-side field update for unknown object %d", do)
+			return
 		}
 
 		if sender != c.channel {
@@ -585,8 +585,10 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				return
 			}
 			c.log.Warnf("Received server-side object delete for unknown object %d", do)
+			return
 		}
 
+		c.log.Debugf("Deleting server-side object %d", do)
 		for i, so := range c.sessionObjects {
 			if so == do {
 				c.sessionObjects = append(c.sessionObjects[:i], c.sessionObjects[i+1:]...)
@@ -672,8 +674,54 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				c.handleObjectEntrance(dgi, msgType == STATESERVER_OBJECT_ENTER_INTEREST_WITH_REQUIRED_OTHER)
 			}
 		}
-	case STATESERVER_OBJECT_SET_ZONE:
-		c.log.Warn("TODO: STATESERVER_OBJECT_SET_ZONE")
+	case STATESERVER_OBJECT_CHANGE_ZONE:
+		do := dgi.ReadDoid()
+		if c.lookupObject(do) == nil {
+			if c.tryQueuePending(do, dg) {
+				return
+			}
+			c.log.Warnf("Got ChangeZone from unknown object:%d", do)
+			return
+		}
+
+		if slices.Contains(c.sessionObjects, do) {
+			return
+		}
+
+		parent := dgi.ReadDoid()
+		zone := dgi.ReadZone()
+
+		if obj, ok := c.visibleObjects[do]; ok {
+			if len(c.lookupInterests(parent, zone)) > 0 {
+				// We have interest in new location; update.
+				obj.parent = parent
+				obj.zone = zone
+
+				// Tell the client to update.
+				dg := NewDatagram()
+				dg.AddUint16(CLIENT_OBJECT_LOCATION)
+				dg.AddDoid(do)
+				dg.AddDoid(parent)
+				dg.AddZone(zone)
+				c.client.SendDatagram(dg)
+			} else {
+				// Not interested, delete.
+				for i, so := range c.seenObjects {
+					if so == do {
+						c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
+						c.handleRemoveObject(do)
+					}
+				}
+
+				if _, ok := c.ownedObjects[do]; ok {
+					c.handleRemoveOwnership(do)
+					delete(c.ownedObjects, do)
+				}
+
+				c.historicalObjects = append(c.historicalObjects, do)
+				delete(c.visibleObjects, do)
+			}
+		}
 	case STATESERVER_OBJECT_CHANGE_OWNER_RECV:
 		c.log.Warn("TODO: STATESERVER_OBJECT_CHANGE_OWNER_RECV")
 	case DBSERVER_CREATE_STORED_OBJECT_RESP:
@@ -804,12 +852,14 @@ func (i *InterestOperation) finish() {
 
 	// Delete the IOP
 	delete(i.client.pendingInterests, i.requestContext)
-	for _, dg := range i.pendingQueue {
-		dgi := NewDatagramIterator(&dg)
-		dgi.SeekPayload()
-		go i.client.HandleDatagram(dg, dgi)
-	}
-	i.pendingQueue = nil
+	go func() {
+		for _, dg := range i.pendingQueue {
+			dgi := NewDatagramIterator(&dg)
+			dgi.SeekPayload()
+			i.client.HandleDatagram(dg, dgi)
+		}
+		i.pendingQueue = nil
+	}()
 }
 
 type InterestPermission int
