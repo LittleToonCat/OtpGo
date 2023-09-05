@@ -1,7 +1,9 @@
 package util
 
 import (
-    "github.com/yuin/gopher-lua"
+	"fmt"
+
+	"github.com/yuin/gopher-lua"
 )
 
 // Util wrappers for Lua.
@@ -75,6 +77,7 @@ func CheckDatagramIterator(L *lua.LState, n int) *DatagramIterator {
 }
 
 var DatagramMethods = map[string]lua.LGFunction{
+	"addServerHeader": LuaAddServerHeader,
 	"addInt8": LuaAddInt8,
 	"addUint8": LuaAddUint8,
 	"addInt16": LuaAddInt16,
@@ -85,6 +88,30 @@ var DatagramMethods = map[string]lua.LGFunction{
 	"addBool": LuaAddBool,
 	"addString": LuaAddString,
 	"addData": LuaAddData,
+}
+
+func LuaAddServerHeader(L *lua.LState) int {
+	dg := CheckDatagram(L, 1)
+	to := L.Get(2)
+	from := Channel_t(L.CheckInt(3))
+	messageType := uint16(L.CheckInt(4))
+
+	if to.Type() == lua.LTNumber {
+		dg.AddServerHeader(Channel_t(to.(lua.LNumber)), from, messageType)
+	} else if to.Type() == lua.LTTable {
+		luaChannels := to.(*lua.LTable)
+		channels := []Channel_t{}
+		luaChannels.ForEach(func(l1, l2 lua.LValue) {
+			if channel, ok := l2.(lua.LNumber); ok {
+				channels = append(channels, Channel_t(channel))
+			}
+		})
+		dg.AddMultipleServerHeader(channels, from, messageType)
+	} else {
+		L.ArgError(2, fmt.Sprintf("Got type %s, expecting number or table", to.Type().String()))
+		return 0
+	}
+	return 1
 }
 
 func LuaAddInt8(L *lua.LState) int {

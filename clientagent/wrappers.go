@@ -50,6 +50,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"handleRemoveInterest": LuaHandleRemoveInterest,
 	"handleUpdateField": LuaHandleUpdateField,
 	"objectSetOwner": LuaObjectSetOwner,
+	"routeDatagram": LuaRouteDatagram,
 	"sendActivateObject": LuaSendActivateObject,
 	"sendDatagram": LuaSendDatagram,
 	"sendDisconnect": LuaSendDisconnect,
@@ -144,6 +145,13 @@ func LuaSendDatagram(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	dg := CheckDatagram(L, 2)
 	go client.client.SendDatagram(*dg)
+	return 1
+}
+
+func LuaRouteDatagram(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	dg := CheckDatagram(L, 2)
+	go client.RouteDatagram(*dg)
 	return 1
 }
 

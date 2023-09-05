@@ -1148,6 +1148,25 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 
 	c.log.Debugf("Got client \"%s\" update for object %s(%d): %s", dcField.Get_name(), dclass.Get_name(), do, dcField.Format_data(packedData))
 
+	lFunc := c.ca.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.Get_name(), dcField.Get_name()))
+	if lFunc.Type() == lua.LTFunction {
+		// Call the Lua function instead of sending the
+		// built-in response.
+		unpacker := dc.NewDCPacker()
+		defer dc.DeleteDCPacker(unpacker)
+
+		unpacker.Set_unpack_data(packedData)
+		unpacker.Begin_unpack(dcField)
+		lValue := core.UnpackDataToLuaValue(unpacker, c.ca.L)
+		if !unpacker.End_unpack() {
+			c.log.Warnf("End_unpack returned false on handleClientUpdateField somehow...")
+			return
+		}
+
+		go c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(field), lValue)
+		return
+	}
+
 	// Send the message over to the object.
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(do), c.channel, STATESERVER_OBJECT_UPDATE_FIELD)
