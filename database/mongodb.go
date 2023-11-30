@@ -7,6 +7,7 @@ import (
 	"time"
 
 	dc "github.com/LittleToonCat/dcparser-go"
+	"github.com/apex/log"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -43,10 +44,10 @@ type MongoBackend struct {
 	objects *mongo.Collection
 }
 
-func UnpackDataToBsonArray(unpacker dc.DCPacker, array *bson.A) {
+func UnpackDataToBsonArray(unpacker dc.DCPacker, array *bson.A, log log.Entry) {
 	switch unpacker.Get_pack_type() {
 	case dc.PT_invalid:
-		// TODO: Error out.
+		log.Errorf("UnpackDataToBsonArray: PT_invalid reached!\n%s", DumpUnpacker(unpacker))
 		*array = append(*array, "invalid")
 	case dc.PT_double:
 		*array = append(*array, unpacker.Unpack_double().(float64))
@@ -72,17 +73,19 @@ func UnpackDataToBsonArray(unpacker dc.DCPacker, array *bson.A) {
 		nestedArray := bson.A{}
 		unpacker.Push()
 		for unpacker.More_nested_fields() {
-			UnpackDataToBsonArray(unpacker, &nestedArray)
+			UnpackDataToBsonArray(unpacker, &nestedArray, log)
 		}
 		unpacker.Pop()
 		*array = append(*array, nestedArray)
 	}
+
+	log.Debugf("Resulting Array: %v", *array)
 }
 
-func UnpackDataToBsonDocument(unpacker dc.DCPacker, name string, doc *bson.D) {
+func UnpackDataToBsonDocument(unpacker dc.DCPacker, name string, doc *bson.D, log log.Entry) {
 	switch unpacker.Get_pack_type() {
 	case dc.PT_invalid:
-		// TODO: Error out.
+		log.Errorf("UnpackDataToBsonDocument: PT_invalid reached!\n%s", DumpUnpacker(unpacker))
 	case dc.PT_double:
 		*doc = append(*doc, bson.E{name, unpacker.Unpack_double().(float64)})
 	case dc.PT_int:
@@ -111,11 +114,13 @@ func UnpackDataToBsonDocument(unpacker dc.DCPacker, name string, doc *bson.D) {
 		array := bson.A{}
 		unpacker.Push()
 		for unpacker.More_nested_fields() {
-			UnpackDataToBsonArray(unpacker, &array)
+			UnpackDataToBsonArray(unpacker, &array, log)
 		}
 		unpacker.Pop()
 		*doc = append(*doc, bson.E{name, array})
 	}
+
+	log.Debugf("Resulting Document: %v", *doc)
 }
 
 func PackBsonValue(packer dc.DCPacker, value interface{}) {
@@ -261,7 +266,7 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 			unpacker.Set_unpack_data(data)
 			unpacker.Begin_unpack(field)
 
-			UnpackDataToBsonDocument(unpacker, field.Get_name(), &doc)
+			UnpackDataToBsonDocument(unpacker, field.Get_name(), &doc, *b.db.log)
 
 			if !unpacker.End_unpack() {
 				b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
@@ -467,7 +472,8 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 
 		unpacker.Set_unpack_data(value)
 		unpacker.Begin_unpack(dcField)
-		UnpackDataToBsonDocument(unpacker, "fields." + field, &setDoc)
+		b.db.log.Debugf("Beginning unpack field \"%s\"\n%s", field, DumpUnpacker(unpacker))
+		UnpackDataToBsonDocument(unpacker, "fields." + field, &setDoc, *b.db.log)
 		if !unpacker.End_unpack() {
 			b.db.log.Errorf("Failed to unpack field \"%s\"!  Update aborted.\n%s", field, DumpUnpacker(unpacker))
 

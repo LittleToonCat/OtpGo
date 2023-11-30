@@ -340,9 +340,10 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator)  {
 	// Also checks for no extra bytes.
 	if !field.Validate_ranges(packedData) {
 		s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), DumpVector(packedData))
+		return
 	}
 
-	s.log.Debugf("Forwarding update for field \"%s\" of object id %d to database.", field.Get_name(), do)
+	s.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.\n%s", field.Get_name(), field.Format_data(packedData), do, DumpVector(packedData))
 
 	dg := NewDatagram()
 	dg.AddServerHeader(s.database, Channel_t(do), DBSERVER_SET_STORED_VALUES)

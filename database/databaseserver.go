@@ -1,13 +1,32 @@
 package database
 
 import (
+	"fmt"
 	"otpgo/core"
 	"otpgo/messagedirector"
 	. "otpgo/util"
-	"fmt"
-	"github.com/apex/log"
+	"sync"
+	"os"
+	"os/signal"
+
 	dc "github.com/LittleToonCat/dcparser-go"
+	"github.com/apex/log"
 )
+
+const (
+	CreateObjectOperation uint8 = iota
+	GetStoredValuesOperation
+	SetStoredValuesOperation
+)
+
+type OperationQueueEntry struct {
+	operation uint8
+	data interface{}
+	doId Doid_t
+	dclass dc.DCClass
+	context uint32
+	sender Channel_t
+}
 
 type DatabaseServer struct {
 	messagedirector.MDParticipantBase
@@ -21,12 +40,18 @@ type DatabaseServer struct {
 
 	// TODO: Support for other backends (YAML, SQL)
 	backend     *MongoBackend
+
+	queue []OperationQueueEntry
+	queueLock sync.Mutex
+	shouldProcess chan bool
 }
 
 func NewDatabaseServer(config core.Role) *DatabaseServer {
 	db := &DatabaseServer{
 		config: config,
 		control: Channel_t(config.Control),
+		queue: []OperationQueueEntry{},
+		shouldProcess: make(chan bool),
 		min: Doid_t(config.Generate.Min),
 		max: Doid_t(config.Generate.Max),
 		objectTypes: make(map[uint16]dc.DCClass),
@@ -55,7 +80,44 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 	db.SubscribeChannel(Channel_t(db.control))
 	db.SubscribeChannel(BCHAN_DBSERVERS)
 
+	go db.queueLoop()
+
 	return db
+}
+
+func (d *DatabaseServer) getOperationFromQueue() OperationQueueEntry {
+	d.queueLock.Lock()
+	defer d.queueLock.Unlock()
+
+	op := d.queue[0]
+	d.queue = d.queue[1:]
+	return op
+}
+
+func (d *DatabaseServer) queueLoop() {
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt)
+
+	for {
+		select {
+		case <-d.shouldProcess:
+			for len(d.queue) > 0 {
+				op := d.getOperationFromQueue()
+				switch op.operation {
+				case CreateObjectOperation:
+					d.backend.CreateStoredObject(op.dclass, op.data.(map[dc.DCField]dc.Vector_uchar), op.context, op.sender)
+				case GetStoredValuesOperation:
+					d.backend.GetStoredValues(op.doId, op.data.([]string), op.context, op.sender)
+				case SetStoredValuesOperation:
+					d.backend.SetStoredValues(op.doId, op.data.(map[string]dc.Vector_uchar))
+				}
+			}
+		case <-signalCh:
+			return
+		case <-core.StopChan:
+			return
+		}
+	}
 }
 
 func (d *DatabaseServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
@@ -115,7 +177,16 @@ func (d *DatabaseServer) HandleCreateObject(dgi *DatagramIterator, sender Channe
 		datas[field] = blob
 	}
 
-	go d.backend.CreateStoredObject(dclass, datas, context, sender)
+	d.queueLock.Lock()
+	op := OperationQueueEntry{operation: CreateObjectOperation,
+		dclass: dclass, data: datas, context: context, sender: sender}
+	d.queue = append(d.queue, op)
+	d.queueLock.Unlock()
+
+	select {
+	case d.shouldProcess <- true:
+	default:
+	}
 }
 
 func (d *DatabaseServer) HandleGetStoredValues(dgi *DatagramIterator, sender Channel_t) {
@@ -128,7 +199,16 @@ func (d *DatabaseServer) HandleGetStoredValues(dgi *DatagramIterator, sender Cha
 		requestedFields[i] = dgi.ReadString()
 	}
 
-	go d.backend.GetStoredValues(doId, requestedFields, context, sender)
+	d.queueLock.Lock()
+	op := OperationQueueEntry{operation: GetStoredValuesOperation,
+		doId: doId, data: requestedFields, context: context, sender: sender}
+	d.queue = append(d.queue, op)
+	d.queueLock.Unlock()
+
+	select {
+	case d.shouldProcess <- true:
+	default:
+	}
 }
 
 func (d *DatabaseServer) handleSetStoredValues(dgi *DatagramIterator, sender Channel_t) {
@@ -143,5 +223,14 @@ func (d *DatabaseServer) handleSetStoredValues(dgi *DatagramIterator, sender Cha
 		packedValues[field] = value
 	}
 
-	go d.backend.SetStoredValues(doId, packedValues)
+	d.queueLock.Lock()
+	op := OperationQueueEntry{operation: SetStoredValuesOperation,
+		doId: doId, data: packedValues}
+	d.queue = append(d.queue, op)
+	d.queueLock.Unlock()
+
+	select {
+	case d.shouldProcess <- true:
+	default:
+	}
 }
