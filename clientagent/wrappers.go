@@ -225,7 +225,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				data := packedValues[i]
 				// Validate that the data is correct
 				if !dcField.Validate_ranges(data) {
-					client.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!", field)
+					client.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpVector(data))
 					dc.DeleteVector_uchar(data)
 					continue
 				}

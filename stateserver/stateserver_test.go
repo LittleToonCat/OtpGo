@@ -328,7 +328,7 @@ func TestStateServer_SetAI(t *testing.T) {
 	obj1.Flush()
 
 	// DO #1 should tell AI #1 that it is changing AI
-	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, 5, STATESERVER_OBJECT_CHANGING_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{ai1Chan}, 5, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
 	dg.AddDoid(Doid_t(do1)) // ID
 	dg.AddChannel(ai2Chan)  // New AI
 	dg.AddChannel(ai1Chan)  // Old AI
@@ -442,7 +442,7 @@ func TestStateServer_SetAI(t *testing.T) {
 
 	var ai1Expected, ai2Expected []Datagram
 	// DO #1 should tell AI #2 that it is changing to AI #1
-	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan, ParentToChildren(Doid_t(do1))}, 5, STATESERVER_OBJECT_CHANGING_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan, ParentToChildren(Doid_t(do1))}, 5, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
 	dg.AddDoid(Doid_t(do1)) // ID
 	dg.AddChannel(ai1Chan)  // New AI
 	dg.AddChannel(ai2Chan)  // Old AI
@@ -458,7 +458,7 @@ func TestStateServer_SetAI(t *testing.T) {
 	ai1Expected = append(ai1Expected, *dg)
 
 	// DO #2 will also tell AI #2 that it is changing AI
-	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan}, 5, STATESERVER_OBJECT_CHANGING_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{ai2Chan}, 5, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
 	dg.AddDoid(Doid_t(do2)) // ID
 	dg.AddChannel(ai1Chan)  // New AI
 	dg.AddChannel(ai2Chan)  // Old AI
@@ -481,7 +481,7 @@ func TestStateServer_SetAI(t *testing.T) {
 	obj2 = connect(do2)
 	time.Sleep(10 * time.Millisecond)
 
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 0xDEADBEEF, STATESERVER_OBJECT_CHANGING_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 0xDEADBEEF, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
 	dg.AddDoid(0xDEADBEEF)
 	dg.AddChannel(0xBEEFDEAD) // New AI
 	dg.AddChannel(ai1Chan)    // Old AI
@@ -493,7 +493,7 @@ func TestStateServer_SetAI(t *testing.T) {
 	children2.ExpectNone(t)
 
 	// A notification with the same AI channel should do nothing
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, do1, STATESERVER_OBJECT_CHANGING_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, do1, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
 	dg.AddDoid(Doid_t(do1))
 	dg.AddChannel(ai1Chan)
 	dg.AddChannel(ai1Chan)

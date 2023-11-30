@@ -82,7 +82,7 @@ const (
 	STATESERVER_OBJECT_LOCATE_RESP                        = 2023
 	STATESERVER_OBJECT_LOCATION_ACK                       = 2046
 	STATESERVER_OBJECT_SET_AI                             = 2050
-	STATESERVER_OBJECT_CHANGING_AI                        = 2051
+	STATESERVER_OBJECT_LEAVING_AI_INTEREST                = 2033
 	STATESERVER_OBJECT_ENTER_AI_RECV                      = 2067
 	STATESERVER_OBJECT_GET_AI                             = 2054
 	STATESERVER_OBJECT_GET_AI_RESP                        = 2055

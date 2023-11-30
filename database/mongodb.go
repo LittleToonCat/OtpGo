@@ -264,7 +264,7 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 			UnpackDataToBsonDocument(unpacker, field.Get_name(), &doc)
 
 			if !unpacker.End_unpack() {
-				b.db.log.Errorf("Failed to unpack field \"%s\"!", field.Get_name())
+				b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
 				// Reply with an error code.
 				dg := NewDatagram()
 				dg.AddServerHeader(sender, b.db.control, DBSERVER_CREATE_STORED_OBJECT_RESP)
@@ -469,7 +469,7 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 		unpacker.Begin_unpack(dcField)
 		UnpackDataToBsonDocument(unpacker, "fields." + field, &setDoc)
 		if !unpacker.End_unpack() {
-			b.db.log.Errorf("Failed to pack field \"%s\"!  Update aborted.", field)
+			b.db.log.Errorf("Failed to unpack field \"%s\"!  Update aborted.\n%s", field, DumpUnpacker(unpacker))
 
 			for _, data := range packedValues {
 				dc.DeleteVector_uchar(data)

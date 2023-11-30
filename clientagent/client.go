@@ -1142,7 +1142,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 	defer dc.DeleteVector_uchar(packedData)
 
 	if !dcField.Validate_ranges(packedData) {
-		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Got truncated update for field %s", dcField.Get_name()), true)
+		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Got truncated update for field %s\n%s\n%s", dcField.Get_name(), DumpVector(packedData), dgi), true)
 		return
 	}
 
@@ -1159,7 +1159,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 		unpacker.Begin_unpack(dcField)
 		lValue := core.UnpackDataToLuaValue(unpacker, c.ca.L)
 		if !unpacker.End_unpack() {
-			c.log.Warnf("End_unpack returned false on handleClientUpdateField somehow...")
+			c.log.Warnf("End_unpack returned false on handleClientUpdateField somehow...\n%s", DumpUnpacker(unpacker))
 			return
 		}
 

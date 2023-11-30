@@ -114,7 +114,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 			}
 			packedData := unpacker.Unpack_literal_value().(dc.Vector_uchar)
 			if !unpacker.End_unpack() {
-				s.log.Errorf("Received invalid update data for field \"%s\"!", dcField.Get_name())
+				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", dcField.Get_name(), DumpUnpacker(unpacker))
 				dc.DeleteVector_uchar(packedData)
 				continue
 			}
@@ -232,7 +232,7 @@ func (s * DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
 			data := packedValues[i]
 			// Validate that the data is correct
 			if !dcField.Validate_ranges(data) {
-				s.log.Errorf("Received invalid update data for field \"%s\"!", field)
+				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field, DumpVector(data))
 				dc.DeleteVector_uchar(data)
 				continue
 			}
@@ -339,7 +339,7 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator)  {
 	// method instead which does the job of validating the data for us.
 	// Also checks for no extra bytes.
 	if !field.Validate_ranges(packedData) {
-		s.log.Errorf("Received invalid update data for field \"%s\"!", field.Get_name())
+		s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), DumpVector(packedData))
 	}
 
 	s.log.Debugf("Forwarding update for field \"%s\" of object id %d to database.", field.Get_name(), do)
@@ -388,7 +388,7 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 			unpacker.Unpack_skip()
 			// ..and even that could fail.
 			if !unpacker.End_unpack() {
-				s.log.Errorf("Received invalid update data for field \"%s\"!", field.Get_name())
+				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
 				return
 			}
 			continue
@@ -398,7 +398,7 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 		packedData := unpacker.Unpack_literal_value().(dc.Vector_uchar)
 		defer dc.DeleteVector_uchar(packedData)
 		if !unpacker.End_unpack() {
-			s.log.Errorf("Received invalid update data for field \"%s\"!", field.Get_name())
+			s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
 			return
 		}
 
@@ -474,7 +474,7 @@ func (s *DatabaseStateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator)
 			if obj, ok := s.loading[Doid_t(receiver)]; ok {
 				obj.dgQueue = append(obj.dgQueue, dg)
 				s.log.Debugf("Queued message of type=%d", msgType)
-	}
+			}
 		}
 		s.log.Debugf("Ignoring message of type=%d", msgType)
 	}

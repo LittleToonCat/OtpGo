@@ -1,9 +1,12 @@
 package util
 
 import (
-	dc "github.com/LittleToonCat/dcparser-go"
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
+	"fmt"
+
+	dc "github.com/LittleToonCat/dcparser-go"
 )
 
 type Datagram struct {
@@ -13,6 +16,14 @@ type Datagram struct {
 func NewDatagram() Datagram {
 	var b bytes.Buffer
 	return Datagram{&b}
+}
+
+func (dg *Datagram) String() string {
+	return fmt.Sprintf(
+		"Datagram:\n" +
+		"%s",
+		hex.Dump(dg.Bytes()),
+	)
 }
 
 //  Bufio will automatically take care of type sizes for us. In these cases, we're not

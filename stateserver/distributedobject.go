@@ -98,7 +98,6 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 
 	unpacker.Set_unpack_data(packedData)
 
-
 	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
 		field := dclass.Get_inherited_field(i)
 		if field.Is_required() {
@@ -112,7 +111,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 			if unpacker.End_unpack() && field.Validate_ranges(do.requiredFields[field]) {
 				do.log.Debugf("Stored REQUIRED field \"%s\": %s", field.Get_name(), field.Format_data(do.requiredFields[field]))
 			} else {
-				return false, nil, fmt.Errorf("received truncated data for REQUIRED field \"%s\"", field.Get_name())
+				return false, nil, fmt.Errorf("received truncated data for REQUIRED field \"%s\"\n%s", field.Get_name(), DumpVector(do.requiredFields[field]))
 			}
 		}
 	}
@@ -138,7 +137,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 			if unpacker.End_unpack() && field.Validate_ranges(do.ramFields[field]) {
 				do.log.Debugf("Stored optional RAM field \"%s\": %s", field.Get_name(), field.Format_data(do.ramFields[field]))
 			} else {
-				return false, nil, fmt.Errorf("received truncated data for OTHER field \"%s\"", field.Get_name())
+				return false, nil, fmt.Errorf("received truncated data for OTHER field \"%s\"\n%s", field.Get_name(), DumpVector(do.ramFields[field]))
 			}
 		}
 	}
@@ -310,10 +309,6 @@ func (d *DistributedObject) handleLocationChange(parent Doid_t, zone Zone_t, sen
 	oldParent := d.parent
 	oldZone := d.zone
 
-	if d.aiChannel != INVALID_CHANNEL {
-		targets = append(targets, d.aiChannel)
-	}
-
 	if d.ownerChannel != INVALID_CHANNEL {
 		targets = append(targets, d.ownerChannel)
 	}
@@ -327,8 +322,8 @@ func (d *DistributedObject) handleLocationChange(parent Doid_t, zone Zone_t, sen
 	if parent != oldParent {
 		if oldParent != INVALID_DOID {
 			d.UnsubscribeChannel(ParentToChildren(d.parent))
-			targets = append(targets, Channel_t(d.parent))
-			targets = append(targets, LocationAsChannel(d.parent, d.zone))
+			targets = append(targets, Channel_t(oldParent))
+			targets = append(targets, LocationAsChannel(oldParent, oldZone))
 		}
 
 		d.parent = parent
@@ -352,8 +347,12 @@ func (d *DistributedObject) handleLocationChange(parent Doid_t, zone Zone_t, sen
 		}
 	} else if zone != oldZone {
 		d.zone = zone
-		targets = append(targets, Channel_t(d.parent))
-		targets = append(targets, LocationAsChannel(d.parent, d.zone))
+		targets = append(targets, Channel_t(oldParent))
+		targets = append(targets, LocationAsChannel(oldParent, oldZone))
+
+		if d.aiChannel != INVALID_CHANNEL {
+			targets = append(targets, d.aiChannel)
+		}
 	} else {
 		return
 	}
@@ -395,7 +394,7 @@ func (d *DistributedObject) handleAiChange(ai Channel_t, sender Channel_t, expli
 	d.explicitAi = explicit
 
 	dg := NewDatagram()
-	dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_CHANGING_AI)
+	dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
 	dg.AddDoid(d.do)
 	dg.AddChannel(ai)
 	dg.AddChannel(oldAi)
@@ -503,7 +502,7 @@ func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channe
 	// method instead which does the job of validating the data for us.
 	// Also checks for no extra bytes.
 	if !field.Validate_ranges(packedData) {
-		d.log.Errorf("Received invalid update data for field \"%s\"!", field.Get_name())
+		d.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", field.Get_name(), DumpVector(packedData), dgi)
 		dc.DeleteVector_uchar(packedData)
 		return false
 	}
@@ -533,7 +532,7 @@ func (d *DistributedObject) handleMultipleUpdates(dgi *DatagramIterator, count u
 		unpacker.Begin_unpack(field)
 		packedData := unpacker.Unpack_literal_value().(dc.Vector_uchar)
 		if !unpacker.End_unpack() {
-			d.log.Errorf("Received invalid update data for field \"%s\"!", field.Get_name())
+			d.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", field.Get_name(), DumpVector(packedData), dgi)
 			dc.DeleteVector_uchar(packedData)
 			return false
 		}
@@ -690,12 +689,12 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		count := dgi.ReadUint16()
 		d.handleMultipleUpdates(dgi, count, sender)
-	case STATESERVER_OBJECT_CHANGING_AI:
+	case STATESERVER_OBJECT_LEAVING_AI_INTEREST:
 		parent := dgi.ReadDoid()
 		newChannel := dgi.ReadChannel()
 		d.log.Debugf("Received changing AI message from %d", parent)
 		if parent != d.parent {
-			d.log.Warnf("Received changing AI message from %d, but AI channel is %d", parent, d.parent)
+			d.log.Warnf("Received changing AI message from %d, but my parent is %d", parent, d.parent)
 			return
 		}
 		if d.explicitAi {

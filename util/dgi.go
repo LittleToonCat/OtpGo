@@ -23,6 +23,16 @@ func NewDatagramIterator(dg *Datagram) *DatagramIterator {
 	return dgi
 }
 
+func (dgi *DatagramIterator) String() string {
+	return fmt.Sprintf(
+		"DatagramIterator:\n" +
+		"offset: %d (of %d) / 0x%x (of 0x%x)\n" +
+		"%s",
+		dgi.offset, dgi.Dg.Len(), dgi.offset, dgi.Dg.Len(),
+		dgi.Dg,
+	)
+}
+
 func (dgi *DatagramIterator) Copy() *DatagramIterator {
 	newDgi := NewDatagramIterator(dgi.Dg)
 	newDgi.Seek(dgi.Tell())
