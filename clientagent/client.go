@@ -985,6 +985,7 @@ func (c *Client) queueLoop() {
 				<-finish
 				if len(dgi.ReadRemainder()) != 0 {
 					c.sendDisconnect(CLIENT_DISCONNECT_OVERSIZED_DATAGRAM, "Datagram contains excess data.", true)
+					c.log.Errorf("%s", dgi)
 				}
 				c.lock.Unlock()
 			}
@@ -1123,6 +1124,9 @@ func (c *Client) isFieldSendable(do Doid_t, field dc.DCField) bool {
 func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramIterator) {
 	dclass := c.lookupObject(do)
 	if dclass == nil {
+		if c.historicalObject(do) {
+			return
+		}
 		c.sendDisconnect(CLIENT_DISCONNECT_MISSING_OBJECT, fmt.Sprintf("Attempted to send field update to unknown object: %d", do), true)
 		return
 	}
