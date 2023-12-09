@@ -90,6 +90,8 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 		}),
 	}
 
+	DCLock.Lock()
+
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)
 
@@ -145,6 +147,8 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 	do.Init(do)
 
 	do.log.Debug("Object instantiated ...")
+
+	DCLock.Unlock()
 
 	if !isMainObj {
 		do.SubscribeChannel(Channel_t(doid))
@@ -496,6 +500,7 @@ func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channe
 		return false
 	}
 
+	DCLock.Lock()
 	packedData := dgi.ReadRemainderAsVector()
 
 	// Instead of constructing our DCPacker, let's call the field's Validate_ranges
@@ -507,6 +512,7 @@ func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channe
 		return false
 	}
 
+	DCLock.Unlock()
 	// Hand things over to finishHandleUpdate
 	d.finishHandleUpdate(field, packedData, sender)
 	return true
@@ -543,6 +549,8 @@ func (d *DistributedObject) handleMultipleUpdates(dgi *DatagramIterator, count u
 }
 
 func (d *DistributedObject) finishHandleUpdate(field dc.DCField, packedData dc.Vector_uchar, sender Channel_t) {
+	DCLock.Lock()
+	defer DCLock.Unlock()
 	// Print out the human formatted data
 	d.log.Debugf("Handling update for field \"%s\": %s", field.Get_name(), field.Format_data(packedData))
 

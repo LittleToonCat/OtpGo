@@ -260,6 +260,9 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 				}
 			}
 
+			DCLock.Lock()
+			defer DCLock.Unlock()
+
 			unpacker := dc.NewDCPacker()
 			defer dc.DeleteDCPacker(unpacker)
 
@@ -378,6 +381,9 @@ func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 	fieldsMap := make(bson.M)
 	_ = bson.Unmarshal(doc, &fieldsMap)
 
+	DCLock.Lock()
+	defer DCLock.Unlock()
+
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
@@ -453,6 +459,9 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 		b.db.log.Errorf("Class %s for object %d does not exist!", object.Class, doId)
 		return
 	}
+
+	DCLock.Lock()
+	defer DCLock.Unlock()
 
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)

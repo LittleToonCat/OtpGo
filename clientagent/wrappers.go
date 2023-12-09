@@ -86,6 +86,8 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 		return 0
 	}
 
+	DCLock.Lock()
+
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
@@ -109,6 +111,7 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 		packer.Clear_data()
 	})
 
+	DCLock.Unlock()
 	callbackFunc := func(doId Doid_t) {
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId))
 	}
@@ -194,6 +197,8 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 			return
 		}
 
+		DCLock.Lock()
+
 		packedValues := make([]dc.Vector_uchar, count)
 		hasValue := map[string]bool{}
 		for i := uint16(0); i < count; i++ {
@@ -238,6 +243,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				dc.DeleteVector_uchar(data)
 			}
 		}
+		DCLock.Unlock()
 		client.ca.CallLuaFunction(callback, client, lua.LTrue, fieldTable)
 	}
 
@@ -256,6 +262,8 @@ func LuaSetDatabaseValues(L *lua.LState) int {
 		L.ArgError(2, "Class not found.")
 		return 0
 	}
+
+	DCLock.Lock()
 
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
@@ -280,6 +288,7 @@ func LuaSetDatabaseValues(L *lua.LState) int {
 		packer.Clear_data()
 	})
 
+	DCLock.Unlock()
 	client.setDatabaseValues(doId, packedFields)
 
 	return 1

@@ -90,6 +90,9 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 	if other {
 		count := dgi.ReadUint16()
 
+		DCLock.Lock()
+		defer DCLock.Unlock()
+
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)
 
@@ -366,6 +369,9 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 	}
 
 	count := dgi.ReadUint16()
+
+	DCLock.Lock()
+	defer DCLock.Unlock()
 
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)

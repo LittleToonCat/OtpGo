@@ -2,7 +2,10 @@ package util
 
 import (
 	dc "github.com/LittleToonCat/dcparser-go"
+	"sync"
 )
+
+var DCLock sync.Mutex = sync.Mutex{}
 
 func DumpVector(data dc.Vector_uchar) string {
 	dg := NewDatagram()

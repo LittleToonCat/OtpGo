@@ -1142,6 +1142,9 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 		return
 	}
 
+	DCLock.Lock()
+	defer DCLock.Unlock()
+
 	packedData := dgi.ReadRemainderAsVector()
 	defer dc.DeleteVector_uchar(packedData)
 
