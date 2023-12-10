@@ -233,6 +233,10 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 										  ctx uint32, sender Channel_t) {
 
 	var doc bson.D
+
+	DCLock.Lock()
+	defer DCLock.Unlock()
+
 	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
 		field := dclass.Get_inherited_field(i)
 		if field.Is_db() {
@@ -259,9 +263,6 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 					continue
 				}
 			}
-
-			DCLock.Lock()
-			defer DCLock.Unlock()
 
 			unpacker := dc.NewDCPacker()
 			defer dc.DeleteDCPacker(unpacker)
