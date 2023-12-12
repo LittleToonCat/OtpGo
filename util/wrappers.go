@@ -185,6 +185,7 @@ func LuaAddData(L * lua.LState) int {
 }
 
 var DatagramIteratorMethods = map[string]lua.LGFunction{
+	"dumpHex": LuaDgiDumpHex,
 	"getRemainingSize": LuaGetRemainingSize,
 	"readInt8": LuaReadInt8,
 	"readUint8": LuaReadUint8,
@@ -193,9 +194,16 @@ var DatagramIteratorMethods = map[string]lua.LGFunction{
 	"readInt32": LuaReadInt32,
 	"readUint32": LuaReadUint32,
 	"readInt64": LuaReadInt64,
+	"readUint64": LuaReadUint64,
 	"readBool": LuaReadBool,
 	"readString": LuaReadString,
 	"readRemainder": LuaReadRemainder,
+}
+
+func LuaDgiDumpHex(L *lua.LState) int {
+	dgi := CheckDatagramIterator(L, 1)
+	L.Push(lua.LString(dgi.String()))
+	return 1
 }
 
 func LuaReadInt8(L *lua.LState) int {
@@ -241,8 +249,19 @@ func LuaReadUint32(L *lua.LState) int {
 }
 
 func LuaReadInt64(L *lua.LState) int {
+	// NOTE: Lua has no native int64 type support.
+	// Use at your own risk.
 	dgi := CheckDatagramIterator(L, 1)
 	v := dgi.ReadInt64()
+	L.Push(lua.LNumber(v))
+	return 1
+}
+
+func LuaReadUint64(L *lua.LState) int {
+	// NOTE: Lua has no native uint64 type support.
+	// Use at your own risk.
+	dgi := CheckDatagramIterator(L, 1)
+	v := dgi.ReadUint64()
 	L.Push(lua.LNumber(v))
 	return 1
 }

@@ -509,6 +509,7 @@ func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channe
 	if !field.Validate_ranges(packedData) {
 		d.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", field.Get_name(), DumpVector(packedData), dgi)
 		dc.DeleteVector_uchar(packedData)
+		DCLock.Unlock()
 		return false
 	}
 

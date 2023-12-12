@@ -20,6 +20,7 @@ var Uberdogs []Uberdog
 
 type Role struct {
 	Type string
+	Name string
 
 	// CLIENT
 	Bind    string

@@ -6,6 +6,7 @@ import (
 	"otpgo/core"
 	"otpgo/database"
 	// "otpgo/eventlogger"
+	"otpgo/luarole"
 	"otpgo/messagedirector"
 	"otpgo/util"
 	"otpgo/stateserver"
@@ -146,6 +147,8 @@ Revision: %s
 			database.NewDatabaseServer(role)
 		case "dbss":
 			stateserver.NewDatabaseStateServer(role)
+		case "lua":
+			luarole.NewLuaRole(role)
 		case "stateserver":
 			stateserver.NewStateServer(role)
 		}
