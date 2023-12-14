@@ -25,6 +25,9 @@ type LuaRole struct {
 	// a float64 type) may cause some problems.
 	sender Channel_t
 
+	context          uint32
+	queryFieldsContextMap    map[uint32]func(dgi *DatagramIterator)
+
 	L *lua.LState
 }
 
@@ -41,6 +44,7 @@ func NewLuaRole(config core.Role) *LuaRole {
 		log: log.WithFields(log.Fields{
 			"name": name,
 		}),
+		queryFieldsContextMap: map[uint32]func(dgi *DatagramIterator){},
 		L: lua.NewState(),
 	}
 
@@ -90,11 +94,30 @@ func (l *LuaRole) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	sender := dgi.ReadChannel()
 	msgType := dgi.ReadUint16()
 
-	go l.CallLuaFunction(l.L.GetGlobal("handleDatagram"), sender,
-	// Arguments:
-	NewLuaParticipant(l.L, l),
-	lua.LNumber(msgType),
-	NewLuaDatagramIteratorFromExisting(l.L, dgi))
+	switch msgType {
+	case STATESERVER_OBJECT_QUERY_FIELDS_RESP:
+		l.handleQueryFieldsResp(dgi)
+	default:
+		// Let Lua handle it.
+		go l.CallLuaFunction(l.L.GetGlobal("handleDatagram"), sender,
+		// Arguments:
+		NewLuaParticipant(l.L, l),
+		lua.LNumber(msgType),
+		NewLuaDatagramIteratorFromExisting(l.L, dgi))
+	}
+}
+
+func (l *LuaRole) handleQueryFieldsResp(dgi *DatagramIterator) {
+	context := dgi.ReadUint32()
+
+	callback, ok := l.queryFieldsContextMap[context]
+	if !ok {
+		l.log.Warnf("Got QueryFieldsResp with missing context %d", context)
+		return
+	}
+
+	callback(dgi)
+	delete(l.queryFieldsContextMap, context)
 }
 
 func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
@@ -133,8 +156,45 @@ func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 	unpacker.Begin_unpack(dcField)
 	lValue := core.UnpackDataToLuaValue(unpacker, l.L)
 	if !unpacker.End_unpack() {
-		l.log.Warnf("End_unpack returned false on handleClientUpdateField somehow...\n%s", DumpUnpacker(unpacker))
+		l.log.Warnf("End_unpack returned false on handleUpdateField somehow...\n%s", DumpUnpacker(unpacker))
 		return
 	}
 	go l.CallLuaFunction(lFunc, l.sender, NewLuaParticipant(l.L, l), lua.LNumber(fieldId), lValue)
+}
+
+func (l *LuaRole) sendUpdateToChannel(channel Channel_t, fromDoId Doid_t, className string, fieldName string, value lua.LValue) {
+	cls := core.DC.Get_class_by_name(className)
+	if cls == dc.SwigcptrDCClass(0) {
+		l.log.Warnf("sendUpdateToChannel: Class name \"%s\" not found!", className)
+		return
+	}
+
+	field := cls.Get_field_by_name(fieldName)
+	if field == dc.SwigcptrDCField(0) {
+		l.log.Warnf("sendUpdateToChannel: Class \"%s\" does not have field \"%s\"!", className, fieldName)
+		return
+	}
+
+	DCLock.Lock()
+	defer DCLock.Unlock()
+
+	packer := dc.NewDCPacker()
+	defer dc.DeleteDCPacker(packer)
+
+	packer.Begin_pack(field)
+	core.PackLuaValue(packer, value)
+	if !packer.End_pack() {
+		l.log.Warnf("sendUpdateToChannel: Packing of \"%s\" failed!", fieldName)
+		return
+	}
+
+	packedData := packer.Get_bytes()
+	defer dc.DeleteVector_uchar(packedData)
+
+	dg := NewDatagram()
+	dg.AddServerHeader(channel, Channel_t(fromDoId), STATESERVER_OBJECT_UPDATE_FIELD)
+	dg.AddDoid(fromDoId)
+	dg.AddUint16(uint16(field.Get_number()))
+	dg.AddVector(packedData)
+	l.RouteDatagram(dg)
 }
