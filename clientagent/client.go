@@ -730,7 +730,15 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case DBSERVER_GET_STORED_VALUES_RESP:
 		c.handleGetStoredValuesResp(dgi)
 	default:
-		c.log.Errorf("Received unknown server msgtype %d", msgType)
+		if luaFunc, ok := c.ca.L.GetGlobal("handleDatagram").(*lua.LFunction); ok {
+			c.ca.CallLuaFunction(luaFunc, c,
+			// Arguments:
+			NewLuaClient(c.ca.L, c),
+			lua.LNumber(msgType),
+			NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
+		} else {
+			c.log.Errorf("Received unknown server msgtype %d", msgType)
+		}
 	}
 }
 
