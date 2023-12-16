@@ -8,6 +8,7 @@ import (
 
 	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/yuin/gopher-lua"
+	"fmt"
 )
 
 // Participant wrappers for Lua
@@ -30,8 +31,8 @@ func NewLuaParticipant(L *lua.LState, participant *LuaRole) *lua.LUserData {
 
 func CheckParticipant(L *lua.LState, n int) *LuaRole {
 	ud := L.CheckUserData(n)
-	if participaint, ok := ud.Value.(*LuaRole); ok {
-		return participaint
+	if participant, ok := ud.Value.(*LuaRole); ok {
+		return participant
 	}
 	L.ArgError(n, "LuaRole expected")
 	return nil
@@ -43,11 +44,15 @@ var ParticipantMethods = map[string]lua.LGFunction{
 	"subscribeRange": LuaSubscribeRange,
 	"unsubscribeRange": LuaUnsubscribeRange,
 	"handleUpdateField": LuaHandleUpdateField,
+	"addServerHeaderWithAvatarId": LuaAddServerHeaderWithAvatarId,
 	"getAccountIdFromSender": LuaGetAccountIdFromSender,
 	"getAvatarIdFromSender": LuaGetAvatarIdFromSender,
+	"sendUpdate": LuaSendUpdate,
 	"sendUpdateToAvatarId": LuaSendUpdateToAvatarId,
 	"sendUpdateToAccountId": LuaSendUpdateToAccountId,
 	"queryObjectFields": LuaQueryObjectFields,
+	"setDatabaseValues": LuaSetDatabaseValues,
+	"routeDatagram": LuaRouteDatagram,
 }
 
 func LuaSubscribeChannel(L *lua.LState) int {
@@ -98,6 +103,37 @@ func LuaGetAccountIdFromSender(L *lua.LState) int {
 func LuaGetAvatarIdFromSender(L *lua.LState) int {
 	participant := CheckParticipant(L, 1)
 	L.Push(lua.LNumber(participant.sender & 0xffffffff))
+	return 1
+}
+
+func LuaRouteDatagram(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	dg := CheckDatagram(L, 2)
+	go participant.RouteDatagram(*dg)
+	return 1
+}
+
+func LuaAddServerHeaderWithAvatarId(L *lua.LState) int {
+	// This exists because of Lua cannot add
+	// the avatar puppet channel on its own.
+	dg := CheckDatagram(L, 2)
+	avatarId := L.CheckInt(3)
+	sender := Channel_t(L.CheckInt(4))
+	msgType := uint16(L.CheckInt(5))
+
+	dg.AddServerHeader(Channel_t(avatarId + (1 << 32)), sender, msgType)
+	return 1
+}
+
+func LuaSendUpdate(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	doId := Doid_t(L.CheckInt(2))
+	from := L.CheckInt(3)
+	className := L.CheckString(4)
+	fieldName := L.CheckString(5)
+	v := L.Get(6)
+
+	participant.sendUpdateToChannel(Channel_t(doId), Doid_t(from), className, fieldName, v)
 	return 1
 }
 
@@ -217,5 +253,49 @@ func LuaQueryObjectFields(L *lua.LState) int {
 	}
 	participant.RouteDatagram(dg)
 	participant.context++
+	return 1
+}
+
+func LuaSetDatabaseValues(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	doId := Doid_t(L.CheckInt(2))
+	dbChannel := Channel_t(L.CheckInt(3))
+	clsName := L.CheckString(4)
+	fields := L.CheckTable(5)
+
+	cls := core.DC.Get_class_by_name(clsName)
+	if cls == dc.SwigcptrDCClass(0) {
+		L.ArgError(2, "Class not found.")
+		return 0
+	}
+
+	DCLock.Lock()
+
+	packer := dc.NewDCPacker()
+	defer dc.DeleteDCPacker(packer)
+
+	packedFields := map[string]dc.Vector_uchar{}
+	// TODO: string dictionary sanity check
+	fields.ForEach(func(l1, data lua.LValue) {
+		name := string(l1.(lua.LString))
+		field := cls.Get_field_by_name(name)
+		if field == dc.SwigcptrDCField(0) {
+			L.ArgError(3, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", name, clsName))
+			return
+		}
+		packer.Begin_pack(field)
+		core.PackLuaValue(packer, data)
+		if !packer.End_pack() {
+			L.ArgError(3, "Pack failed!")
+			return
+		}
+
+		packedFields[name] = packer.Get_bytes()
+		packer.Clear_data()
+	})
+
+	DCLock.Unlock()
+	participant.setDatabaseValues(doId, dbChannel, packedFields)
+
 	return 1
 }

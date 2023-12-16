@@ -120,6 +120,22 @@ func (l *LuaRole) handleQueryFieldsResp(dgi *DatagramIterator) {
 	delete(l.queryFieldsContextMap, context)
 }
 
+func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValues map[string]dc.Vector_uchar) {
+	dg := NewDatagram()
+	dg.AddServerHeader(dbChannel, 0, DBSERVER_SET_STORED_VALUES)
+	dg.AddDoid(doId)
+	dg.AddUint16(uint16(len(packedValues)))
+
+	for name, value := range packedValues {
+		dg.AddString(name)
+		dg.AddUint16(uint16(value.Size()))
+		dg.AddVector(value)
+		dc.DeleteVector_uchar(value)
+	}
+
+	l.RouteDatagram(dg)
+}
+
 func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 	dclass := core.DC.Get_class_by_name(className)
 	if dclass == dc.SwigcptrDCClass(0) {

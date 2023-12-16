@@ -39,6 +39,8 @@ func CheckClient(L *lua.LState, n int) *Client {
 }
 
 var ClientMethods = map[string]lua.LGFunction{
+	"addServerHeader": LuaClientAddServerHeader,
+	"addServerHeaderWithAvatarId": LuaAddServerHeaderWithAvatarId,
 	"addSessionObject": LuaAddSessionObject,
 	"authenticated": LuaGetSetAuthenticated,
 	"createDatabaseObject": LuaCreateDatabaseObject,
@@ -60,6 +62,32 @@ var ClientMethods = map[string]lua.LGFunction{
 	"setChannel": LuaSetChannel,
 	"unsubscribePuppetChannel": LuaUnsubscribePuppetChannel,
 	"userTable": LuaGetSetUserTable,
+}
+
+func LuaClientAddServerHeader(L *lua.LState) int {
+	// This exists because of Lua cannot add
+	// the server header on its own, espically since
+	// our channel can be higher than what Lua
+	// is allowed.
+	client := CheckClient(L, 1)
+	dg := CheckDatagram(L, 2)
+	to := Channel_t(L.CheckNumber(3))
+	msgType := uint16(L.CheckNumber(4))
+
+	dg.AddServerHeader(to, client.channel, msgType)
+	return 1
+}
+
+func LuaAddServerHeaderWithAvatarId(L *lua.LState) int {
+	// This exists because of Lua cannot add
+	// the avatar puppet channel on its own.
+	client := CheckClient(L, 1)
+	dg := CheckDatagram(L, 2)
+	avatarId := (L.CheckNumber(3))
+	msgType := uint16(L.CheckNumber(4))
+
+	dg.AddServerHeader(Channel_t(avatarId + (1 << 32)), client.channel, msgType)
+	return 1
 }
 
 func LuaGetSetAuthenticated(L *lua.LState) int {
@@ -113,7 +141,7 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 
 	DCLock.Unlock()
 	callbackFunc := func(doId Doid_t) {
-		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId))
+		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId))
 	}
 
 	client.createDatabaseObject(uint16(objectType), packedFields, callbackFunc)
@@ -177,10 +205,10 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 		fields = append(fields, string(fieldName))
 	})
 
-	callbackFunc := func(dbDoId Doid_t, dgi *DatagramIterator)  {
+	callbackFunc := func(dbDoId Doid_t, dgi *DatagramIterator) {
 		if doId != dbDoId {
 			client.log.Warnf("Got GetStoredValues for wrong ID! Got: %d.  Expecting: %d", dbDoId, doId)
-			client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
+			go client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
 			return
 		}
 
@@ -193,7 +221,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 		code := dgi.ReadUint8()
 		if code > 0 {
 			client.log.Warnf("GetStoredValues returned error code %d", code)
-			client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
+			go client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
 			return
 		}
 
@@ -244,7 +272,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 			}
 		}
 		DCLock.Unlock()
-		client.ca.CallLuaFunction(callback, client, lua.LTrue, fieldTable)
+		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
 	client.getDatabaseValues(doId, fields, callbackFunc)
