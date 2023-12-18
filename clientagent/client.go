@@ -496,7 +496,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case CLIENTAGENT_UNDECLARE_OBJECT:
 		do := dgi.ReadDoid()
 
-		if _, ok := c.declaredObjects[do]; ok {
+		if _, ok := c.declaredObjects[do]; !ok {
 			c.log.Warnf("Received object de-declaration for previously declared object %d", do)
 			return
 		}

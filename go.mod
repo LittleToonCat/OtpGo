@@ -1,6 +1,6 @@
 module otpgo
 
-go 1.20
+go 1.21
 
 require (
 	github.com/LittleToonCat/dcparser-go v0.0.0-20230730120720-1f6a06bb5633

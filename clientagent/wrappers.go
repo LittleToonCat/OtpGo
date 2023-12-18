@@ -42,8 +42,11 @@ var ClientMethods = map[string]lua.LGFunction{
 	"addServerHeader": LuaClientAddServerHeader,
 	"addServerHeaderWithAvatarId": LuaAddServerHeaderWithAvatarId,
 	"addSessionObject": LuaAddSessionObject,
+	"addPostRemove": LuaAddPostRemove,
 	"authenticated": LuaGetSetAuthenticated,
+	"clearPostRemoves": LuaClearPostRemoves,
 	"createDatabaseObject": LuaCreateDatabaseObject,
+	"declareObject": LuaDeclareObject,
 	"getDatabaseValues": LuaGetDatabaseValues,
 	"setDatabaseValues": LuaSetDatabaseValues,
 	"handleAddInterest": LuaHandleAddInterest,
@@ -52,6 +55,8 @@ var ClientMethods = map[string]lua.LGFunction{
 	"handleRemoveInterest": LuaHandleRemoveInterest,
 	"handleUpdateField": LuaHandleUpdateField,
 	"objectSetOwner": LuaObjectSetOwner,
+	"packFieldToDatagram": LuaPackFieldToDatagram,
+	"removeSessionObject": LuaRemoveSessionObject,
 	"routeDatagram": LuaRouteDatagram,
 	"sendActivateObject": LuaSendActivateObject,
 	"sendDatagram": LuaSendDatagram,
@@ -60,6 +65,8 @@ var ClientMethods = map[string]lua.LGFunction{
 	"subscribeChannel": LuaSubscribeChannel,
 	"subscribePuppetChannel": LuaSubscribePuppetChannel,
 	"setChannel": LuaSetChannel,
+	"undeclareObject": LuaUndeclareObject,
+	"undeclareAllObjects": LuaUndeclareAllObjects,
 	"unsubscribePuppetChannel": LuaUnsubscribePuppetChannel,
 	"userTable": LuaGetSetUserTable,
 }
@@ -146,6 +153,44 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 
 	client.createDatabaseObject(uint16(objectType), packedFields, callbackFunc)
 
+	return 1
+}
+
+func LuaPackFieldToDatagram(L *lua.LState) int {
+	dg := CheckDatagram(L, 2)
+	clsName := L.CheckString(3)
+	fieldName := L.CheckString(4)
+	value := L.Get(5)
+
+	cls := core.DC.Get_class_by_name(clsName)
+	if cls == dc.SwigcptrDCClass(0) {
+		L.ArgError(3, "Class not found.")
+		return 0
+	}
+
+	DCLock.Lock()
+	defer DCLock.Unlock()
+
+	packer := dc.NewDCPacker()
+	defer dc.DeleteDCPacker(packer)
+
+	field := cls.Get_field_by_name(fieldName)
+	if field == dc.SwigcptrDCField(0) {
+		L.ArgError(4, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", fieldName, clsName))
+		return 0
+	}
+	packer.Begin_pack(field)
+	core.PackLuaValue(packer, value)
+	if !packer.End_pack() {
+		L.ArgError(5, "Pack failed!")
+		return 0
+	}
+
+	packedData := packer.Get_bytes()
+	defer dc.DeleteVector_uchar(packedData)
+
+	dg.AddUint16(uint16(field.Get_number()))
+	dg.AddVector(packedData)
 	return 1
 }
 
@@ -507,6 +552,78 @@ func LuaAddSessionObject(L *lua.LState) int {
 
 	client.log.Debugf("Added session object with ID %d", do)
 	client.sessionObjects = append(client.sessionObjects, do)
+	return 1
+}
+
+func LuaRemoveSessionObject(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	do := Doid_t(L.CheckInt(2))
+
+	for _, d := range client.sessionObjects {
+		if d == do {
+			break
+		}
+		client.log.Warnf("Received remove sesion object with non-existant ID=%d", do)
+	}
+
+	client.log.Debugf("Removed session object with ID %d", do)
+	for i, o := range client.sessionObjects {
+		if o == do {
+			client.sessionObjects = append(client.sessionObjects[:i], client.sessionObjects[i+1:]...)
+		}
+	}
+	return 1
+}
+
+func LuaAddPostRemove(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	dg := CheckDatagram(L, 2)
+
+	client.AddPostRemove(client.allocatedChannel, *dg)
+	return 1
+}
+
+func LuaClearPostRemoves(L *lua.LState) int {
+	client := CheckClient(L, 1)
+
+	client.ClearPostRemoves(client.allocatedChannel)
+	return 1
+}
+
+func LuaDeclareObject(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	do := Doid_t(L.CheckInt(2))
+	clsName := L.CheckString(3)
+
+	if _, ok := client.declaredObjects[do]; ok {
+		client.log.Warnf("Received object declaration for previously declared object %d", do)
+		return 1
+	}
+
+	cls := core.DC.Get_class_by_name(clsName)
+	client.declaredObjects[do] = DeclaredObject{
+		do: do,
+		dc: cls,
+	}
+	return 1
+}
+
+func LuaUndeclareObject(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	do := Doid_t(L.CheckInt(2))
+
+	if _, ok := client.declaredObjects[do]; !ok {
+		client.log.Warnf("Received object de-declaration for previously declared object %d", do)
+		return 1
+	}
+
+	delete(client.declaredObjects, do)
+	return 1
+}
+
+func LuaUndeclareAllObjects(L * lua.LState) int {
+	client := CheckClient(L, 1)
+	clear(client.declaredObjects)
 	return 1
 }
 
