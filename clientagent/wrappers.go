@@ -56,6 +56,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"handleUpdateField": LuaHandleUpdateField,
 	"objectSetOwner": LuaObjectSetOwner,
 	"packFieldToDatagram": LuaPackFieldToDatagram,
+	"queryObjectFields": LuaQueryObjectFields,
 	"removeSessionObject": LuaRemoveSessionObject,
 	"routeDatagram": LuaRouteDatagram,
 	"sendActivateObject": LuaSendActivateObject,
@@ -321,6 +322,98 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 	}
 
 	client.getDatabaseValues(doId, fields, callbackFunc)
+	return 1
+}
+
+func LuaQueryObjectFields(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	doId := Doid_t(L.CheckInt(2))
+	clsName := L.CheckString(3)
+	fieldsTable := L.CheckTable(4)
+	callback := L.CheckFunction(5)
+
+	cls := core.DC.Get_class_by_name(clsName)
+	if cls == dc.SwigcptrDCClass(0) {
+		L.ArgError(3, "Class not found.")
+		return 0
+	}
+
+	fields := make([]string, 0)
+	fieldsTable.ForEach(func(_, l2 lua.LValue) {
+		fieldName := l2.(lua.LString)
+		fields = append(fields, string(fieldName))
+	})
+
+	var fieldIds []uint16
+	for _, fieldName := range fields {
+		field := cls.Get_field_by_name(fieldName)
+		if field == dc.SwigcptrDCField(0) {
+			client.log.Warnf("queryObjectFields: Class \"%s\" does not have field \"%s\"!", clsName, fieldName)
+			continue
+		}
+		fieldIds = append(fieldIds, uint16(field.Get_number()))
+	}
+
+	if len(fieldIds) == 0 {
+		client.log.Warnf("queryObjectFields: Nothing to do for class \"%s\"!", clsName)
+		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, client.ca.L.NewTable())
+		return 1
+	}
+
+	callbackFunc := func(dgi *DatagramIterator) {
+		success := dgi.ReadBool()
+		if !success {
+			client.log.Warnf("QueryFieldsResp returned unsuccessful for ID %d!", doId)
+			go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LBool(success), lua.LNil)
+			return
+		}
+
+		found := dgi.ReadUint16()
+		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
+
+		fieldTable := client.ca.L.NewTable()
+
+		DCLock.Lock()
+		defer DCLock.Unlock()
+
+		packedData := dgi.ReadRemainderAsVector()
+		defer dc.DeleteVector_uchar(packedData)
+
+		unpacker := dc.NewDCPacker()
+		defer dc.DeleteDCPacker(unpacker)
+
+		unpacker.Set_unpack_data(packedData)
+		for i := uint16(0); i < found; i++ {
+			fieldId := unpacker.Raw_unpack_uint16().(uint)
+			field := cls.Get_field_by_index(int(fieldId))
+			if field == dc.SwigcptrDCField(0) {
+				client.log.Warnf("queryObjectFields: Unknown field %d for class \"%s\"!", fieldId, clsName)
+				continue
+			}
+			unpacker.Begin_unpack(field)
+			lValue := core.UnpackDataToLuaValue(unpacker, client.ca.L)
+			if !unpacker.End_unpack() {
+				client.log.Warnf("queryObjectFields: Unable to unpack field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
+				continue
+			}
+			fieldTable.RawSetString(field.Get_name(), lValue)
+		}
+
+		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+	}
+
+	client.queryFieldsContextMap[client.context] = callbackFunc
+
+	dg := NewDatagram()
+	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
+	dg.AddUint32(client.context)
+	dg.AddDoid(doId)
+	dg.AddUint16(uint16(len(fieldIds)))
+	for _, fieldId := range fieldIds {
+		dg.AddUint16(fieldId)
+	}
+	client.RouteDatagram(dg)
+	client.context++
 	return 1
 }
 

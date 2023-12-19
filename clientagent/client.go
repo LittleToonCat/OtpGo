@@ -79,6 +79,7 @@ type Client struct {
 	context          uint32
 	createContextMap map[uint32]func(doId Doid_t)
 	getContextMap    map[uint32]func(doId Doid_t, dgi *DatagramIterator)
+	queryFieldsContextMap    map[uint32]func(dgi *DatagramIterator)
 
 	queue         []Datagram
 	queueLock     sync.Mutex
@@ -116,6 +117,7 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 		stopChan: make(chan bool),
 		createContextMap: map[uint32]func(doId Doid_t){},
 		getContextMap: map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
+		queryFieldsContextMap: map[uint32]func(dgi *DatagramIterator){},
 		authenticated: false,
 		visibleObjects: map[Doid_t]VisibleObject{},
 		declaredObjects: map[Doid_t]DeclaredObject{},
@@ -729,6 +731,8 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		c.handleCreateDatabaseResp(context, code, doId)
 	case DBSERVER_GET_STORED_VALUES_RESP:
 		c.handleGetStoredValuesResp(dgi)
+	case STATESERVER_OBJECT_QUERY_FIELDS_RESP:
+		c.handleQueryFieldsResp(dgi)
 	default:
 		if luaFunc, ok := c.ca.L.GetGlobal("handleDatagram").(*lua.LFunction); ok {
 			c.ca.CallLuaFunction(luaFunc, c,
@@ -937,7 +941,7 @@ func (c *Client) Terminate(err error) {
 		// Stop the heartbeat goroutine
 		c.stopHeartbeat <- true
 	}()
-	c.annihilate()
+	go c.annihilate()
 
 	c.client.Close()
 }
@@ -991,7 +995,8 @@ func (c *Client) queueLoop() {
 				}()
 
 				<-finish
-				if len(dgi.ReadRemainder()) != 0 {
+
+				if dgi.RemainingSize() != 0 {
 					c.sendDisconnect(CLIENT_DISCONNECT_OVERSIZED_DATAGRAM, "Datagram contains excess data.", true)
 					c.log.Errorf("%s", dgi)
 				}
@@ -1074,6 +1079,19 @@ func (c *Client) handleGetStoredValuesResp(dgi *DatagramIterator) {
 	delete(c.getContextMap, context)
 }
 
+func (c *Client) handleQueryFieldsResp(dgi *DatagramIterator) {
+	context := dgi.ReadUint32()
+
+	callback, ok := c.queryFieldsContextMap[context]
+	if !ok {
+		c.log.Warnf("Got QueryFieldsResp with missing context %d", context)
+		return
+	}
+
+	callback(dgi)
+	delete(c.queryFieldsContextMap, context)
+}
+
 func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string]dc.Vector_uchar) {
 	dg := NewDatagram()
 	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_SET_STORED_VALUES)
@@ -1133,6 +1151,8 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 	dclass := c.lookupObject(do)
 	if dclass == nil {
 		if c.historicalObject(do) {
+			// Skip the data to prevent the excess data ejection.
+			dgi.Skip(dgi.RemainingSize())
 			return
 		}
 		c.sendDisconnect(CLIENT_DISCONNECT_MISSING_OBJECT, fmt.Sprintf("Attempted to send field update to unknown object: %d", do), true)

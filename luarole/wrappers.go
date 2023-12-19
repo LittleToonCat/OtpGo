@@ -45,6 +45,7 @@ var ParticipantMethods = map[string]lua.LGFunction{
 	"unsubscribeRange": LuaUnsubscribeRange,
 	"handleUpdateField": LuaHandleUpdateField,
 	"addServerHeaderWithAvatarId": LuaAddServerHeaderWithAvatarId,
+	"getSender": LuaGetSender,
 	"getAccountIdFromSender": LuaGetAccountIdFromSender,
 	"getAvatarIdFromSender": LuaGetAvatarIdFromSender,
 	"sendUpdate": LuaSendUpdate,
@@ -91,6 +92,12 @@ func LuaHandleUpdateField(L *lua.LState) int {
 	className := L.CheckString(3)
 
 	participant.handleUpdateField(dgi, className)
+	return 1
+}
+
+func LuaGetSender(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	L.Push(lua.LNumber(participant.sender))
 	return 1
 }
 
