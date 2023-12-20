@@ -47,6 +47,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"clearPostRemoves": LuaClearPostRemoves,
 	"createDatabaseObject": LuaCreateDatabaseObject,
 	"declareObject": LuaDeclareObject,
+	"getAllRequiredFromDatabase": LuaGetAllRequiredFromDatabase,
 	"getDatabaseValues": LuaGetDatabaseValues,
 	"setDatabaseValues": LuaSetDatabaseValues,
 	"handleAddInterest": LuaHandleAddInterest,
@@ -56,6 +57,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"handleUpdateField": LuaHandleUpdateField,
 	"objectSetOwner": LuaObjectSetOwner,
 	"packFieldToDatagram": LuaPackFieldToDatagram,
+	"queryAllRequiredFields": LuaQueryAllRequiredFields,
 	"queryObjectFields": LuaQueryObjectFields,
 	"removeSessionObject": LuaRemoveSessionObject,
 	"routeDatagram": LuaRouteDatagram,
@@ -162,6 +164,7 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 	clsName := L.CheckString(3)
 	fieldName := L.CheckString(4)
 	value := L.Get(5)
+	includeFieldId := L.CheckBool(6)
 
 	cls := core.DC.Get_class_by_name(clsName)
 	if cls == dc.SwigcptrDCClass(0) {
@@ -190,7 +193,9 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 	packedData := packer.Get_bytes()
 	defer dc.DeleteVector_uchar(packedData)
 
-	dg.AddUint16(uint16(field.Get_number()))
+	if includeFieldId {
+		dg.AddUint16(uint16(field.Get_number()))
+	}
 	dg.AddVector(packedData)
 	return 1
 }
@@ -325,6 +330,109 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 	return 1
 }
 
+func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	doId := Doid_t(L.CheckInt(2))
+	clsName := L.CheckString(3)
+	callback := L.CheckFunction(4)
+
+	cls := core.DC.Get_class_by_name(clsName)
+	if cls == dc.SwigcptrDCClass(0) {
+		L.ArgError(3, "Class not found.")
+		return 0
+	}
+
+	fields := make([]string, 0)
+	for i := 0; i < cls.Get_num_inherited_fields(); i++ {
+		field := cls.Get_inherited_field(i)
+		if field.Is_required() {
+			fields = append(fields, field.Get_name())
+		}
+	}
+
+	callbackFunc := func(dbDoId Doid_t, dgi *DatagramIterator) {
+		if doId != dbDoId {
+			client.log.Warnf("Got GetStoredValues for wrong ID! Got: %d.  Expecting: %d", dbDoId, doId)
+			go client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
+			return
+		}
+
+		count := dgi.ReadUint16()
+		fields := make([]string, count)
+		for i := uint16(0); i < count; i++ {
+			fields[i] = dgi.ReadString()
+		}
+
+		code := dgi.ReadUint8()
+		if code > 0 {
+			client.log.Warnf("GetStoredValues returned error code %d", code)
+			go client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
+			return
+		}
+
+		DCLock.Lock()
+
+		packedValues := make([]dc.Vector_uchar, count)
+		hasValue := map[string]bool{}
+		for i := uint16(0); i < count; i++ {
+			packedValues[i] = dgi.ReadVector()
+			hasValue[fields[i]] = dgi.ReadBool()
+			if !hasValue[fields[i]] {
+				client.log.Debugf("GetStoredValues: Data for field \"%s\" not found, will be replaced with default value", fields[i])
+
+			}
+		}
+
+		fieldTable := L.NewTable()
+		unpacker := dc.NewDCPacker()
+		defer dc.DeleteDCPacker(unpacker)
+
+		for i := uint16(0); i < count; i++ {
+			field := fields[i]
+			found := hasValue[field]
+
+			dcField := cls.Get_field_by_name(field)
+			if dcField == dc.SwigcptrDCField(0) {
+				client.log.Warnf("GetStoredValues: Field \"%s\" does not exist for class \"%s\"", field, clsName)
+				if found {
+					dc.DeleteVector_uchar(packedValues[i])
+				}
+				continue
+			}
+
+			var data dc.Vector_uchar
+			if found {
+				data = packedValues[i]
+				// Validate that the data is correct
+				if !dcField.Validate_ranges(data) {
+					client.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpVector(data))
+					dc.DeleteVector_uchar(data)
+					continue
+				}
+			} else {
+				// Get default value instead.
+				value := dcField.Get_default_value()
+				data = dc.NewVector_uchar()
+				for i := int64(0); i < value.Size(); i++ {
+					data.Add(value.Get(int(i)))
+				}
+			}
+
+			unpacker.Set_unpack_data(data)
+			unpacker.Begin_unpack(dcField)
+			fieldTable.RawSetString(fields[i], core.UnpackDataToLuaValue(unpacker, L))
+			unpacker.End_unpack()
+
+			dc.DeleteVector_uchar(data)
+		}
+		DCLock.Unlock()
+		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+	}
+
+	client.getDatabaseValues(doId, fields, callbackFunc)
+	return 1
+}
+
 func LuaQueryObjectFields(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	doId := Doid_t(L.CheckInt(2))
@@ -352,6 +460,89 @@ func LuaQueryObjectFields(L *lua.LState) int {
 			continue
 		}
 		fieldIds = append(fieldIds, uint16(field.Get_number()))
+	}
+
+	if len(fieldIds) == 0 {
+		client.log.Warnf("queryObjectFields: Nothing to do for class \"%s\"!", clsName)
+		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, client.ca.L.NewTable())
+		return 1
+	}
+
+	callbackFunc := func(dgi *DatagramIterator) {
+		success := dgi.ReadBool()
+		if !success {
+			client.log.Warnf("QueryFieldsResp returned unsuccessful for ID %d!", doId)
+			go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LBool(success), lua.LNil)
+			return
+		}
+
+		found := dgi.ReadUint16()
+		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
+
+		fieldTable := client.ca.L.NewTable()
+
+		DCLock.Lock()
+		defer DCLock.Unlock()
+
+		packedData := dgi.ReadRemainderAsVector()
+		defer dc.DeleteVector_uchar(packedData)
+
+		unpacker := dc.NewDCPacker()
+		defer dc.DeleteDCPacker(unpacker)
+
+		unpacker.Set_unpack_data(packedData)
+		for i := uint16(0); i < found; i++ {
+			fieldId := unpacker.Raw_unpack_uint16().(uint)
+			field := cls.Get_field_by_index(int(fieldId))
+			if field == dc.SwigcptrDCField(0) {
+				client.log.Warnf("queryObjectFields: Unknown field %d for class \"%s\"!", fieldId, clsName)
+				continue
+			}
+			unpacker.Begin_unpack(field)
+			lValue := core.UnpackDataToLuaValue(unpacker, client.ca.L)
+			if !unpacker.End_unpack() {
+				client.log.Warnf("queryObjectFields: Unable to unpack field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
+				continue
+			}
+			fieldTable.RawSetString(field.Get_name(), lValue)
+		}
+
+		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+	}
+
+	client.queryFieldsContextMap[client.context] = callbackFunc
+
+	dg := NewDatagram()
+	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
+	dg.AddUint32(client.context)
+	dg.AddDoid(doId)
+	dg.AddUint16(uint16(len(fieldIds)))
+	for _, fieldId := range fieldIds {
+		dg.AddUint16(fieldId)
+	}
+	client.RouteDatagram(dg)
+	client.context++
+	return 1
+}
+
+func LuaQueryAllRequiredFields(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	doId := Doid_t(L.CheckInt(2))
+	clsName := L.CheckString(3)
+	callback := L.CheckFunction(4)
+
+	cls := core.DC.Get_class_by_name(clsName)
+	if cls == dc.SwigcptrDCClass(0) {
+		L.ArgError(3, "Class not found.")
+		return 0
+	}
+
+	var fieldIds []uint16
+	for i := 0; i < cls.Get_num_inherited_fields(); i++ {
+		field := cls.Get_inherited_field(i)
+		if field.Is_required() {
+			fieldIds = append(fieldIds, uint16(field.Get_number()))
+		}
 	}
 
 	if len(fieldIds) == 0 {
