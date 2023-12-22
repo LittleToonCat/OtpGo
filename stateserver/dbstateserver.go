@@ -54,7 +54,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 	parent := dgi.ReadDoid()
 	zone := dgi.ReadZone()
 
-	s.log.Debugf("Received activate for object=%d", do)
+	s.log.Debugf("Received activate for object=%d, other=%t", do, other)
 
 	if _, ok := s.objects[do]; ok {
 		s.log.Warnf("Received activate for already-active object with id %d", do)
@@ -102,7 +102,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 
 		for i := uint16(0); i < count; i++ {
 			field := unpacker.Raw_unpack_uint16().(uint)
-			dcField := dclass.Get_inherited_field(int(field))
+			dcField := dclass.Get_field_by_index(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
 				s.log.Errorf("Received invalid field index %d", field)
 				return
