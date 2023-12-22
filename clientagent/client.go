@@ -555,7 +555,8 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		c.RouteDatagram(resp)
 	case STATESERVER_OBJECT_UPDATE_FIELD:
 		do := dgi.ReadDoid()
-		if c.lookupObject(do) == nil {
+		dclass := c.lookupObject(do)
+		if dclass == nil {
 			if c.tryQueuePending(do, dg) {
 				return
 			}
@@ -565,7 +566,12 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		if sender != c.channel {
 			field := dgi.ReadUint16()
-			c.handleUpdateField(do, field, dgi)
+			dcField := dclass.Get_field_by_index(int(field))
+			if dcField == dc.SwigcptrDCField(0) {
+				c.log.Warnf("Received server-side field update for object %s(%d) with unknown field %d", dclass.Get_name(), do, field)
+				return
+			}
+			c.handleUpdateField(do, dclass, dcField, dgi)
 		}
 	// case STATESERVER_OBJECT_UPDATE_FIELD_MULTIPLE:
 	// 	do := dgi.ReadDoid()
@@ -1183,7 +1189,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 
 	c.log.Debugf("Got client \"%s\" update for object %s(%d): %s", dcField.Get_name(), dclass.Get_name(), do, dcField.Format_data(packedData))
 
-	lFunc := c.ca.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.Get_name(), dcField.Get_name()))
+	lFunc := c.ca.L.GetGlobal(fmt.Sprintf("handleClient%s_%s", dclass.Get_name(), dcField.Get_name()))
 	if lFunc.Type() == lua.LTFunction {
 		// Call the Lua function instead of sending the
 		// built-in response.
@@ -1212,11 +1218,37 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 	c.RouteDatagram(dg)
 }
 
-func (c *Client) handleUpdateField(do Doid_t, field uint16, dgi *DatagramIterator) {
+func (c *Client) handleUpdateField(do Doid_t, dclass dc.DCClass, dcField dc.DCField, dgi *DatagramIterator) {
+	lFunc := c.ca.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.Get_name(), dcField.Get_name()))
+	if lFunc.Type() == lua.LTFunction {
+		// Call the Lua function instead of sending the
+		// built-in response.
+
+		DCLock.Lock()
+		defer DCLock.Unlock()
+
+		packedData := dgi.ReadRemainderAsVector()
+		defer dc.DeleteVector_uchar(packedData)
+
+		unpacker := dc.NewDCPacker()
+		defer dc.DeleteDCPacker(unpacker)
+
+		unpacker.Set_unpack_data(packedData)
+		unpacker.Begin_unpack(dcField)
+		lValue := core.UnpackDataToLuaValue(unpacker, c.ca.L)
+		if !unpacker.End_unpack() {
+			c.log.Warnf("End_unpack returned false on handleUpdateField somehow...\n%s", DumpUnpacker(unpacker))
+			return
+		}
+
+		go c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(dcField.Get_number()), lValue)
+		return
+	}
+
 	resp := NewDatagram()
 	resp.AddUint16(CLIENT_OBJECT_UPDATE_FIELD)
 	resp.AddDoid(do)
-	resp.AddUint16(field)
+	resp.AddUint16(uint16(dcField.Get_number()))
 	resp.AddData(dgi.ReadRemainder())
 	c.client.SendDatagram(resp)
 }
