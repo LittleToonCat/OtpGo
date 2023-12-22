@@ -787,10 +787,15 @@ func LuaHandleUpdateField(L *lua.LState) int {
 	return 1
 }
 
-func LuaSendActivateObject(L * lua.LState) int {
+func LuaSendActivateObject(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	do := Doid_t(L.CheckInt(2))
 	className := L.CheckString(3)
+
+	var fields *lua.LTable
+	if L.GetTop() == 4 {
+		fields = L.CheckTable(4)
+	}
 
 	dclass := core.DC.Get_class_by_name(className)
 	if dclass == dc.SwigcptrDCClass(0) {
@@ -799,10 +804,48 @@ func LuaSendActivateObject(L * lua.LState) int {
 	}
 
 	dg := NewDatagram()
-	dg.AddServerHeader(Channel_t(do), client.channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+	if fields != nil {
+		dg.AddServerHeader(Channel_t(do), client.channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER)
+	} else {
+		dg.AddServerHeader(Channel_t(do), client.channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+	}
 	dg.AddDoid(do)
 	dg.AddLocation(0, 0)
 	dg.AddUint16(uint16(dclass.Get_number()))
+
+	if fields != nil {
+		DCLock.Lock()
+		defer DCLock.Unlock()
+
+		packer := dc.NewDCPacker()
+		defer dc.DeleteDCPacker(packer)
+
+		length := uint16(0)
+		fields.ForEach(func(l1, data lua.LValue) {
+			name := string(l1.(lua.LString))
+			field := dclass.Get_field_by_name(name)
+			if field == dc.SwigcptrDCField(0) {
+				L.ArgError(4, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", name, className))
+				return
+			}
+			length++
+			packer.Raw_pack_uint16(uint(field.Get_number()))
+			packer.Begin_pack(field)
+			core.PackLuaValue(packer, data)
+			if !packer.End_pack() {
+				L.ArgError(4, "Pack failed!")
+				return
+			}
+
+		})
+		packedData := packer.Get_bytes()
+		dg.AddUint16(length)
+		dg.AddVector(packedData)
+
+		dc.DeleteVector_uchar(packedData)
+		packer.Clear_data()
+	}
+
 	client.RouteDatagram(dg)
 	return 1
 }
