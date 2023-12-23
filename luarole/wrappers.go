@@ -3,12 +3,15 @@ package luarole
 import (
 	// "otpgo/core"
 	"otpgo/core"
+	"otpgo/eventlogger"
 	"otpgo/messagedirector"
 	. "otpgo/util"
+	"strconv"
+
+	"fmt"
 
 	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/yuin/gopher-lua"
-	"fmt"
 )
 
 // Participant wrappers for Lua
@@ -54,6 +57,7 @@ var ParticipantMethods = map[string]lua.LGFunction{
 	"queryObjectFields": LuaQueryObjectFields,
 	"setDatabaseValues": LuaSetDatabaseValues,
 	"routeDatagram": LuaRouteDatagram,
+	"writeServerEvent": LuaWriteServerEvent,
 }
 
 func LuaSubscribeChannel(L *lua.LState) int {
@@ -303,6 +307,18 @@ func LuaSetDatabaseValues(L *lua.LState) int {
 
 	DCLock.Unlock()
 	participant.setDatabaseValues(doId, dbChannel, packedFields)
+
+	return 1
+}
+
+func LuaWriteServerEvent(L *lua.LState) int {
+	eventType := L.CheckString(2)
+	serverName := L.CheckString(3)
+	channel := L.CheckInt64(4)
+	description := L.CheckString(5)
+
+	event := eventlogger.NewLoggedEvent(eventType, serverName, strconv.FormatInt(channel, 10), description)
+	event.Send()
 
 	return 1
 }

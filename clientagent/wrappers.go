@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"otpgo/core"
+	"otpgo/eventlogger"
 	. "otpgo/util"
 	"slices"
+	"strconv"
 
 	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/yuin/gopher-lua"
@@ -72,6 +74,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"undeclareAllObjects": LuaUndeclareAllObjects,
 	"unsubscribePuppetChannel": LuaUnsubscribePuppetChannel,
 	"userTable": LuaGetSetUserTable,
+	"writeServerEvent": LuaWriteServerEvent,
 }
 
 func LuaClientAddServerHeader(L *lua.LState) int {
@@ -974,5 +977,17 @@ func LuaSetLocation(L *lua.LState) int {
 	} else {
 		client.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_RELOCATE, fmt.Sprintf("Attempted to move un-owned object %d", do), true)
 	}
+	return 1
+}
+
+func LuaWriteServerEvent(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	eventType := L.CheckString(2)
+	serverName := L.CheckString(3)
+	description := L.CheckString(4)
+
+	event := eventlogger.NewLoggedEvent(eventType, serverName, strconv.FormatUint(uint64(client.allocatedChannel), 10), description)
+	event.Send()
+
 	return 1
 }

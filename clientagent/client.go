@@ -5,10 +5,11 @@ import (
 	"otpgo/core"
 	"slices"
 	"sort"
+	"strconv"
 
-	// "otpgo/eventlogger"
 	"fmt"
 	gonet "net"
+	"otpgo/eventlogger"
 	"otpgo/messagedirector"
 	"otpgo/net"
 	. "otpgo/util"
@@ -151,19 +152,17 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 
 func (c *Client) sendDisconnect(reason uint16, message string, security bool) {
 	// TODO: Implement security loglevel
-	// var eventType string
+	var eventType string
 	if security {
 		c.log.Errorf("[SECURITY] Ejecting client (%s): %s", reason, message)
-		// eventType = "client-ejected-security"
+		eventType = "client-ejected-security"
 	} else {
 		c.log.Errorf("Ejecting client (%s): %s", reason, message)
-		// eventType = "client-ejected"
+		eventType = "client-ejected"
 	}
 
-	// event := eventlogger.NewLoggedEvent(eventType, "")
-	// event.Add("reason_code", string(reason))
-	// event.Add("reason_msg", error)
-	// c.logEvent(event)
+	event := eventlogger.NewLoggedEvent(eventType, "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10), fmt.Sprintf("%d|%d", reason, message))
+	event.Send()
 
 	if c.client.Connected() {
 		resp := NewDatagram()
@@ -176,11 +175,6 @@ func (c *Client) sendDisconnect(reason uint16, message string, security bool) {
 		c.Terminate(errors.New(message))
 	}
 }
-
-// func (c *Client) logEvent(event eventlogger.LoggedEvent) {
-// 	event.Add("sender", fmt.Sprintf("Client: %d", c.channel))
-// 	event.Send()
-// }
 
 func (c *Client) annihilate() {
 	c.Lock()
@@ -907,10 +901,10 @@ func (c *Client) init(config core.Role, conn gonet.Conn) {
 	c.client = net.NewClient(socket, c, time.Duration(5)*time.Second)
 
 	if !c.client.Local() {
-		// event := eventlogger.NewLoggedEvent("client-connected", "")
-		// event.Add("remote_address", conn.RemoteAddr().String())
-		// event.Add("local_address", conn.LocalAddr().String())
-		// c.logEvent(event)
+		event := eventlogger.NewLoggedEvent("client-connected", "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10),
+			fmt.Sprintf("%s|%s", conn.RemoteAddr().String(), conn.LocalAddr().String()),
+		)
+		event.Send()
 	}
 }
 
@@ -929,13 +923,12 @@ func (c *Client) startHeartbeat() {
 }
 
 func (c *Client) Terminate(err error) {
-	// if !c.cleanDisconnect && !c.client.Local() {
-	// 	event := eventlogger.NewLoggedEvent("client-lost", "")
-	// 	event.Add("remote_address", c.conn.RemoteAddr().String())
-	// 	event.Add("local_address", c.conn.LocalAddr().String())
-	// 	event.Add("reason", err.Error())
-	// 	event.Send()
-	// }
+	if !c.cleanDisconnect && !c.client.Local() {
+		event := eventlogger.NewLoggedEvent("client-lost", "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10),
+			fmt.Sprintf("%s|%s", c.conn.RemoteAddr().String(), c.conn.LocalAddr().String()),
+		)
+		event.Send()
+	}
 
 
 	c.heartbeat.Stop()

@@ -5,7 +5,7 @@ import (
 	"otpgo/clientagent"
 	"otpgo/core"
 	"otpgo/database"
-	// "otpgo/eventlogger"
+	"otpgo/eventlogger"
 	"otpgo/luarole"
 	"otpgo/messagedirector"
 	"otpgo/util"
@@ -120,7 +120,7 @@ Revision: %s
 		mainLog.Fatal(err.Error())
 	}
 
-	// eventlogger.StartEventLogger()
+	eventlogger.StartEventLogger()
 	messagedirector.Start()
 
 	// Configure UberDOG list
