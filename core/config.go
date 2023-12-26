@@ -67,6 +67,9 @@ type Role struct {
 		// MONGO BACKEND
 		Server    string
 		Database  string
+
+		// YAML BACKEND
+		Directory string
 	}
 }
 

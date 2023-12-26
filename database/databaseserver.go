@@ -28,6 +28,23 @@ type OperationQueueEntry struct {
 	sender Channel_t
 }
 
+type DatabaseBackend interface {
+	CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector_uchar, ctx uint32, sender Channel_t)
+	GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t)
+	SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector_uchar)
+}
+
+type Config struct {
+
+	Type      string
+	// MONGO BACKEND
+	Server    string
+	Database  string
+
+	// YAML BACKEND
+	Directory string
+}
+
 type DatabaseServer struct {
 	messagedirector.MDParticipantBase
 
@@ -37,9 +54,7 @@ type DatabaseServer struct {
 	min         Doid_t
 	max         Doid_t
 	objectTypes map[uint16]dc.DCClass
-
-	// TODO: Support for other backends (YAML, SQL)
-	backend     *MongoBackend
+	backend     DatabaseBackend
 
 	queue []OperationQueueEntry
 	queueLock sync.Mutex
@@ -69,11 +84,11 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 		db.objectTypes[uint16(obj.ID)] = dclass
 	}
 
-	if ok, backend, err := NewMongoBackend(db, config.Backend); ok {
+	if ok, backend, err := db.createBackend(config); ok {
 		db.backend = backend
-		} else {
-			db.log.Fatal(err.Error())
-		}
+	} else {
+		db.log.Fatal(err.Error())
+	}
 
 	db.Init(db)
 
@@ -83,6 +98,17 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 	go db.queueLoop()
 
 	return db
+}
+
+func (d *DatabaseServer) createBackend(config core.Role) (bool, DatabaseBackend, error) {
+	switch config.Backend.Type {
+	case "mongodb":
+		return NewMongoBackend(d, config.Backend)
+	case "yaml":
+		return NewYAMLBackend(d, config.Backend)
+	default:
+		return false, nil, fmt.Errorf("unknown backend type: %s", config.Backend.Type)
+	}
 }
 
 func (d *DatabaseServer) getOperationFromQueue() OperationQueueEntry {

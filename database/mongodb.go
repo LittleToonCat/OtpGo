@@ -15,12 +15,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type Config struct {
-	Type     string
-	Server   string
-	Database string
-}
-
 type Globals struct {
 	ID   string `bson:"_id"`
 	DoId *GlobalsDoId `bson:"doid"`
