@@ -12,6 +12,7 @@ import (
 	"github.com/apex/log"
 	libs "github.com/vadv/gopher-lua-libs"
 	lua "github.com/yuin/gopher-lua"
+	gluacrypto "github.com/tengattack/gluacrypto"
 )
 
 type ChannelTracker struct {
@@ -85,6 +86,9 @@ func NewClientAgent(config core.Role) *ClientAgent {
 
 	// Preload libaries
 	libs.Preload(ca.L)
+	// Replace gopher-lua-libs's crypto module with
+	// gluacrypto since it has more methods.
+	gluacrypto.Preload(ca.L)
 	RegisterDatagramType(ca.L)
 	RegisterDatagramIteratorType(ca.L)
 	RegisterClientType(ca.L)

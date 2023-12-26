@@ -10,6 +10,7 @@ import (
 	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/apex/log"
 	libs "github.com/vadv/gopher-lua-libs"
+	gluacrypto "github.com/tengattack/gluacrypto"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -51,6 +52,9 @@ func NewLuaRole(config core.Role) *LuaRole {
 	role.Init(role)
 
 	libs.Preload(role.L)
+	// Replace gopher-lua-libs's crypto module with
+	// gluacrypto since it has more methods.
+	gluacrypto.Preload(role.L)
 	RegisterDatagramType(role.L)
 	RegisterDatagramIteratorType(role.L)
 	RegisterLuaParticipantType(role.L)
