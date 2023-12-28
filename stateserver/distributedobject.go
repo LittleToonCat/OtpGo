@@ -50,6 +50,8 @@ func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
 		ramFields:      ramFields,
 		log: log.WithFields(log.Fields{
 			"name": fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
+			"modName": dclass.Get_name(),
+			"id": fmt.Sprintf("%d", doid),
 		}),
 	}
 
@@ -87,6 +89,8 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 		ramFields:      make(map[dc.DCField]dc.Vector_uchar),
 		log: log.WithFields(log.Fields{
 			"name": fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
+			"modName": dclass.Get_name(),
+			"id": fmt.Sprintf("%d", doid),
 		}),
 	}
 
@@ -714,7 +718,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		newChannel := dgi.ReadChannel()
 		d.handleAiChange(newChannel, sender, true)
 	case STATESERVER_OBJECT_GET_AI:
-		d.log.Debugf("Received AI query from %d", sender)
+		// d.log.Debugf("Received AI query from %d", sender)
 		dg := NewDatagram()
 		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_GET_AI_RESP)
 		dg.AddUint32(dgi.ReadUint32()) // Context

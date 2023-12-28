@@ -175,6 +175,7 @@ func listen() {
 
 func init() {
 	EventLoggerLog = log.WithFields(log.Fields{
-		"name": "MD",
+		"name": "EventLogger",
+		"modName": "EventLogger",
 	})
 }

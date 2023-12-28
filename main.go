@@ -28,6 +28,7 @@ func init() {
 	log.SetLevel(log.DebugLevel)
 	mainLog = log.WithFields(log.Fields{
 		"name": "Main",
+		"modName": "Main",
 	})
 }
 
@@ -51,7 +52,7 @@ func main() {
 	}
 
 	logfilePtr := pflag.StringP("log", "L", "", "Specify the file to write log messages to.")
-	loglevelPtr := pflag.StringP("loglevel", "l", "info", "Specify minimum log level that should be logged.")
+	loglevelPtr := pflag.StringP("loglevel", "l", "debug", "Specify minimum log level that should be logged.")
 	versionPtr := pflag.BoolP("version", "v", false, "Show the application version.")
 	helpPtr := pflag.BoolP("help", "h", false, "Show the application usage.")
 

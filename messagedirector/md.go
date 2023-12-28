@@ -48,6 +48,7 @@ type MessageDirector struct {
 func init() {
 	MDLog = log.WithFields(log.Fields{
 		"name": "MD",
+		"modName": "MD",
 	})
 }
 

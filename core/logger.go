@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 
 // Default handler outputting to stderr.
 var Log = NewLogger(os.Stderr)
+
+var DebugEnvrion = strings.Split(os.Getenv("DEBUG"), ",")
 
 var bold = color.New(color.Bold)
 var grey = color.New(color.FgHiBlack)
@@ -83,8 +86,46 @@ func NewLogger(w io.Writer) *Handler {
 	}
 }
 
+func IsDebugEnabled(modName string, id string) bool {
+	for _, name := range DebugEnvrion {
+		if name == "*" {
+			return true
+		}
+
+		s := strings.Split(name, ":")
+		switch len(s) {
+		case 1:
+			// Module name only
+			if s[0] == modName {
+				return true
+			}
+		case 2:
+			// Module and id
+			if s[0] == modName && (s[1] == "*" || id == "*" || s[1] == id) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // HandleLog implements log.Handler.
 func (h *Handler) HandleLog(e *log.Entry) error {
+	if e.Level == log.DebugLevel {
+		modName, ok := e.Fields.Get("modName").(string)
+		if !ok {
+			return nil
+		}
+		id, ok := e.Fields.Get("id").(string)
+		if !ok {
+			id = "*"
+		}
+
+		if !IsDebugEnabled(modName, id) {
+			return nil
+		}
+	}
+
 	color := Colors[e.Level]
 	level := Strings[e.Level]
 	name := e.Fields.Get("name")

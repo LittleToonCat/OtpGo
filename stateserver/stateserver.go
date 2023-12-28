@@ -21,7 +21,7 @@ type StateServer struct {
 
 func NewStateServer(config core.Role) *StateServer {
 	ss := &StateServer{}
-	ss.InitStateServer(config, fmt.Sprintf("StateServer (%d)", config.Control))
+	ss.InitStateServer(config, fmt.Sprintf("StateServer (%d)", config.Control), "StateServer", fmt.Sprintf("%d", config.Control))
 
 	ss.Init(ss)
 
@@ -36,11 +36,13 @@ func NewStateServer(config core.Role) *StateServer {
 	return ss
 }
 
-func (s *StateServer) InitStateServer(config core.Role, logName string) {
+func (s *StateServer) InitStateServer(config core.Role, logName string, logModName string, logId string,) {
 	s.config = config
 	s.objects = map[Doid_t]*DistributedObject{}
 	s.log = log.WithFields(log.Fields{
 		"name": logName,
+		"modName": logModName,
+		"id": logId,
 	})
 }
 

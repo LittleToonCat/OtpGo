@@ -65,6 +65,7 @@ func NewClientAgent(config core.Role) *ClientAgent {
 		database: config.Database,
 		log: log.WithFields(log.Fields{
 			"name": fmt.Sprintf("ClientAgent (%s)", config.Bind),
+			"modName": "ClientAgent",
 		}),
 	}
 	ca.Tracker = NewChannelTracker(Channel_t(config.Channels.Min), Channel_t(config.Channels.Max), ca.log)

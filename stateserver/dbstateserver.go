@@ -40,7 +40,7 @@ func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
 		context: 0,
 		contextToLoading: map[uint32]*LoadingObject{},
 	}
-	dbss.InitStateServer(config, fmt.Sprintf("DBSS (%d - %d)", dbss.config.Ranges.Min, dbss.config.Ranges.Max))
+	dbss.InitStateServer(config, fmt.Sprintf("DBSS (%d - %d)", dbss.config.Ranges.Min, dbss.config.Ranges.Max), "DBSS", "*")
 
 	dbss.Init(dbss)
 

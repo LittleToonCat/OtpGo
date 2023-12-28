@@ -44,6 +44,7 @@ func NewLuaRole(config core.Role) *LuaRole {
 		config: config,
 		log: log.WithFields(log.Fields{
 			"name": name,
+			"modName": name,
 		}),
 		queryFieldsContextMap: map[uint32]func(dgi *DatagramIterator){},
 		L: lua.NewState(),
