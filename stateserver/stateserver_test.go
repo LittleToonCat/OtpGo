@@ -1,17 +1,18 @@
 package stateserver
 
 import (
+	"encoding/hex"
+	"fmt"
+	"os"
 	"otpgo/core"
 	"otpgo/messagedirector"
 	. "otpgo/test"
 	. "otpgo/util"
-	"encoding/hex"
-	"fmt"
-	"github.com/apex/log"
-	"github.com/tj/assert"
-	"os"
 	"testing"
 	"time"
+
+	"github.com/apex/log"
+	"github.com/tj/assert"
 )
 
 func connect(ch Channel_t) *TestChannelConnection {
@@ -85,7 +86,10 @@ func TestMain(m *testing.M) {
 
 	NewStateServer(core.Role{Control: 100100})
 
-	NewDatabaseStateServer(core.Role{Database: 1200, Ranges: struct{Min Channel_t; Max Channel_t}{9000, 9999}})
+	NewDatabaseStateServer(core.Role{Database: 1200, Ranges: struct {
+		Min Channel_t
+		Max Channel_t
+	}{9000, 9999}})
 
 	code := m.Run()
 
@@ -209,7 +213,7 @@ func TestStateServer_Airecv(t *testing.T) {
 	instantiateObject(conn, 5, 101000002, 5000, 1500, 1337)
 	time.Sleep(100 * time.Millisecond)
 
-	dg := (&TestDatagram{}).Create([]Channel_t{101000002}, 5, STATESERVER_OBJECT_SET_AI)
+	dg := (&TestDatagram{}).Create([]Channel_t{101000002}, 5, STATESERVER_ADD_AI_RECV)
 	dg.AddChannel(1300)
 	conn.SendDatagram(*dg)
 	time.Sleep(100 * time.Millisecond)
@@ -304,7 +308,7 @@ func TestStateServer_SetAI(t *testing.T) {
 	children1.Flush()
 
 	// Give DO #1 to AI #1
-	dg := (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_SET_AI)
+	dg := (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_ADD_AI_RECV)
 	dg.AddChannel(ai1Chan)
 	conn.SendDatagram(*dg)
 	time.Sleep(50 * time.Millisecond)
@@ -321,7 +325,7 @@ func TestStateServer_SetAI(t *testing.T) {
 
 	// Test for an object with an existing AI
 	// Give DO #1 to AI #2
-	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_SET_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_ADD_AI_RECV)
 	dg.AddChannel(ai2Chan)
 	conn.SendDatagram(*dg)
 	time.Sleep(50 * time.Millisecond)
@@ -434,7 +438,7 @@ func TestStateServer_SetAI(t *testing.T) {
 	children2.ExpectNone(t)
 
 	// Test for an object w/ children
-	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_SET_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_ADD_AI_RECV)
 	dg.AddChannel(ai1Chan)
 	conn.SendDatagram(*dg)
 	time.Sleep(20 * time.Millisecond)
@@ -524,7 +528,7 @@ func TestStateServer_SetAI(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	// Set the AI of DO #2
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_)
 	dg.AddChannel(ai1Chan)
 	conn.SendDatagram(*dg)
 
@@ -694,7 +698,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 	// Give DO #2 an AI
 	aiChan := Channel_t(0xFF)
 	conn.AddChannel(aiChan)
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_ADD_AI_RECV)
 	dg.AddChannel(aiChan)
 	conn.SendDatagram(*dg)
 	time.Sleep(10 * time.Millisecond)
@@ -721,7 +725,7 @@ func TestStateServer_SetLocation(t *testing.T) {
 	obj1.Flush()
 
 	// Remove AI
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_SET_AI)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_ADD_AI_RECV)
 	dg.AddChannel(INVALID_CHANNEL)
 	conn.SendDatagram(*dg)
 	time.Sleep(10 * time.Millisecond)
@@ -1135,7 +1139,7 @@ func TestStateServer_DeleteAiObjects(t *testing.T) {
 	instantiateObject(conn, 5, Doid_t(do), 20000, 10000, 0xF00D)
 
 	// Give the object an AI channel
-	dg := (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_OBJECT_SET_AI)
+	dg := (&TestDatagram{}).Create([]Channel_t{do}, 5, STATESERVER_ADD_AI_RECV)
 	dg.AddChannel(100)
 	conn.SendDatagram(*dg)
 
@@ -1899,7 +1903,7 @@ func TestStateServer_Clrecv(t *testing.T) {
 	// Create a DistributedChunk
 	dg := (&TestDatagram{}).Create([]Channel_t{100100}, 5, STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER)
 	appendMetaDoidLast(dg, Doid_t(do), 0xB00B, 0xF00D, DistributedChunk)
-	dg.AddUint16(12)   // blockList size
+	dg.AddUint16(12) // blockList size
 	dg.AddUint32(10) // blockList[0].x
 	dg.AddUint32(20) // blockList[0].y
 	dg.AddUint32(30) // blockList[0].z
@@ -1916,7 +1920,7 @@ func TestStateServer_Clrecv(t *testing.T) {
 	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(0xB00B, 0xF00D)},
 		do, STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER)
 	appendMeta(dg, Doid_t(do), 0xB00B, 0xF00D, DistributedChunk)
-	dg.AddUint16(12)   // blockList size
+	dg.AddUint16(12) // blockList size
 	dg.AddUint32(10) // blockList[0].x
 	dg.AddUint32(20) // blockList[0].y
 	dg.AddUint32(30) // blockList[0].z
@@ -2011,7 +2015,7 @@ func TestDatabaseStateServer_Activate(t *testing.T) {
 	// See if it announces its entry into 100.
 	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(80000, 100)}, do1, STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED)
 	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
-	dg.AddUint32(78) // setRequired1
+	dg.AddUint32(78)   // setRequired1
 	dg.AddUint32(3117) // setRDB3
 	shard.Expect(t, *dg, false)
 
@@ -2074,8 +2078,8 @@ func TestDatabaseStateServer_Activate(t *testing.T) {
 	dg = (&TestDatagram{}).Create([]Channel_t{LocationAsChannel(80000, 100)}, do1, STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER)
 	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
 	dg.AddUint32(0x00a49de2) // setRequired1
-	dg.AddUint32(3117) // setRDB3
-	dg.AddUint16(1) // One other field:
+	dg.AddUint32(3117)       // setRDB3
+	dg.AddUint16(1)          // One other field:
 	dg.AddUint16(SetBR1)
 	dg.AddString("V ybir Whar")
 	shard.Expect(t, *dg, false)

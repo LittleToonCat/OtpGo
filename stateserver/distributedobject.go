@@ -49,9 +49,9 @@ func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
 		requiredFields: requiredFields,
 		ramFields:      ramFields,
 		log: log.WithFields(log.Fields{
-			"name": fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
+			"name":    fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
 			"modName": dclass.Get_name(),
-			"id": fmt.Sprintf("%d", doid),
+			"id":      fmt.Sprintf("%d", doid),
 		}),
 	}
 
@@ -88,9 +88,9 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 		requiredFields: make(map[dc.DCField]dc.Vector_uchar),
 		ramFields:      make(map[dc.DCField]dc.Vector_uchar),
 		log: log.WithFields(log.Fields{
-			"name": fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
+			"name":    fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
 			"modName": dclass.Get_name(),
-			"id": fmt.Sprintf("%d", doid),
+			"id":      fmt.Sprintf("%d", doid),
 		}),
 	}
 
@@ -108,7 +108,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 		field := dclass.Get_inherited_field(i)
 		if field.Is_required() {
 			if molecular, ok := field.As_molecular_field().(dc.DCMolecularField); ok {
-				if (molecular != dc.SwigcptrDCMolecularField(0)) {
+				if molecular != dc.SwigcptrDCMolecularField(0) {
 					continue
 				}
 			}
@@ -191,7 +191,7 @@ func (d *DistributedObject) appendRequiredData(dg Datagram, client bool, owner b
 	for i := 0; i < int(count); i++ {
 		field := d.dclass.Get_inherited_field(i)
 		if molecular, ok := field.As_molecular_field().(dc.DCMolecularField); ok {
-			if (molecular != dc.SwigcptrDCMolecularField(0)) {
+			if molecular != dc.SwigcptrDCMolecularField(0) {
 				continue
 			}
 		}
@@ -211,7 +211,7 @@ func (d *DistributedObject) appendRequiredDataDoidLast(dg Datagram, client bool,
 	for i := 0; i < int(count); i++ {
 		field := d.dclass.Get_inherited_field(i)
 		if molecular, ok := field.As_molecular_field().(dc.DCMolecularField); ok {
-			if (molecular != dc.SwigcptrDCMolecularField(0)) {
+			if molecular != dc.SwigcptrDCMolecularField(0) {
 				continue
 			}
 		}
@@ -564,7 +564,7 @@ func (d *DistributedObject) finishHandleUpdate(field dc.DCField, packedData dc.V
 	stored := false
 
 	molecular := field.As_molecular_field().(dc.DCMolecularField)
-	if (molecular != dc.SwigcptrDCMolecularField(0)) {
+	if molecular != dc.SwigcptrDCMolecularField(0) {
 		// Time to pull out the DCPacker for this one.
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)
@@ -614,8 +614,6 @@ func (d *DistributedObject) finishHandleUpdate(field dc.DCField, packedData dc.V
 	}
 }
 
-
-
 func (d *DistributedObject) handleOneGet(out *Datagram, fieldId uint16, allowUnset bool, subfield bool) bool {
 	field := d.dclass.Get_field_by_index(int(fieldId))
 	if field == dc.SwigcptrDCField(0) {
@@ -625,7 +623,7 @@ func (d *DistributedObject) handleOneGet(out *Datagram, fieldId uint16, allowUns
 
 	d.log.Debugf("Handling query for field %s", field.Get_name())
 	molecular := field.As_molecular_field().(dc.DCMolecularField)
-	if (molecular != dc.SwigcptrDCMolecularField(0)) {
+	if molecular != dc.SwigcptrDCMolecularField(0) {
 		count := molecular.Get_num_atomics()
 		out.AddUint16(fieldId)
 		for n := 0; n < count; n++ {
@@ -714,7 +712,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			break
 		}
 		d.handleAiChange(newChannel, sender, false)
-	case STATESERVER_OBJECT_SET_AI:
+	case STATESERVER_ADD_AI_RECV:
 		newChannel := dgi.ReadChannel()
 		d.handleAiChange(newChannel, sender, true)
 	case STATESERVER_OBJECT_GET_AI:
