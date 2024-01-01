@@ -528,7 +528,7 @@ func TestStateServer_SetAI(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	// Set the AI of DO #2
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_ADD_AI_RECV)
 	dg.AddChannel(ai1Chan)
 	conn.SendDatagram(*dg)
 
