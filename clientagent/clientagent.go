@@ -8,6 +8,8 @@ import (
 	"otpgo/net"
 	. "otpgo/util"
 	"sync"
+	"os"
+	"os/signal"
 
 	"github.com/apex/log"
 	libs "github.com/vadv/gopher-lua-libs"
@@ -22,6 +24,12 @@ type ChannelTracker struct {
 	log    *log.Entry
 }
 
+type LuaQueueEntry struct {
+	fn lua.LValue
+	client *Client
+	args []lua.LValue
+}
+
 type ClientAgent struct {
 	net.NetworkServer
 	sync.Mutex
@@ -34,7 +42,9 @@ type ClientAgent struct {
 	interestTimeout int
 	database        Channel_t
 
-	L *lua.LState
+	L            *lua.LState
+	LQueue       []LuaQueueEntry
+	processQueue chan bool
 }
 
 func NewChannelTracker(min Channel_t, max Channel_t, log *log.Entry) *ChannelTracker {
@@ -67,6 +77,8 @@ func NewClientAgent(config core.Role) *ClientAgent {
 			"name": fmt.Sprintf("ClientAgent (%s)", config.Bind),
 			"modName": "ClientAgent",
 		}),
+		LQueue: []LuaQueueEntry{},
+		processQueue: make(chan bool),
 	}
 	ca.Tracker = NewChannelTracker(Channel_t(config.Channels.Min), Channel_t(config.Channels.Max), ca.log)
 
@@ -125,25 +137,61 @@ func NewClientAgent(config core.Role) *ClientAgent {
 			ca.log.Fatal(err.Error())
 		}
 	}()
+	go ca.queueLoop()
 	go ca.Start(config.Bind, errChan)
 	return ca
 }
 
-func (c *ClientAgent) CallLuaFunction(fn lua.LValue, client *Client, args ...lua.LValue) {
+func (c *ClientAgent) getEntryFromQueue() LuaQueueEntry {
 	c.Lock()
-	err := c.L.CallByParam(lua.P{
-		Fn: fn,
-		NRet: 0,
-		Protect: true,
-	}, args...)
-	c.Unlock()
-	if err != nil {
-		if client != nil {
-			client.log.Errorf("Lua error:\n%s", err.Error())
-			client.sendDisconnect(CLIENT_DISCONNECT_GENERIC, "Lua error has occured.", true)
-		} else {
-			c.log.Errorf("Lua error:\n%s", err.Error())
+	defer c.Unlock()
+
+	op := c.LQueue[0]
+	c.LQueue = c.LQueue[1:]
+	return op
+}
+
+func (c *ClientAgent) queueLoop() {
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt)
+
+	for {
+		select {
+		case <-c.processQueue:
+			for len(c.LQueue) > 0 {
+				entry := c.getEntryFromQueue()
+				err := c.L.CallByParam(lua.P{
+					Fn: entry.fn,
+					NRet: 0,
+					Protect: true,
+				}, entry.args...)
+				if err != nil {
+					if entry.client != nil {
+						entry.client.log.Errorf("Lua error:\n%s", err.Error())
+						entry.client.sendDisconnect(CLIENT_DISCONNECT_GENERIC, "Lua error has occured.", true)
+					} else {
+						c.log.Errorf("Lua error:\n%s", err.Error())
+					}
+				}
+			}
+		case <-signalCh:
+			return
+		case <-core.StopChan:
+			return
 		}
+	}
+}
+
+func (c *ClientAgent) CallLuaFunction(fn lua.LValue, client *Client, args ...lua.LValue) {
+	// Queue the call
+	c.Lock()
+	entry := LuaQueueEntry{fn, client, args}
+	c.LQueue = append(c.LQueue, entry)
+	c.Unlock()
+
+	select {
+	case c.processQueue <- true:
+	default:
 	}
 }
 

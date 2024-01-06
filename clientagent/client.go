@@ -996,11 +996,6 @@ func (c *Client) queueLoop() {
 				}()
 
 				<-finish
-
-				if dgi.RemainingSize() != 0 {
-					c.sendDisconnect(CLIENT_DISCONNECT_OVERSIZED_DATAGRAM, "Datagram contains excess data.", true)
-					c.log.Errorf("%s", dgi)
-				}
 				c.lock.Unlock()
 			}
 		case <-c.stopChan:
@@ -1199,7 +1194,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 			return
 		}
 
-		go c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(field), lValue)
+		c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(field), lValue)
 		return
 	}
 
@@ -1236,7 +1231,7 @@ func (c *Client) handleUpdateField(do Doid_t, dclass dc.DCClass, dcField dc.DCFi
 			return
 		}
 
-		go c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(dcField.Get_number()), lValue)
+		c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(dcField.Get_number()), lValue)
 		return
 	}
 

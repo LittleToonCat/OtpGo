@@ -49,6 +49,8 @@ var ClientMethods = map[string]lua.LGFunction{
 	"clearPostRemoves": LuaClearPostRemoves,
 	"createDatabaseObject": LuaCreateDatabaseObject,
 	"declareObject": LuaDeclareObject,
+	"debug": LuaDebug,
+	"error": LuaError,
 	"getAllRequiredFromDatabase": LuaGetAllRequiredFromDatabase,
 	"getDatabaseValues": LuaGetDatabaseValues,
 	"setDatabaseValues": LuaSetDatabaseValues,
@@ -57,6 +59,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"handleHeartbeat": LuaHandleHeartbeat,
 	"handleRemoveInterest": LuaHandleRemoveInterest,
 	"handleUpdateField": LuaHandleUpdateField,
+	"info": LuaInfo,
 	"objectSetOwner": LuaObjectSetOwner,
 	"packFieldToDatagram": LuaPackFieldToDatagram,
 	"queryAllRequiredFields": LuaQueryAllRequiredFields,
@@ -74,7 +77,40 @@ var ClientMethods = map[string]lua.LGFunction{
 	"undeclareAllObjects": LuaUndeclareAllObjects,
 	"unsubscribePuppetChannel": LuaUnsubscribePuppetChannel,
 	"userTable": LuaGetSetUserTable,
+	"warn": LuaWarn,
 	"writeServerEvent": LuaWriteServerEvent,
+}
+
+func LuaInfo(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	msg := L.CheckString(2)
+
+	client.log.Info(msg)
+	return 1
+}
+
+func LuaWarn(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	msg := L.CheckString(2)
+
+	client.log.Warn(msg)
+	return 1
+}
+
+func LuaError(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	msg := L.CheckString(2)
+
+	client.log.Error(msg)
+	return 1
+}
+
+func LuaDebug(L *lua.LState) int {
+	client := CheckClient(L, 1)
+	msg := L.CheckString(2)
+
+	client.log.Debug(msg)
+	return 1
 }
 
 func LuaClientAddServerHeader(L *lua.LState) int {
@@ -154,7 +190,7 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 
 	DCLock.Unlock()
 	callbackFunc := func(doId Doid_t) {
-		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId))
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId))
 	}
 
 	client.createDatabaseObject(uint16(objectType), packedFields, callbackFunc)
@@ -262,7 +298,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 	callbackFunc := func(dbDoId Doid_t, dgi *DatagramIterator) {
 		if doId != dbDoId {
 			client.log.Warnf("Got GetStoredValues for wrong ID! Got: %d.  Expecting: %d", dbDoId, doId)
-			go client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
+			client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
 			return
 		}
 
@@ -275,7 +311,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 		code := dgi.ReadUint8()
 		if code > 0 {
 			client.log.Warnf("GetStoredValues returned error code %d", code)
-			go client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
+			client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
 			return
 		}
 
@@ -326,7 +362,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 			}
 		}
 		DCLock.Unlock()
-		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
 	client.getDatabaseValues(doId, fields, callbackFunc)
@@ -356,7 +392,7 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 	callbackFunc := func(dbDoId Doid_t, dgi *DatagramIterator) {
 		if doId != dbDoId {
 			client.log.Warnf("Got GetStoredValues for wrong ID! Got: %d.  Expecting: %d", dbDoId, doId)
-			go client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
+			client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
 			return
 		}
 
@@ -369,7 +405,7 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 		code := dgi.ReadUint8()
 		if code > 0 {
 			client.log.Warnf("GetStoredValues returned error code %d", code)
-			go client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
+			client.ca.CallLuaFunction(callback, client, lua.LFalse, lua.LNil)
 			return
 		}
 
@@ -429,7 +465,7 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 			dc.DeleteVector_uchar(data)
 		}
 		DCLock.Unlock()
-		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
 	client.getDatabaseValues(doId, fields, callbackFunc)
@@ -467,7 +503,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 
 	if len(fieldIds) == 0 {
 		client.log.Warnf("queryObjectFields: Nothing to do for class \"%s\"!", clsName)
-		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, client.ca.L.NewTable())
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, client.ca.L.NewTable())
 		return 1
 	}
 
@@ -475,7 +511,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		success := dgi.ReadBool()
 		if !success {
 			client.log.Warnf("QueryFieldsResp returned unsuccessful for ID %d!", doId)
-			go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LBool(success), lua.LNil)
+			client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LBool(success), lua.LNil)
 			return
 		}
 
@@ -510,7 +546,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 			fieldTable.RawSetString(field.Get_name(), lValue)
 		}
 
-		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
 	client.queryFieldsContextMap[client.context] = callbackFunc
@@ -550,7 +586,7 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 
 	if len(fieldIds) == 0 {
 		client.log.Warnf("queryObjectFields: Nothing to do for class \"%s\"!", clsName)
-		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, client.ca.L.NewTable())
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, client.ca.L.NewTable())
 		return 1
 	}
 
@@ -558,7 +594,7 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 		success := dgi.ReadBool()
 		if !success {
 			client.log.Warnf("QueryFieldsResp returned unsuccessful for ID %d!", doId)
-			go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LBool(success), lua.LNil)
+			client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LBool(success), lua.LNil)
 			return
 		}
 
@@ -593,7 +629,7 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 			fieldTable.RawSetString(field.Get_name(), lValue)
 		}
 
-		go client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
 	client.queryFieldsContextMap[client.context] = callbackFunc

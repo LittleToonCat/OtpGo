@@ -42,6 +42,10 @@ func CheckParticipant(L *lua.LState, n int) *LuaRole {
 }
 
 var ParticipantMethods = map[string]lua.LGFunction{
+	"info": LuaInfo,
+	"warn": LuaWarn,
+	"error": LuaError,
+	"debug": LuaDebug,
 	"subscribeChannel": LuaSubscribeChannel,
 	"unsubscribeChannel": LuaUnsubscribeChannel,
 	"subscribeRange": LuaSubscribeRange,
@@ -58,6 +62,40 @@ var ParticipantMethods = map[string]lua.LGFunction{
 	"setDatabaseValues": LuaSetDatabaseValues,
 	"routeDatagram": LuaRouteDatagram,
 	"writeServerEvent": LuaWriteServerEvent,
+	"createDatabaseObject": LuaCreateDatabaseObject,
+	"getDatabaseValues": LuaGetDatabaseValues,
+}
+
+func LuaInfo(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	msg := L.CheckString(2)
+
+	participant.log.Info(msg)
+	return 1
+}
+
+func LuaWarn(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	msg := L.CheckString(2)
+
+	participant.log.Warn(msg)
+	return 1
+}
+
+func LuaError(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	msg := L.CheckString(2)
+
+	participant.log.Error(msg)
+	return 1
+}
+
+func LuaDebug(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	msg := L.CheckString(2)
+
+	participant.log.Debug(msg)
+	return 1
 }
 
 func LuaSubscribeChannel(L *lua.LState) int {
@@ -172,6 +210,157 @@ func LuaSendUpdateToAccountId(L *lua.LState) int {
 	return 1
 }
 
+func LuaCreateDatabaseObject(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	dbChannel := Channel_t(L.CheckInt(2))
+	clsName := L.CheckString(3)
+	fields := L.CheckTable(4)
+	objectType := L.CheckInt(5)
+	from := Channel_t(L.CheckInt(6))
+	callback := L.CheckFunction(7)
+
+	cls := core.DC.Get_class_by_name(clsName)
+	if cls == dc.SwigcptrDCClass(0) {
+		L.ArgError(2, "Class not found.")
+		return 0
+	}
+
+	senderContext := participant.sender
+
+	DCLock.Lock()
+
+	packer := dc.NewDCPacker()
+	defer dc.DeleteDCPacker(packer)
+
+	packedFields := map[string]dc.Vector_uchar{}
+	// TODO: string dictionary sanity check
+	fields.ForEach(func(l1, data lua.LValue) {
+		name := string(l1.(lua.LString))
+		field := cls.Get_field_by_name(name)
+		if field == dc.SwigcptrDCField(0) {
+			L.ArgError(3, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", name, clsName))
+			DCLock.Unlock()
+			return
+		}
+		packer.Begin_pack(field)
+		core.PackLuaValue(packer, data)
+		if !packer.End_pack() {
+			L.ArgError(3, "Pack failed!")
+			DCLock.Unlock()
+			return
+		}
+
+		packedFields[name] = packer.Get_bytes()
+		packer.Clear_data()
+	})
+
+	DCLock.Unlock()
+	callbackFunc := func(doId Doid_t) {
+		participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId))
+	}
+
+	participant.createDatabaseObject(dbChannel, uint16(objectType), packedFields, from, callbackFunc)
+
+	return 1
+}
+
+func LuaGetDatabaseValues(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	dbChannel := Channel_t(L.CheckInt(2))
+	doId := Doid_t(L.CheckInt(3))
+	clsName := L.CheckString(4)
+	fieldsTable := L.CheckTable(5)
+	from := Channel_t(L.CheckInt(6))
+	callback := L.CheckFunction(7)
+
+	cls := core.DC.Get_class_by_name(clsName)
+	if cls == dc.SwigcptrDCClass(0) {
+		L.ArgError(3, "Class not found.")
+		return 0
+	}
+
+	fields := make([]string, 0)
+	fieldsTable.ForEach(func(_, l2 lua.LValue) {
+		fieldName := l2.(lua.LString)
+		fields = append(fields, string(fieldName))
+	})
+
+	senderContext := participant.sender
+
+	callbackFunc := func(dbDoId Doid_t, dgi *DatagramIterator) {
+		if doId != dbDoId {
+			participant.log.Warnf("Got GetStoredValues for wrong ID! Got: %d.  Expecting: %d", dbDoId, doId)
+			participant.CallLuaFunction(callback, senderContext, lua.LFalse, lua.LNil)
+			return
+		}
+
+		count := dgi.ReadUint16()
+		fields := make([]string, count)
+		for i := uint16(0); i < count; i++ {
+			fields[i] = dgi.ReadString()
+		}
+
+		code := dgi.ReadUint8()
+		if code > 0 {
+			participant.log.Warnf("GetStoredValues returned error code %d", code)
+			participant.CallLuaFunction(callback, senderContext, lua.LFalse, lua.LNil)
+			return
+		}
+
+		DCLock.Lock()
+
+		packedValues := make([]dc.Vector_uchar, count)
+		hasValue := map[string]bool{}
+		for i := uint16(0); i < count; i++ {
+			packedValues[i] = dgi.ReadVector()
+			hasValue[fields[i]] = dgi.ReadBool()
+			if !hasValue[fields[i]] {
+				participant.log.Debugf("GetStoredValues: Data for field \"%s\" not found", fields[i])
+			}
+		}
+
+		fieldTable := L.NewTable()
+		unpacker := dc.NewDCPacker()
+		defer dc.DeleteDCPacker(unpacker)
+
+		for i := uint16(0); i < count; i++ {
+			field := fields[i]
+			found := hasValue[field]
+
+			dcField := cls.Get_field_by_name(field)
+			if dcField == dc.SwigcptrDCField(0) {
+				participant.log.Warnf("GetStoredValues: Field \"%s\" does not exist for class \"%s\"", field, clsName)
+				if found {
+					dc.DeleteVector_uchar(packedValues[i])
+				}
+				continue
+			}
+
+			if found {
+				data := packedValues[i]
+				// Validate that the data is correct
+				if !dcField.Validate_ranges(data) {
+					participant.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpVector(data))
+					dc.DeleteVector_uchar(data)
+					continue
+				}
+
+				unpacker.Set_unpack_data(data)
+				unpacker.Begin_unpack(dcField)
+				fieldTable.RawSetString(fields[i], core.UnpackDataToLuaValue(unpacker, L))
+				unpacker.End_unpack()
+
+				dc.DeleteVector_uchar(data)
+			}
+		}
+		DCLock.Unlock()
+		participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LTrue, fieldTable)
+	}
+
+	participant.getDatabaseValues(dbChannel, doId, fields, from, callbackFunc)
+	return 1
+}
+
 func LuaQueryObjectFields(L *lua.LState) int {
 	participant := CheckParticipant(L, 1)
 	doId := Doid_t(L.CheckInt(2))
@@ -206,7 +395,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 
 	if len(fieldIds) == 0 {
 		participant.log.Warnf("queryObjectFields: Nothing to do for class \"%s\"!", clsName)
-		go participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LTrue, participant.L.NewTable())
+		participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LTrue, participant.L.NewTable())
 		return 1
 	}
 
@@ -214,7 +403,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		success := dgi.ReadBool()
 		if !success {
 			participant.log.Warnf("QueryFieldsResp returned unsuccessful for ID %d!", doId)
-			go participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LBool(success), lua.LNil)
+			participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LBool(success), lua.LNil)
 			return
 		}
 
@@ -249,10 +438,10 @@ func LuaQueryObjectFields(L *lua.LState) int {
 			fieldTable.RawSetString(field.Get_name(), lValue)
 		}
 
-		go participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LTrue, fieldTable)
+		participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
-	participant.queryFieldsContextMap[participant.context] = callbackFunc
+	participant.queryContextMap[participant.context] = callbackFunc
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), from, STATESERVER_OBJECT_QUERY_FIELDS)
