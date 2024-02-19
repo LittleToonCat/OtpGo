@@ -3,18 +3,20 @@ package clientagent
 import (
 	"fmt"
 	gonet "net"
+	"os"
+	"os/signal"
 	"otpgo/core"
 	"otpgo/messagedirector"
 	"otpgo/net"
 	. "otpgo/util"
 	"sync"
-	"os"
-	"os/signal"
 
 	"github.com/apex/log"
+	gluahttp "github.com/cjoudrey/gluahttp"
+	gluacrypto "github.com/tengattack/gluacrypto"
 	libs "github.com/vadv/gopher-lua-libs"
 	lua "github.com/yuin/gopher-lua"
-	gluacrypto "github.com/tengattack/gluacrypto"
+	"net/http"
 )
 
 type ChannelTracker struct {
@@ -25,9 +27,9 @@ type ChannelTracker struct {
 }
 
 type LuaQueueEntry struct {
-	fn lua.LValue
+	fn     lua.LValue
 	client *Client
-	args []lua.LValue
+	args   []lua.LValue
 }
 
 type ClientAgent struct {
@@ -71,13 +73,13 @@ func (c *ChannelTracker) free(ch Channel_t) {
 
 func NewClientAgent(config core.Role) *ClientAgent {
 	ca := &ClientAgent{
-		config: config,
+		config:   config,
 		database: config.Database,
 		log: log.WithFields(log.Fields{
-			"name": fmt.Sprintf("ClientAgent (%s)", config.Bind),
+			"name":    fmt.Sprintf("ClientAgent (%s)", config.Bind),
 			"modName": "ClientAgent",
 		}),
-		LQueue: []LuaQueueEntry{},
+		LQueue:       []LuaQueueEntry{},
 		processQueue: make(chan bool),
 	}
 	ca.Tracker = NewChannelTracker(Channel_t(config.Channels.Min), Channel_t(config.Channels.Max), ca.log)
@@ -102,6 +104,9 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	// Replace gopher-lua-libs's crypto module with
 	// gluacrypto since it has more methods.
 	gluacrypto.Preload(ca.L)
+	// Used for web requests within Lua
+	ca.L.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
+
 	RegisterDatagramType(ca.L)
 	RegisterDatagramIteratorType(ca.L)
 	RegisterClientType(ca.L)
@@ -161,8 +166,8 @@ func (c *ClientAgent) queueLoop() {
 			for len(c.LQueue) > 0 {
 				entry := c.getEntryFromQueue()
 				err := c.L.CallByParam(lua.P{
-					Fn: entry.fn,
-					NRet: 0,
+					Fn:      entry.fn,
+					NRet:    0,
 					Protect: true,
 				}, entry.args...)
 				if err != nil {

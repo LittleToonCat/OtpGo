@@ -2,32 +2,34 @@ package luarole
 
 import (
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
 	"otpgo/core"
 	"otpgo/messagedirector"
 	. "otpgo/util"
 	"sync"
-	"os"
-	"os/signal"
 
 	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/apex/log"
-	libs "github.com/vadv/gopher-lua-libs"
+	gluahttp "github.com/cjoudrey/gluahttp"
 	gluacrypto "github.com/tengattack/gluacrypto"
+	libs "github.com/vadv/gopher-lua-libs"
 	lua "github.com/yuin/gopher-lua"
 )
 
 type LuaQueueEntry struct {
-	fn lua.LValue
+	fn     lua.LValue
 	sender Channel_t
-	args []lua.LValue
+	args   []lua.LValue
 }
 
 type LuaRole struct {
 	messagedirector.MDParticipantBase
 	sync.Mutex
 
-	config  core.Role
-	log     *log.Entry
+	config core.Role
+	log    *log.Entry
 
 	// We store the sender internally because Lua has no native
 	// uint64 support, and passing it as a LNumber (which is
@@ -55,15 +57,15 @@ func NewLuaRole(config core.Role) *LuaRole {
 	role := &LuaRole{
 		config: config,
 		log: log.WithFields(log.Fields{
-			"name": name,
+			"name":    name,
 			"modName": name,
 		}),
 		createContextMap: map[uint32]func(doId Doid_t){},
-		getContextMap: map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
-		queryContextMap: map[uint32]func(dgi *DatagramIterator){},
-		L: lua.NewState(),
-		LQueue: []LuaQueueEntry{},
-		processQueue: make(chan bool),
+		getContextMap:    map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
+		queryContextMap:  map[uint32]func(dgi *DatagramIterator){},
+		L:                lua.NewState(),
+		LQueue:           []LuaQueueEntry{},
+		processQueue:     make(chan bool),
 	}
 
 	role.Init(role)
@@ -72,6 +74,8 @@ func NewLuaRole(config core.Role) *LuaRole {
 	// Replace gopher-lua-libs's crypto module with
 	// gluacrypto since it has more methods.
 	gluacrypto.Preload(role.L)
+	// Used for web requests within Lua
+	role.L.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
 	RegisterDatagramType(role.L)
 	RegisterDatagramIteratorType(role.L)
 	RegisterLuaParticipantType(role.L)
@@ -91,8 +95,8 @@ func NewLuaRole(config core.Role) *LuaRole {
 	// Call the init function if there's any:
 	if initFunction, ok := role.L.GetGlobal("init").(*lua.LFunction); ok {
 		err := role.L.CallByParam(lua.P{
-			Fn: initFunction,
-			NRet: 0,
+			Fn:      initFunction,
+			NRet:    0,
 			Protect: true,
 		}, NewLuaParticipant(role.L, role))
 		if err != nil {
@@ -126,8 +130,8 @@ func (l *LuaRole) queueLoop() {
 				// Store last sender.
 				l.sender = entry.sender
 				err := l.L.CallByParam(lua.P{
-					Fn: entry.fn,
-					NRet: 0,
+					Fn:      entry.fn,
+					NRet:    0,
 					Protect: true,
 				}, entry.args...)
 				if err != nil {
@@ -170,10 +174,10 @@ func (l *LuaRole) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	default:
 		// Let Lua handle it.
 		l.CallLuaFunction(l.L.GetGlobal("handleDatagram"), sender,
-		// Arguments:
-		NewLuaParticipant(l.L, l),
-		lua.LNumber(msgType),
-		NewLuaDatagramIteratorFromExisting(l.L, dgi))
+			// Arguments:
+			NewLuaParticipant(l.L, l),
+			lua.LNumber(msgType),
+			NewLuaDatagramIteratorFromExisting(l.L, dgi))
 	}
 }
 
