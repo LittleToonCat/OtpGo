@@ -64,6 +64,7 @@ var ParticipantMethods = map[string]lua.LGFunction{
 	"writeServerEvent": LuaWriteServerEvent,
 	"createDatabaseObject": LuaCreateDatabaseObject,
 	"getDatabaseValues": LuaGetDatabaseValues,
+	"packFieldToDatagram": LuaPackFieldToDatagram,
 }
 
 func LuaInfo(L *lua.LState) int {
@@ -509,5 +510,53 @@ func LuaWriteServerEvent(L *lua.LState) int {
 	event := eventlogger.NewLoggedEvent(eventType, serverName, strconv.FormatInt(channel, 10), description)
 	event.Send()
 
+	return 1
+}
+
+func LuaPackFieldToDatagram(L *lua.LState) int {
+	dg := CheckDatagram(L, 2)
+	clsName := L.CheckString(3)
+	fieldName := L.CheckString(4)
+	value := L.Get(5)
+	includeFieldId := L.CheckBool(6)
+	includeLength := false
+	if (L.GetTop() == 7) {
+		includeLength = L.CheckBool(7)
+	}
+
+	cls := core.DC.Get_class_by_name(clsName)
+	if cls == dc.SwigcptrDCClass(0) {
+		L.ArgError(3, "Class not found.")
+		return 0
+	}
+
+	DCLock.Lock()
+	defer DCLock.Unlock()
+
+	packer := dc.NewDCPacker()
+	defer dc.DeleteDCPacker(packer)
+
+	field := cls.Get_field_by_name(fieldName)
+	if field == dc.SwigcptrDCField(0) {
+		L.ArgError(4, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", fieldName, clsName))
+		return 0
+	}
+	packer.Begin_pack(field)
+	core.PackLuaValue(packer, value)
+	if !packer.End_pack() {
+		L.ArgError(5, "Pack failed!")
+		return 0
+	}
+
+	packedData := packer.Get_bytes()
+	defer dc.DeleteVector_uchar(packedData)
+
+	if includeFieldId {
+		dg.AddUint16(uint16(field.Get_number()))
+	}
+	if includeLength {
+		dg.AddUint16(uint16(packedData.Size()))
+	}
+	dg.AddVector(packedData)
 	return 1
 }

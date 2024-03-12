@@ -204,6 +204,10 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 	fieldName := L.CheckString(4)
 	value := L.Get(5)
 	includeFieldId := L.CheckBool(6)
+	includeLength := false
+	if (L.GetTop() == 7) {
+		includeLength = L.CheckBool(7)
+	}
 
 	cls := core.DC.Get_class_by_name(clsName)
 	if cls == dc.SwigcptrDCClass(0) {
@@ -234,6 +238,9 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 
 	if includeFieldId {
 		dg.AddUint16(uint16(field.Get_number()))
+	}
+	if includeLength {
+		dg.AddUint16(uint16(packedData.Size()))
 	}
 	dg.AddVector(packedData)
 	return 1
