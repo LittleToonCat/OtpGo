@@ -242,9 +242,8 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 
 			data, ok := datas[field]
 			if !ok {
-				// Use default value instead if there is any, or use the
-				// field type's empty value if it's a required field.
-				if field.Has_default_value() || field.Is_required() {
+				// Use default value instead if there is any.
+				if field.Has_default_value() {
 					// HACK: Because Get_default_value returns a pointer which will
 					// become lost when accidentally deleted, we'd have to copy it.
 					// into a new blob instance.
@@ -281,6 +280,11 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 				}
 			}
 		}
+	}
+
+	if doc == nil {
+		// Nothing has been done to the document, create a empty one.
+		doc = bson.D{}
 	}
 
 	doId := b.AssignDoId()
