@@ -56,9 +56,9 @@ type DatabaseServer struct {
 	objectTypes map[uint16]dc.DCClass
 	backend     DatabaseBackend
 
-	queue []OperationQueueEntry
-	queueLock sync.Mutex
-	shouldProcess chan bool
+	queue        []OperationQueueEntry
+	queueLock    sync.Mutex
+	processQueue chan bool
 }
 
 func NewDatabaseServer(config core.Role) *DatabaseServer {
@@ -66,12 +66,14 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 		config: config,
 		control: Channel_t(config.Control),
 		queue: []OperationQueueEntry{},
-		shouldProcess: make(chan bool),
+		processQueue: make(chan bool),
 		min: Doid_t(config.Generate.Min),
 		max: Doid_t(config.Generate.Max),
 		objectTypes: make(map[uint16]dc.DCClass),
 		log: log.WithFields(log.Fields{
-			"name": fmt.Sprintf("DatabaseServer (%d)", config.Control),
+			"name":    fmt.Sprintf("DatabaseServer (%d)", config.Control),
+			"modName": "DatabaseServer",
+			"id":      fmt.Sprintf("%d", config.Control),
 		}),
 	}
 
@@ -126,7 +128,7 @@ func (d *DatabaseServer) queueLoop() {
 
 	for {
 		select {
-		case <-d.shouldProcess:
+		case <-d.processQueue:
 			for len(d.queue) > 0 {
 				op := d.getOperationFromQueue()
 				switch op.operation {
@@ -210,7 +212,7 @@ func (d *DatabaseServer) HandleCreateObject(dgi *DatagramIterator, sender Channe
 	d.queueLock.Unlock()
 
 	select {
-	case d.shouldProcess <- true:
+	case d.processQueue <- true:
 	default:
 	}
 }
@@ -232,7 +234,7 @@ func (d *DatabaseServer) HandleGetStoredValues(dgi *DatagramIterator, sender Cha
 	d.queueLock.Unlock()
 
 	select {
-	case d.shouldProcess <- true:
+	case d.processQueue <- true:
 	default:
 	}
 }
@@ -256,7 +258,7 @@ func (d *DatabaseServer) handleSetStoredValues(dgi *DatagramIterator, sender Cha
 	d.queueLock.Unlock()
 
 	select {
-	case d.shouldProcess <- true:
+	case d.processQueue <- true:
 	default:
 	}
 }

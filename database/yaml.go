@@ -149,8 +149,9 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 
 			data, ok := datas[field]
 			if !ok {
-				// Use default value instead if there is any.
-				if field.Has_default_value() {
+				// Use default value instead if there is any, or use the
+				// field type's empty value if it's a required field.
+				if field.Has_default_value() || field.Is_required() {
 					// HACK: Because Get_default_value returns a pointer which will
 					// become lost when accidentally deleted, we'd have to copy it.
 					// into a new blob instance.
@@ -464,6 +465,9 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 		b.db.log.Errorf("Class %s for object %d does not exist!", obj.Class, doId)
 		return
 	}
+
+	DCLock.Lock()
+	defer DCLock.Unlock()
 
 	for field, value := range packedValues {
 		dcField := dclass.Get_field_by_name(field)

@@ -242,8 +242,9 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 
 			data, ok := datas[field]
 			if !ok {
-				// Use default value instead if there is any.
-				if field.Has_default_value() {
+				// Use default value instead if there is any, or use the
+				// field type's empty value if it's a required field.
+				if field.Has_default_value() || field.Is_required() {
 					// HACK: Because Get_default_value returns a pointer which will
 					// become lost when accidentally deleted, we'd have to copy it.
 					// into a new blob instance.
