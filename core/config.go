@@ -93,6 +93,9 @@ type ServerConfig struct {
 		Bind   string
 		Output string
 	}
+	Debug struct {
+		Pprof bool
+	}
 	Roles []Role
 }
 

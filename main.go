@@ -14,6 +14,8 @@ import (
 	"github.com/apex/log"
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/spf13/pflag"
+	_ "net/http/pprof"
+	"net/http"
 	"os"
 	"os/signal"
 	"path"
@@ -119,6 +121,16 @@ Revision: %s
 
 	if err := core.LoadDC(); err != nil {
 		mainLog.Fatal(err.Error())
+	}
+
+	// Start pprof if enabled
+	if core.Config.Debug.Pprof {
+		go func() {
+			err := http.ListenAndServe("localhost:6060", nil)
+			if err != nil {
+				mainLog.Error(err.Error())
+			}
+		}()
 	}
 
 	eventlogger.StartEventLogger()
