@@ -446,9 +446,8 @@ func LuaQueryObjectFields(L *lua.LState) int {
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), from, STATESERVER_OBJECT_QUERY_FIELDS)
-	dg.AddUint32(participant.context)
 	dg.AddDoid(doId)
-	dg.AddUint16(uint16(len(fieldIds)))
+	dg.AddUint32(participant.context)
 	for _, fieldId := range fieldIds {
 		dg.AddUint16(fieldId)
 	}

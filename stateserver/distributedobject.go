@@ -848,17 +848,20 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		d.appendOtherData(dg, false, false)
 		d.RouteDatagram(dg)
 	case STATESERVER_OBJECT_QUERY_FIELD:
-		context := dgi.ReadUint32()
 		if dgi.ReadDoid() != d.do {
 			return
 		}
 
 		fieldId := dgi.ReadUint16()
+
+		context := dgi.ReadUint32()
+
 		field := NewDatagram()
 		success := d.handleOneGet(&field, fieldId, false, false)
 
 		dg := NewDatagram()
 		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_QUERY_FIELD_RESP)
+		dg.AddDoid(d.do)
 		dg.AddUint32(context)
 		dg.AddBool(success)
 		if success {
@@ -866,14 +869,13 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 		d.RouteDatagram(dg)
 	case STATESERVER_OBJECT_QUERY_FIELDS:
-		context := dgi.ReadUint32()
 		if dgi.ReadDoid() != d.do {
 			return
 		}
-		fieldCount := dgi.ReadUint16()
+		context := dgi.ReadUint32()
 
 		var requestedFields []uint16
-		for n := 0; n < int(fieldCount); n++ {
+		for dgi.RemainingSize() >= Blobsize {
 			fieldId := dgi.ReadUint16()
 			requestedFields = append(requestedFields, fieldId)
 		}
@@ -895,6 +897,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		dg := NewDatagram()
 		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_QUERY_FIELDS_RESP)
+		dg.AddDoid(d.do)
 		dg.AddUint32(context)
 		dg.AddBool(success)
 		if success {

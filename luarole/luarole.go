@@ -246,6 +246,8 @@ func (l *LuaRole) handleGetStoredValuesResp(dgi *DatagramIterator) {
 }
 
 func (l *LuaRole) handleQueryFieldsResp(dgi *DatagramIterator) {
+	dgi.ReadDoid() // doId, unused
+
 	context := dgi.ReadUint32()
 
 	callback, ok := l.queryContextMap[context]

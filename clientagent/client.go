@@ -1076,6 +1076,8 @@ func (c *Client) handleGetStoredValuesResp(dgi *DatagramIterator) {
 }
 
 func (c *Client) handleQueryFieldsResp(dgi *DatagramIterator) {
+	dgi.ReadDoid() // doId, unused
+
 	context := dgi.ReadUint32()
 
 	callback, ok := c.queryFieldsContextMap[context]

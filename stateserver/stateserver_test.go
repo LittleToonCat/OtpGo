@@ -1025,6 +1025,7 @@ func TestStateServer_SingleObjectAccessors(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	dg = (&TestDatagram{}).Create([]Channel_t{5}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(0xB0000B)
 	dg.AddBool(true)
 	dg.AddUint16(SetRequired1)
@@ -1049,6 +1050,7 @@ func TestStateServer_SingleObjectAccessors(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	dg = (&TestDatagram{}).Create([]Channel_t{5}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(0xB0000B)
 	dg.AddBool(true)
 	dg.AddUint16(SetRequired1)
@@ -1216,6 +1218,7 @@ func TestStateServer_Get(t *testing.T) {
 
 	// Expect response
 	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(SetRequired1)
@@ -1231,6 +1234,7 @@ func TestStateServer_Get(t *testing.T) {
 
 	// Expect failure
 	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(1)
 	dg.AddBool(false)
 	conn.Expect(t, *dg, false)
@@ -1244,6 +1248,7 @@ func TestStateServer_Get(t *testing.T) {
 
 	// Expect failure
 	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELD_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(1)
 	dg.AddBool(false)
 	conn.Expect(t, *dg, false)
@@ -1268,6 +1273,7 @@ func TestStateServer_Get(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(2)
@@ -1287,6 +1293,7 @@ func TestStateServer_Get(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(1)
@@ -1304,6 +1311,7 @@ func TestStateServer_Get(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(0)
@@ -1319,6 +1327,7 @@ func TestStateServer_Get(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(1)
 	dg.AddBool(false)
 	conn.Expect(t, *dg, false)
@@ -1333,6 +1342,7 @@ func TestStateServer_Get(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	dg = (&TestDatagram{}).Create([]Channel_t{0x69}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(1)
 	dg.AddBool(false)
 	conn.Expect(t, *dg, false)
@@ -1636,6 +1646,7 @@ func TestStateServer_Molecular(t *testing.T) {
 	conn.SendDatagram(*dg)
 
 	dg = (&TestDatagram{}).Create([]Channel_t{1337}, do, STATESERVER_OBJECT_QUERY_FIELDS_RESP)
+	dg.AddDoid(Doid_t(do))
 	dg.AddUint32(1)
 	dg.AddBool(true)
 	dg.AddUint16(5)
