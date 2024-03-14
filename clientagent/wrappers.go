@@ -745,6 +745,10 @@ func LuaHandleAddInterest(L *lua.LState) int {
 	}
 
 	i := client.buildInterest(handle, parent, zones)
+
+	client.Lock()
+	defer client.Unlock()
+
 	client.addInterest(i, context, 0)
 
 	return 1
@@ -771,6 +775,9 @@ func LuaHandleRemoveInterest(L *lua.LState) int {
 	}
 
 	if i, ok := client.interests[handle]; ok {
+		client.Lock()
+		defer client.Unlock()
+
 		client.removeInterest(i, context)
 	} else {
 		client.sendDisconnect(CLIENT_DISCONNECT_GENERIC, fmt.Sprintf("Attempted to remove non-existant interest: %d", handle), true)
