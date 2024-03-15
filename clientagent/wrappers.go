@@ -43,6 +43,7 @@ func CheckClient(L *lua.LState, n int) *Client {
 var ClientMethods = map[string]lua.LGFunction{
 	"addServerHeader": LuaClientAddServerHeader,
 	"addServerHeaderWithAvatarId": LuaAddServerHeaderWithAvatarId,
+	"addServerHeaderWithAccountId": LuaAddServerHeaderWithAccountId,
 	"addSessionObject": LuaAddSessionObject,
 	"addPostRemove": LuaAddPostRemove,
 	"authenticated": LuaGetSetAuthenticated,
@@ -136,6 +137,18 @@ func LuaAddServerHeaderWithAvatarId(L *lua.LState) int {
 	msgType := uint16(L.CheckNumber(4))
 
 	dg.AddServerHeader(Channel_t(avatarId + (1 << 32)), client.channel, msgType)
+	return 1
+}
+
+func LuaAddServerHeaderWithAccountId(L *lua.LState) int {
+	// This exists because of Lua cannot add
+	// the account puppet channel on its own.
+	client := CheckClient(L, 1)
+	dg := CheckDatagram(L, 2)
+	accountId := (L.CheckNumber(3))
+	msgType := uint16(L.CheckNumber(4))
+
+	dg.AddServerHeader(Channel_t(accountId + (3 << 32)), client.channel, msgType)
 	return 1
 }
 

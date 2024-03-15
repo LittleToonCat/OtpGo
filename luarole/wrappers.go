@@ -52,6 +52,7 @@ var ParticipantMethods = map[string]lua.LGFunction{
 	"unsubscribeRange": LuaUnsubscribeRange,
 	"handleUpdateField": LuaHandleUpdateField,
 	"addServerHeaderWithAvatarId": LuaAddServerHeaderWithAvatarId,
+	"addServerHeaderWithAccountId": LuaAddServerHeaderWithAccountId,
 	"getSender": LuaGetSender,
 	"getAccountIdFromSender": LuaGetAccountIdFromSender,
 	"getAvatarIdFromSender": LuaGetAvatarIdFromSender,
@@ -172,6 +173,18 @@ func LuaAddServerHeaderWithAvatarId(L *lua.LState) int {
 	msgType := uint16(L.CheckInt(5))
 
 	dg.AddServerHeader(Channel_t(avatarId + (1 << 32)), sender, msgType)
+	return 1
+}
+
+func LuaAddServerHeaderWithAccountId(L *lua.LState) int {
+	// This exists because of Lua cannot add
+	// the account puppet channel on its own.
+	dg := CheckDatagram(L, 2)
+	accountId := L.CheckInt(3)
+	sender := Channel_t(L.CheckInt(4))
+	msgType := uint16(L.CheckInt(5))
+
+	dg.AddServerHeader(Channel_t(accountId + (3 << 32)), sender, msgType)
 	return 1
 }
 
