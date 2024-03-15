@@ -701,6 +701,8 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				obj.parent = parent
 				obj.zone = zone
 
+				c.visibleObjects[do] = obj
+
 				// Tell the client to update.
 				dg := NewDatagram()
 				dg.AddUint16(CLIENT_OBJECT_LOCATION)
