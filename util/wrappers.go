@@ -198,6 +198,7 @@ var DatagramIteratorMethods = map[string]lua.LGFunction{
 	"readBool": LuaReadBool,
 	"readString": LuaReadString,
 	"readRemainder": LuaReadRemainder,
+	"readFixedString": LuaReadFixedString,
 }
 
 func LuaDgiDumpHex(L *lua.LState) int {
@@ -291,5 +292,13 @@ func LuaReadRemainder(L *lua.LState) int {
 	dgi := CheckDatagramIterator(L, 1)
 	remainder := dgi.ReadRemainder()
 	L.Push(lua.LString(remainder))
+	return 1
+}
+
+func LuaReadFixedString(L *lua.LState) int {
+	dgi := CheckDatagramIterator(L, 1)
+	size := L.CheckInt(2)
+	v := dgi.ReadData(Dgsize_t(size))
+	L.Push(lua.LString(v))
 	return 1
 }
