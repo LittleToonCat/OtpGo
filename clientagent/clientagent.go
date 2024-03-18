@@ -47,6 +47,8 @@ type ClientAgent struct {
 	L            *lua.LState
 	LQueue       []LuaQueueEntry
 	processQueue chan bool
+
+	receiveDatagramFunc *lua.LFunction
 }
 
 func NewChannelTracker(min Channel_t, max Channel_t, log *log.Entry) *ChannelTracker {
@@ -126,7 +128,9 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	}
 
 	// Santity check to make sure certian global functions exists:
-	if _, ok := ca.L.GetGlobal("receiveDatagram").(*lua.LFunction); !ok {
+	if function, ok := ca.L.GetGlobal("receiveDatagram").(*lua.LFunction); ok {
+		ca.receiveDatagramFunc = function
+	} else {
 		ca.log.Fatal("Missing \"receiveDatagram\" function in Lua script.")
 		return nil
 	}

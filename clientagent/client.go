@@ -469,7 +469,8 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case CLIENTAGENT_SET_CLIENT_ID:
 		c.SetChannel(dgi.ReadChannel())
 	case CLIENTAGENT_SEND_DATAGRAM:
-		c.client.SendDatagram(dg)
+		datagram := dgi.ReadDatagram()
+		c.client.SendDatagram(*datagram)
 	case CLIENTAGENT_OPEN_CHANNEL:
 		c.SubscribeChannel(dgi.ReadChannel())
 	case CLIENTAGENT_CLOSE_CHANNEL:
@@ -990,7 +991,7 @@ func (c *Client) queueLoop() {
 					}()
 
 					// Pass the datagram over to Lua to handle:
-					c.ca.CallLuaFunction(c.ca.L.GetGlobal("receiveDatagram"), c,
+					c.ca.CallLuaFunction(c.ca.receiveDatagramFunc, c,
 					// Arguments:
 					NewLuaClient(c.ca.L, c),
 					NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
