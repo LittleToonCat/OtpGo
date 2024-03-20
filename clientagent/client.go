@@ -145,7 +145,7 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	})
 
 	c.SubscribeChannel(c.channel)
-	c.SubscribeChannel(BCHAN_CLIENTS)
+	c.SubscribeChannel(CHANNEL_CLIENT_BROADCAST)
 
 	go c.queueLoop()
 
