@@ -651,6 +651,15 @@ func (d *DistributedObject) handleOneGet(out *Datagram, fieldId uint16, allowUns
 	return true
 }
 
+func (d *DistributedObject) handleQueryAll(sender Channel_t, context uint32) {
+	dg := NewDatagram()
+	dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_QUERY_OBJECT_ALL_RESP)
+	dg.AddUint32(context)
+	d.appendRequiredDataDoidLast(dg, false, false)
+	d.appendOtherData(dg, false, false)
+	d.RouteDatagram(dg)
+}
+
 func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	d.Lock()
 	defer d.Unlock()
@@ -839,14 +848,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			d.zoneObjects[zone] = append(d.zoneObjects[zone], do)
 		}
 	case STATESERVER_QUERY_OBJECT_ALL:
-		context := dgi.ReadUint32()
-
-		dg = NewDatagram()
-		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_QUERY_OBJECT_ALL_RESP)
-		dg.AddUint32(context)
-		d.appendRequiredDataDoidLast(dg, false, false)
-		d.appendOtherData(dg, false, false)
-		d.RouteDatagram(dg)
+		d.handleQueryAll(sender, dgi.ReadUint32())
 	case STATESERVER_OBJECT_QUERY_FIELD:
 		if dgi.ReadDoid() != d.do {
 			return
@@ -857,11 +859,12 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		context := dgi.ReadUint32()
 
 		field := NewDatagram()
-		success := d.handleOneGet(&field, fieldId, false, false)
+		success := d.handleOneGet(&field, fieldId, false, true)
 
 		dg := NewDatagram()
 		dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_QUERY_FIELD_RESP)
 		dg.AddDoid(d.do)
+		dg.AddUint16(fieldId)
 		dg.AddUint32(context)
 		dg.AddBool(success)
 		if success {

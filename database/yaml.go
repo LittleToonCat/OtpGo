@@ -366,7 +366,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 
 		if field == "DcObjectType" {
 			// Return dclass type
-			packedData[field] = dcField.Parse_string(obj.Class)
+			packedData[field] = dcField.Parse_string("\"" + obj.Class + "\"")
 			continue
 		}
 

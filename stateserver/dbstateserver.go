@@ -22,6 +22,26 @@ type LoadingObject struct {
 
 	context  uint32
 	dgQueue  []Datagram
+
+	queryAllFrom    Channel_t
+	queryAllContext uint32
+}
+
+type FieldQuery struct {
+	do        Doid_t
+	from      Channel_t
+	context   uint32
+
+	multiple  bool
+	singleFieldId uint16
+	name2FieldId map[string]uint16
+}
+
+type DClassQuery struct {
+	do      Doid_t
+	from    Channel_t
+	context uint32
+	dg      Datagram
 }
 
 type DatabaseStateServer struct {
@@ -31,6 +51,9 @@ type DatabaseStateServer struct {
 	loading map[Doid_t]*LoadingObject
 	context uint32
 	contextToLoading map[uint32]*LoadingObject
+	contextToFieldQuery map[uint32]*FieldQuery
+	contextToQueryDClass map[uint32]*DClassQuery
+	contextToQueryAll map[uint32]*LoadingObject
 }
 
 func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
@@ -39,6 +62,9 @@ func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
 		loading: map[Doid_t]*LoadingObject{},
 		context: 0,
 		contextToLoading: map[uint32]*LoadingObject{},
+		contextToFieldQuery: map[uint32]*FieldQuery{},
+		contextToQueryDClass: map[uint32]*DClassQuery{},
+		contextToQueryAll: map[uint32]*LoadingObject{},
 	}
 	dbss.InitStateServer(config, fmt.Sprintf("DBSS (%d - %d)", dbss.config.Ranges.Min, dbss.config.Ranges.Max), "DBSS", "*")
 
@@ -158,15 +184,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 	s.context++
 }
 
-func (s * DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
-	context := dgi.ReadUint32()
-	obj, ok := s.contextToLoading[context]
-	if !ok {
-		s.log.Warnf("Received context %d but no LoadingObject found!", context)
-		return
-	}
-	delete(s.contextToLoading, context)
-
+func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *DatagramIterator) {
 	do := dgi.ReadDoid()
 	if obj.do != do {
 		s.log.Warnf("Received GetStoredValues for wrong DOID! %d != %d", obj.do, do)
@@ -312,7 +330,43 @@ func (s *DatabaseStateServer) finalizeLoading(obj *LoadingObject) {
 		}
 		delete(s.loading, obj.do)
 	}
+}
 
+func (s * DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
+	context := dgi.ReadUint32()
+	if obj, ok := s.contextToLoading[context]; ok {
+		delete(s.contextToLoading, context)
+		s.initObjectFromDbValues(obj, dgi)
+		return
+	}
+
+	if query, ok := s.contextToFieldQuery[context]; ok {
+		delete(s.contextToFieldQuery, context)
+		s.finishFieldQuery(query, dgi)
+		return
+	}
+
+	if query, ok := s.contextToQueryDClass[context]; ok {
+		delete(s.contextToQueryDClass, context)
+		s.handleDClassQuery(dgi, query)
+		return
+	}
+
+	if obj, ok := s.contextToQueryAll[context]; ok {
+		delete(s.contextToQueryAll, context)
+		s.initObjectFromDbValues(obj, dgi)
+
+		if dObj, ok := s.objects[obj.do]; ok {
+			s.log.Debugf("handleQueryAll: object id %d successfully initalized, calling handleQueryAll", obj.do)
+			dObj.handleQueryAll(obj.queryAllFrom, obj.queryAllContext)
+			dObj.annihilate(obj.queryAllFrom, false)
+		} else {
+			s.log.Errorf("handleQueryAll: Failed to init object id=%d", obj.do)
+		}
+		return
+	}
+
+	s.log.Warnf("Received unknown GetStoredValues context=%d", context)
 }
 
 func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator)  {
@@ -453,13 +507,19 @@ func (s *DatabaseStateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator)
 		s.handleGetStoredValues(dgi)
 	// Accept regular SS generate messages.
 	case STATESERVER_OBJECT_GENERATE_WITH_REQUIRED:
-		s.handleGenerate(dgi, false)
+		fallthrough
 	case STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER:
-		s.handleGenerate(dgi, true)
+		s.handleGenerate(dgi, msgType == STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER)
 	case STATESERVER_OBJECT_UPDATE_FIELD:
 		s.handleOneUpdate(dgi)
 	case STATESERVER_OBJECT_UPDATE_FIELD_MULTIPLE:
 		s.handleMultipleUpdates(dgi)
+	case STATESERVER_OBJECT_QUERY_FIELD:
+		fallthrough
+	case STATESERVER_OBJECT_QUERY_FIELDS:
+		s.handleQueryFields(dgi, sender, msgType == STATESERVER_OBJECT_QUERY_FIELDS)
+	case STATESERVER_QUERY_OBJECT_ALL:
+		s.handleQueryAll(dgi, sender, Doid_t(receivers[0]))
 	case DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS:
 		fallthrough
 	case DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER:
@@ -485,4 +545,301 @@ func (s *DatabaseStateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator)
 		}
 		s.log.Debugf("Ignoring message of type=%d", msgType)
 	}
+}
+
+func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Channel_t, multiple bool) {
+	do := dgi.ReadDoid()
+	if _, ok := s.objects[do]; ok {
+		s.log.Debugf("Ignoring handleQueryFields of already activated object=%d", do)
+		// Let the object instance handle it.
+		return
+	}
+	if obj, ok := s.loading[do]; ok {
+		// Wait till the obj has been initalized before handling this message.
+		obj.dgQueue = append(obj.dgQueue, *dgi.Dg)
+		s.log.Debugf("Queued handleQueryFields for pending object=%d", do)
+		return
+	}
+
+	var context uint32
+	var fields []dc.DCField
+
+	if !multiple {
+		fieldId := dgi.ReadUint16()
+		context = dgi.ReadUint32()
+
+		field := core.DC.Get_field_by_index(int(fieldId))
+		if field == dc.SwigcptrDCField(0) {
+			s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
+			return
+		}
+		fields = []dc.DCField{field}
+	} else {
+		context = dgi.ReadUint32()
+		fields = []dc.DCField{}
+		for dgi.RemainingSize() >= Blobsize {
+			fieldId := dgi.ReadUint16()
+			field := core.DC.Get_field_by_index(int(fieldId))
+			if field == dc.SwigcptrDCField(0) {
+				s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
+				return
+			}
+			fields = append(fields, field)
+		}
+	}
+
+	name2FieldId := map[string]uint16{}
+	for _, field := range fields {
+		name2FieldId[field.Get_name()] = uint16(field.Get_number())
+	}
+	query := &FieldQuery{
+		do: do,
+		from: sender,
+		context: context,
+
+		multiple: multiple,
+	}
+
+	query.name2FieldId = name2FieldId
+	if len(fields) == 1 {
+		query.singleFieldId = uint16(fields[0].Get_number())
+	}
+
+	s.contextToFieldQuery[s.context] = query
+
+	dg := NewDatagram()
+	dg.AddServerHeader(s.database, Channel_t(do), DBSERVER_GET_STORED_VALUES)
+	dg.AddUint32(s.context)
+	dg.AddDoid(do)
+	dg.AddUint16(uint16(len(fields)))
+	for _, field := range fields {
+		dg.AddString(field.Get_name())
+	}
+	s.RouteDatagram(dg)
+	s.context++
+}
+
+func (s *DatabaseStateServer) finishFieldQuery(query *FieldQuery, dgi *DatagramIterator) {
+	var respMsgType uint16
+	if query.multiple {
+		respMsgType = STATESERVER_OBJECT_QUERY_FIELDS_RESP
+	} else {
+		respMsgType = STATESERVER_OBJECT_QUERY_FIELD_RESP
+	}
+
+	do := dgi.ReadDoid()
+	if do != query.do {
+		s.log.Warnf("Got GetStoredValuesResp for id=%d, but was expecting id=%d!", do, query.do)
+		dg := NewDatagram()
+		dg.AddServerHeader(query.from, Channel_t(query.do), respMsgType)
+		dg.AddDoid(query.do)
+		if !query.multiple {
+			dg.AddUint16(query.singleFieldId)
+		}
+		dg.AddUint32(query.context)
+		dg.AddBool(false) // success
+		s.RouteDatagram(dg)
+		return
+	}
+
+	count := dgi.ReadUint16()
+	fields := make([]string, count)
+	for i := uint16(0); i < count; i++ {
+		fields[i] = dgi.ReadString()
+	}
+
+	code := dgi.ReadUint8()
+	if code > 0 {
+		if code == 1 {
+			s.log.Errorf("queryFields: Object %d not found in database.", do)
+		} else {
+			s.log.Errorf("queryFields: GetStoredValues failed for DOID %d", do)
+		}
+
+		dg := NewDatagram()
+		dg.AddServerHeader(query.from, Channel_t(query.do), respMsgType)
+		dg.AddDoid(query.do)
+		if !query.multiple {
+			dg.AddUint16(query.singleFieldId)
+		}
+		dg.AddUint32(query.context)
+		dg.AddBool(false) // success
+		s.RouteDatagram(dg)
+		return
+	}
+
+	fieldData := map[uint16][]byte{}
+	success := true
+	for _, field := range fields {
+		if fieldId, ok := query.name2FieldId[field]; ok {
+			data := dgi.ReadBlob()
+			if dgi.ReadBool() { // found
+				fieldData[fieldId] = data
+			} else {
+				s.log.Errorf("queryFields: Data for field \"%s\" not found", field)
+				success = false
+				break
+			}
+		} else {
+			s.log.Errorf("queryFields: Got unexpected field \"%s\"", field)
+			success = false
+			break
+		}
+	}
+
+	dg := NewDatagram()
+	dg.AddServerHeader(query.from, Channel_t(query.do), respMsgType)
+	dg.AddDoid(query.do)
+	if !query.multiple {
+		dg.AddUint16(query.singleFieldId)
+	}
+	dg.AddUint32(query.context)
+	dg.AddBool(success)
+
+	if success {
+		if !query.multiple {
+			dg.AddData(fieldData[query.singleFieldId])
+		} else {
+			for fieldId, data := range fieldData {
+				dg.AddUint16(fieldId)
+				dg.AddData(data)
+			}
+		}
+	}
+	s.RouteDatagram(dg)
+}
+
+func (s *DatabaseStateServer) handleQueryAll(dgi *DatagramIterator, sender Channel_t, do Doid_t) {
+	if _, ok := s.objects[do]; ok {
+		s.log.Debugf("Ignoring handleQueryAll of already activated object=%d", do)
+		// Let the object instance handle it.
+		return
+	}
+	if obj, ok := s.loading[do]; ok {
+		// Wait till the obj has been initalized before handling this message.
+		obj.dgQueue = append(obj.dgQueue, *dgi.Dg)
+		s.log.Debugf("Queued handleQueryAll for pending object=%d", do)
+		return
+	}
+
+	context := dgi.ReadUint32()
+	// First, we need to get the DClass of the stored object, or else we would
+	// know what fields we're getting.
+	query := &DClassQuery{do, sender, context, *dgi.Dg}
+	s.contextToQueryDClass[s.context] = query
+
+	s.log.Debugf("handleQueryAll: Querying DClass name for object id=%d", do)
+
+	dg := NewDatagram()
+	dg.AddServerHeader(s.database, Channel_t(do), DBSERVER_GET_STORED_VALUES)
+	dg.AddUint32(s.context)
+	dg.AddDoid(do)
+	dg.AddUint16(1) // count
+	dg.AddString("DcObjectType")
+	s.RouteDatagram(dg)
+
+	s.context++
+}
+
+func (s *DatabaseStateServer) handleDClassQuery(dgi *DatagramIterator, query *DClassQuery) {
+	do := dgi.ReadDoid()
+	if do != query.do {
+		s.log.Errorf("handleDClassQuery: Got GetStoredValuesResp for id=%d, but was expecting id=%d!", do, query.do)
+		return
+	}
+
+	// Do the checks again just in case our object gets activated while waiting for the
+	// database response
+	if _, ok := s.objects[do]; ok {
+		s.log.Debugf("Ignoring handleQueryAll of already activated object=%d", do)
+		// Let the object instance handle it.
+		return
+	}
+	if obj, ok := s.loading[do]; ok {
+		// Wait till the obj has been initalized before handling this message.
+		obj.dgQueue = append(obj.dgQueue, query.dg)
+		s.log.Debugf("Queued handleQueryAll for pending object=%d", do)
+		return
+	}
+
+	// Skip count and field name
+	dgi.Skip(Blobsize)
+	dgi.Skip(Dgsize_t(dgi.ReadUint16()))
+
+	code := dgi.ReadUint8()
+	if code > 0 {
+		if code == 1 {
+			s.log.Errorf("Object %d not found in database.", do)
+		} else {
+			s.log.Errorf("GetStoredValues failed for DOID %d", do)
+		}
+		return
+	}
+
+	// Skip value size.
+	dgi.Skip(Blobsize)
+	className := dgi.ReadString()
+	if !dgi.ReadBool() { // found
+		s.log.Errorf("handleQueryAll: Could not find dclass name for object %d.  Does the dclass definition of the object you're looking for has a \"DcObjectType\" parameter?\n\"string DcObjectType db;\"", do)
+		return
+	}
+
+	s.log.Debugf("handleQueryAll: Found DClass name \"%s\" for object=%d", className, do)
+	dclass := core.DC.Get_class_by_name(className)
+	if dclass == dc.SwigcptrDCClass(0) {
+		s.log.Errorf("handleQueryAll: Retreived unknown class of name \"%s\"!", className)
+		return
+	}
+
+	// Now thats we've got our name, we can init the object temporary
+	// and call handleQueryAll there when finished.
+	obj := LoadingObject{
+		dbss: s,
+		do: do,
+		parent: INVALID_DOID,
+		zone: INVALID_ZONE,
+		dclass: dclass,
+
+		requiredFields: FieldValues{},
+		ramFields: FieldValues{},
+
+		fieldUpdates: FieldValues{},
+
+		context: s.context,
+		dgQueue: []Datagram{},
+
+		queryAllFrom: query.from,
+		queryAllContext: query.context,
+	}
+
+	s.loading[do] = &obj
+	s.contextToQueryAll[s.context] = &obj
+
+	// Populate names of required fields to fetch.
+	required := make([]string, 0)
+	count := dclass.Get_num_inherited_fields()
+	for i := 0; i < count; i++ {
+		field := dclass.Get_inherited_field(i)
+		molecular := field.As_molecular_field().(dc.DCMolecularField)
+		if (molecular != dc.SwigcptrDCMolecularField(0)) {
+			continue
+		}
+		if field.Is_required() && field.Is_db() {
+			if _, ok := obj.fieldUpdates[field]; !ok {
+				required = append(required, field.Get_name())
+			}
+		}
+	}
+
+	dg := NewDatagram()
+	dg.AddServerHeader(s.database, Channel_t(do), DBSERVER_GET_STORED_VALUES)
+	dg.AddUint32(s.context)
+	dg.AddDoid(do)
+	dg.AddUint16(uint16(len(required)))
+	for _, field := range required {
+		dg.AddString(field)
+	}
+	s.RouteDatagram(dg)
+
+	s.context++
 }

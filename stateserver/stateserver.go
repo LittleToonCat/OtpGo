@@ -160,9 +160,9 @@ func (s *StateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 	switch msgType {
 	case STATESERVER_OBJECT_GENERATE_WITH_REQUIRED:
-		s.handleGenerate(dgi, false)
+		fallthrough
 	case STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER:
-		s.handleGenerate(dgi, true)
+		s.handleGenerate(dgi, msgType == STATESERVER_OBJECT_GENERATE_WITH_REQUIRED_OTHER)
 	case STATESERVER_SHARD_REST:
 		s.handleDeleteAi(dgi, sender)
 	case STATESERVER_QUERY_OBJECT_ALL:
