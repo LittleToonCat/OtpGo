@@ -404,6 +404,11 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 	fields := make([]string, 0)
 	for i := 0; i < cls.Get_num_inherited_fields(); i++ {
 		field := cls.Get_inherited_field(i)
+		if molecular, ok := field.As_molecular_field().(dc.DCMolecularField); ok {
+			if molecular != dc.SwigcptrDCMolecularField(0) {
+				continue
+			}
+		}
 		if field.Is_required() {
 			fields = append(fields, field.Get_name())
 		}
