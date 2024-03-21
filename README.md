@@ -8,7 +8,7 @@ World of Cars Online, and Pixie Hollow.  It is based on nosyliam's unfinished [A
 
 It uses cgo to run Panda's DC parser and packer.  This is done to maintain compatibility. [It can be found here](https://github.com/LittleToonCat/dcparser-go), but it might be move into this repository at a future date.
 
-This project uses [GopherLua](https://github.com/yuin/gopher-lua) to implement a Lua5.1(+ goto statement in Lua5.2) VM which can be used to extand functionaility of OtpGo by writing your own Client handling or create game-specific
+This project uses [GopherLua](https://github.com/yuin/gopher-lua) to implement a Lua5.1(+ goto statement in Lua5.2) VM which can be used to extand functionaility of OtpGo by writing your own Client message handler or game-specific custom roles.
 
 [Astron's Readme](https://github.com/Astron/Astron/blob/master/README.md#overview) provides a really good description at how the OTP server works internally.
 
