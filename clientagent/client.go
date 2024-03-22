@@ -316,7 +316,7 @@ func (c *Client) closeZones(parent Doid_t, zones []Zone_t) {
 					}
 				}
 
-				c.handleRemoveObject(obj.do)
+				c.handleRemoveObject(obj.do, false)
 				for i, o := range c.seenObjects {
 					if o == obj.do {
 						c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
@@ -605,7 +605,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		for i, so := range c.seenObjects {
 			if so == do {
 				c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
-				c.handleRemoveObject(do)
+				c.handleRemoveObject(do, false)
 			}
 		}
 
@@ -716,7 +716,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				for i, so := range c.seenObjects {
 					if so == do {
 						c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
-						c.handleRemoveObject(do)
+						c.handleRemoveObject(do, false)
 					}
 				}
 
@@ -1283,9 +1283,16 @@ func (c *Client) handleAddInterest(i Interest, context uint32) {
 	// c.client.SendDatagram(resp)
 }
 
-func (c *Client) handleRemoveObject(do Doid_t) {
+func (c *Client) handleRemoveObject(do Doid_t, deleted bool) {
 	resp := NewDatagram()
-	resp.AddUint16(CLIENT_OBJECT_DELETE)
+
+	msgType := CLIENT_OBJECT_DISABLE
+
+	if deleted {
+		msgType = CLIENT_OBJECT_DELETE
+	}
+
+	resp.AddUint16(uint16(msgType))
 	resp.AddDoid(do)
 	c.client.SendDatagram(resp)
 }
