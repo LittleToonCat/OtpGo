@@ -15,4 +15,4 @@ This project uses [GopherLua](https://github.com/yuin/gopher-lua) to implement a
 The entire documentation and unit tests is pretty much a TODO right now, but it'll get it done eventually so please, pardon our dust.
 
 ## Projects using OtpGo ##
-[Mewtwo](https://sunrise.games/) (Sunrise Games' Toontown servers)
+[Mewtwo](https://gitlab.com/sunrisemmos/Mewtwo) ([Sunrise Games'](https://sunrise.games/) Toontown servers)
