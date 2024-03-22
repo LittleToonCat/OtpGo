@@ -1157,17 +1157,23 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 			return
 		}
 		c.sendDisconnect(CLIENT_DISCONNECT_MISSING_OBJECT, fmt.Sprintf("Attempted to send field update to unknown object: %d", do), true)
+		// Skip the data to prevent the excess data ejection.
+		dgi.Skip(dgi.RemainingSize())
 		return
 	}
 
 	dcField := dclass.Get_field_by_index(int(field))
 	if dcField == dc.SwigcptrDCField(0) {
 		c.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_FIELD, fmt.Sprintf("Attempted to send field update to %s(%d) with unknown field: %d", dclass.Get_name(), do, field), true)
+		// Skip the data to prevent the excess data ejection.
+		dgi.Skip(dgi.RemainingSize())
 		return
 	}
 
 	if !c.isFieldSendable(do, dcField) {
 		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Attempted to send unsendable field %s", dcField.Get_name()), true)
+		// Skip the data to prevent the excess data ejection.
+		dgi.Skip(dgi.RemainingSize())
 		return
 	}
 
