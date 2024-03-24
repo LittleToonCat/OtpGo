@@ -283,7 +283,7 @@ func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 		return
 	}
 	fieldId := dgi.ReadUint16()
-	dcField := dclass.Get_field_by_index(int(fieldId))
+	dcField := dclass.Get_inherited_field(int(fieldId))
 	if dcField == dc.SwigcptrDCField(0) {
 		l.log.Errorf("handleUpdateField: Field number %d does not exist in class \"%s\"!", fieldId, className)
 		return

@@ -80,3 +80,5 @@ require (
 
 // This exists until https://github.com/yuin/gopher-lua/pull/465 has been merged.
 replace github.com/yuin/gopher-lua => github.com/bvisness/gopher-lua v0.0.0-20231210210735-90501ab9848b
+
+replace github.com/LittleToonCat/dcparser-go => D:\Projects\Toontown\Sunrise\dcparser-go

@@ -1,40 +1,40 @@
 package stateserver
 
 import (
-	"otpgo/core"
 	"fmt"
+	"otpgo/core"
 	. "otpgo/util"
 
 	dc "github.com/LittleToonCat/dcparser-go"
 )
 
 type LoadingObject struct {
-	dbss     *DatabaseStateServer
-	do       Doid_t
-	parent   Doid_t
-	zone     Zone_t
-	dclass   dc.DCClass
+	dbss   *DatabaseStateServer
+	do     Doid_t
+	parent Doid_t
+	zone   Zone_t
+	dclass dc.DCClass
 
 	requiredFields FieldValues
 	ramFields      FieldValues
 
-	fieldUpdates   FieldValues
+	fieldUpdates FieldValues
 
-	context  uint32
-	dgQueue  []Datagram
+	context uint32
+	dgQueue []Datagram
 
 	queryAllFrom    Channel_t
 	queryAllContext uint32
 }
 
 type FieldQuery struct {
-	do        Doid_t
-	from      Channel_t
-	context   uint32
+	do      Doid_t
+	from    Channel_t
+	context uint32
 
-	multiple  bool
+	multiple      bool
 	singleFieldId uint16
-	name2FieldId map[string]uint16
+	name2FieldId  map[string]uint16
 }
 
 type DClassQuery struct {
@@ -47,24 +47,24 @@ type DClassQuery struct {
 type DatabaseStateServer struct {
 	StateServer
 
-	database Channel_t
-	loading map[Doid_t]*LoadingObject
-	context uint32
-	contextToLoading map[uint32]*LoadingObject
-	contextToFieldQuery map[uint32]*FieldQuery
+	database             Channel_t
+	loading              map[Doid_t]*LoadingObject
+	context              uint32
+	contextToLoading     map[uint32]*LoadingObject
+	contextToFieldQuery  map[uint32]*FieldQuery
 	contextToQueryDClass map[uint32]*DClassQuery
-	contextToQueryAll map[uint32]*LoadingObject
+	contextToQueryAll    map[uint32]*LoadingObject
 }
 
 func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
 	dbss := &DatabaseStateServer{
-		database: config.Database,
-		loading: map[Doid_t]*LoadingObject{},
-		context: 0,
-		contextToLoading: map[uint32]*LoadingObject{},
-		contextToFieldQuery: map[uint32]*FieldQuery{},
+		database:             config.Database,
+		loading:              map[Doid_t]*LoadingObject{},
+		context:              0,
+		contextToLoading:     map[uint32]*LoadingObject{},
+		contextToFieldQuery:  map[uint32]*FieldQuery{},
 		contextToQueryDClass: map[uint32]*DClassQuery{},
-		contextToQueryAll: map[uint32]*LoadingObject{},
+		contextToQueryAll:    map[uint32]*LoadingObject{},
 	}
 	dbss.InitStateServer(config, fmt.Sprintf("DBSS (%d - %d)", dbss.config.Ranges.Min, dbss.config.Ranges.Max), "DBSS", "*")
 
@@ -98,14 +98,14 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 	dclass := core.DC.Get_class(int(dcId))
 
 	obj := LoadingObject{
-		dbss: s,
-		do: do,
+		dbss:   s,
+		do:     do,
 		parent: parent,
-		zone: zone,
+		zone:   zone,
 		dclass: dclass,
 
 		requiredFields: FieldValues{},
-		ramFields: FieldValues{},
+		ramFields:      FieldValues{},
 
 		fieldUpdates: FieldValues{},
 
@@ -128,7 +128,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 
 		for i := uint16(0); i < count; i++ {
 			field := unpacker.Raw_unpack_uint16().(uint)
-			dcField := dclass.Get_field_by_index(int(field))
+			dcField := dclass.Get_inherited_field(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
 				s.log.Errorf("Received invalid field index %d", field)
 				return
@@ -161,7 +161,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 	for i := 0; i < count; i++ {
 		field := dclass.Get_inherited_field(i)
 		molecular := field.As_molecular_field().(dc.DCMolecularField)
-		if (molecular != dc.SwigcptrDCMolecularField(0)) {
+		if molecular != dc.SwigcptrDCMolecularField(0) {
 			continue
 		}
 		if field.Is_required() && field.Is_db() {
@@ -270,35 +270,35 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 	for i := 0; i < numFields; i++ {
 		dcField := obj.dclass.Get_inherited_field(i)
 		molecular := dcField.As_molecular_field().(dc.DCMolecularField)
-		if (molecular != dc.SwigcptrDCMolecularField(0)) {
+		if molecular != dc.SwigcptrDCMolecularField(0) {
 			continue
 		}
-	if dcField.Is_required() {
-		if data, ok := obj.fieldUpdates[dcField]; ok {
-			obj.requiredFields[dcField] = data
-			delete(obj.fieldUpdates, dcField)
-		} else {
-			// Use the default value.
+		if dcField.Is_required() {
+			if data, ok := obj.fieldUpdates[dcField]; ok {
+				obj.requiredFields[dcField] = data
+				delete(obj.fieldUpdates, dcField)
+			} else {
+				// Use the default value.
 
-			// HACK: Because Get_default_value returns a pointer which will
-			// become lost when accidentally deleted, we'd have to copy it.
-			// into a new blob instance.
-			value := dcField.Get_default_value()
+				// HACK: Because Get_default_value returns a pointer which will
+				// become lost when accidentally deleted, we'd have to copy it.
+				// into a new blob instance.
+				value := dcField.Get_default_value()
 
-			obj.requiredFields[dcField] = dc.NewVector_uchar()
-			for i := int64(0); i < value.Size(); i++ {
-				obj.requiredFields[dcField].Add(value.Get(int(i)))
+				obj.requiredFields[dcField] = dc.NewVector_uchar()
+				for i := int64(0); i < value.Size(); i++ {
+					obj.requiredFields[dcField].Add(value.Get(int(i)))
+				}
+
+				s.log.Debugf("Using default value required for field \"%s\" %s", dcField.Get_name(), dcField.Format_data(obj.requiredFields[dcField]))
 			}
-
-			s.log.Debugf("Using default value required for field \"%s\" %s", dcField.Get_name(), dcField.Format_data(obj.requiredFields[dcField]))
-		}
-	} else if dcField.Is_ram() {
-		if data, ok := obj.fieldUpdates[dcField]; ok {
-			obj.ramFields[dcField] = data
-			delete(obj.fieldUpdates, dcField)
+		} else if dcField.Is_ram() {
+			if data, ok := obj.fieldUpdates[dcField]; ok {
+				obj.ramFields[dcField] = data
+				delete(obj.fieldUpdates, dcField)
+			}
 		}
 	}
-}
 
 	dobj := s.CreateDistributedObjectWithData(obj.do, obj.parent, obj.zone, obj.dclass,
 		obj.requiredFields, obj.ramFields)
@@ -332,7 +332,7 @@ func (s *DatabaseStateServer) finalizeLoading(obj *LoadingObject) {
 	}
 }
 
-func (s * DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
+func (s *DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
 	context := dgi.ReadUint32()
 	if obj, ok := s.contextToLoading[context]; ok {
 		delete(s.contextToLoading, context)
@@ -369,8 +369,9 @@ func (s * DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
 	s.log.Warnf("Received unknown GetStoredValues context=%d", context)
 }
 
-func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator)  {
+func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 	do := dgi.ReadDoid()
+
 	if obj, ok := s.loading[do]; ok {
 		// Add to the queue and leave it alone.  It'll be bounced back
 		// when finished.
@@ -378,8 +379,10 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator)  {
 		return
 	}
 
+	obj, _ := s.objects[do]
+
 	fieldId := dgi.ReadUint16()
-	field := core.DC.Get_field_by_index(int(fieldId))
+	field := obj.dclass.Get_inherited_field(int(fieldId))
 	if field == dc.SwigcptrDCField(0) {
 		s.log.Warnf("Update received for unknown field ID=%d", fieldId)
 	}
@@ -422,6 +425,8 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 		return
 	}
 
+	obj, _ := s.objects[do]
+
 	count := dgi.ReadUint16()
 
 	DCLock.Lock()
@@ -438,7 +443,7 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 
 	for i := 0; i < int(count); i++ {
 		fieldId := unpacker.Raw_unpack_uint16().(uint)
-		field := core.DC.Get_field_by_index(int(fieldId))
+		field := obj.dclass.Get_inherited_field(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			s.log.Warnf("Update received for unknown field ID=%d", fieldId)
 			return
@@ -561,6 +566,8 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		return
 	}
 
+	obj, _ := s.objects[do]
+
 	var context uint32
 	var fields []dc.DCField
 
@@ -568,7 +575,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		fieldId := dgi.ReadUint16()
 		context = dgi.ReadUint32()
 
-		field := core.DC.Get_field_by_index(int(fieldId))
+		field := obj.dclass.Get_inherited_field(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
 			return
@@ -579,7 +586,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		fields = []dc.DCField{}
 		for dgi.RemainingSize() >= Blobsize {
 			fieldId := dgi.ReadUint16()
-			field := core.DC.Get_field_by_index(int(fieldId))
+			field := obj.dclass.Get_inherited_field(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
 				s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
 				return
@@ -593,8 +600,8 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		name2FieldId[field.Get_name()] = uint16(field.Get_number())
 	}
 	query := &FieldQuery{
-		do: do,
-		from: sender,
+		do:      do,
+		from:    sender,
 		context: context,
 
 		multiple: multiple,
@@ -794,21 +801,21 @@ func (s *DatabaseStateServer) handleDClassQuery(dgi *DatagramIterator, query *DC
 	// Now thats we've got our name, we can init the object temporary
 	// and call handleQueryAll there when finished.
 	obj := LoadingObject{
-		dbss: s,
-		do: do,
+		dbss:   s,
+		do:     do,
 		parent: INVALID_DOID,
-		zone: INVALID_ZONE,
+		zone:   INVALID_ZONE,
 		dclass: dclass,
 
 		requiredFields: FieldValues{},
-		ramFields: FieldValues{},
+		ramFields:      FieldValues{},
 
 		fieldUpdates: FieldValues{},
 
 		context: s.context,
 		dgQueue: []Datagram{},
 
-		queryAllFrom: query.from,
+		queryAllFrom:    query.from,
 		queryAllContext: query.context,
 	}
 
@@ -821,7 +828,7 @@ func (s *DatabaseStateServer) handleDClassQuery(dgi *DatagramIterator, query *DC
 	for i := 0; i < count; i++ {
 		field := dclass.Get_inherited_field(i)
 		molecular := field.As_molecular_field().(dc.DCMolecularField)
-		if (molecular != dc.SwigcptrDCMolecularField(0)) {
+		if molecular != dc.SwigcptrDCMolecularField(0) {
 			continue
 		}
 		if field.Is_required() && field.Is_db() {

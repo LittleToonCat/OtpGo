@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	dc "github.com/LittleToonCat/dcparser-go"
-	"github.com/yuin/gopher-lua"
+	lua "github.com/yuin/gopher-lua"
 )
 
 // Participant wrappers for Lua
@@ -42,30 +42,30 @@ func CheckParticipant(L *lua.LState, n int) *LuaRole {
 }
 
 var ParticipantMethods = map[string]lua.LGFunction{
-	"info": LuaInfo,
-	"warn": LuaWarn,
-	"error": LuaError,
-	"debug": LuaDebug,
-	"subscribeChannel": LuaSubscribeChannel,
-	"unsubscribeChannel": LuaUnsubscribeChannel,
-	"subscribeRange": LuaSubscribeRange,
-	"unsubscribeRange": LuaUnsubscribeRange,
-	"handleUpdateField": LuaHandleUpdateField,
-	"addServerHeaderWithAvatarId": LuaAddServerHeaderWithAvatarId,
+	"info":                         LuaInfo,
+	"warn":                         LuaWarn,
+	"error":                        LuaError,
+	"debug":                        LuaDebug,
+	"subscribeChannel":             LuaSubscribeChannel,
+	"unsubscribeChannel":           LuaUnsubscribeChannel,
+	"subscribeRange":               LuaSubscribeRange,
+	"unsubscribeRange":             LuaUnsubscribeRange,
+	"handleUpdateField":            LuaHandleUpdateField,
+	"addServerHeaderWithAvatarId":  LuaAddServerHeaderWithAvatarId,
 	"addServerHeaderWithAccountId": LuaAddServerHeaderWithAccountId,
-	"getSender": LuaGetSender,
-	"getAccountIdFromSender": LuaGetAccountIdFromSender,
-	"getAvatarIdFromSender": LuaGetAvatarIdFromSender,
-	"sendUpdate": LuaSendUpdate,
-	"sendUpdateToAvatarId": LuaSendUpdateToAvatarId,
-	"sendUpdateToAccountId": LuaSendUpdateToAccountId,
-	"queryObjectFields": LuaQueryObjectFields,
-	"setDatabaseValues": LuaSetDatabaseValues,
-	"routeDatagram": LuaRouteDatagram,
-	"writeServerEvent": LuaWriteServerEvent,
-	"createDatabaseObject": LuaCreateDatabaseObject,
-	"getDatabaseValues": LuaGetDatabaseValues,
-	"packFieldToDatagram": LuaPackFieldToDatagram,
+	"getSender":                    LuaGetSender,
+	"getAccountIdFromSender":       LuaGetAccountIdFromSender,
+	"getAvatarIdFromSender":        LuaGetAvatarIdFromSender,
+	"sendUpdate":                   LuaSendUpdate,
+	"sendUpdateToAvatarId":         LuaSendUpdateToAvatarId,
+	"sendUpdateToAccountId":        LuaSendUpdateToAccountId,
+	"queryObjectFields":            LuaQueryObjectFields,
+	"setDatabaseValues":            LuaSetDatabaseValues,
+	"routeDatagram":                LuaRouteDatagram,
+	"writeServerEvent":             LuaWriteServerEvent,
+	"createDatabaseObject":         LuaCreateDatabaseObject,
+	"getDatabaseValues":            LuaGetDatabaseValues,
+	"packFieldToDatagram":          LuaPackFieldToDatagram,
 }
 
 func LuaInfo(L *lua.LState) int {
@@ -172,7 +172,7 @@ func LuaAddServerHeaderWithAvatarId(L *lua.LState) int {
 	sender := Channel_t(L.CheckInt(4))
 	msgType := uint16(L.CheckInt(5))
 
-	dg.AddServerHeader(Channel_t(avatarId + (1 << 32)), sender, msgType)
+	dg.AddServerHeader(Channel_t(avatarId+(1<<32)), sender, msgType)
 	return 1
 }
 
@@ -184,7 +184,7 @@ func LuaAddServerHeaderWithAccountId(L *lua.LState) int {
 	sender := Channel_t(L.CheckInt(4))
 	msgType := uint16(L.CheckInt(5))
 
-	dg.AddServerHeader(Channel_t(accountId + (3 << 32)), sender, msgType)
+	dg.AddServerHeader(Channel_t(accountId+(3<<32)), sender, msgType)
 	return 1
 }
 
@@ -208,7 +208,7 @@ func LuaSendUpdateToAvatarId(L *lua.LState) int {
 	fieldName := L.CheckString(5)
 	v := L.Get(6)
 
-	participant.sendUpdateToChannel(Channel_t(avatarId + (1 << 32)), Doid_t(from), className, fieldName, v)
+	participant.sendUpdateToChannel(Channel_t(avatarId+(1<<32)), Doid_t(from), className, fieldName, v)
 	return 1
 }
 
@@ -220,7 +220,7 @@ func LuaSendUpdateToAccountId(L *lua.LState) int {
 	fieldName := L.CheckString(5)
 	v := L.Get(6)
 
-	participant.sendUpdateToChannel(Channel_t(accountId + (3 << 32)), Doid_t(from), className, fieldName, v)
+	participant.sendUpdateToChannel(Channel_t(accountId+(3<<32)), Doid_t(from), className, fieldName, v)
 	return 1
 }
 
@@ -438,7 +438,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		unpacker.Set_unpack_data(packedData)
 		for i := uint16(0); i < found; i++ {
 			fieldId := unpacker.Raw_unpack_uint16().(uint)
-			field := cls.Get_field_by_index(int(fieldId))
+			field := cls.Get_field(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
 				participant.log.Warnf("queryObjectFields: Unknown field %d for class \"%s\"!", fieldId, clsName)
 				continue
@@ -532,7 +532,7 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 	value := L.Get(5)
 	includeFieldId := L.CheckBool(6)
 	includeLength := false
-	if (L.GetTop() == 7) {
+	if L.GetTop() == 7 {
 		includeLength = L.CheckBool(7)
 	}
 

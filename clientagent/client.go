@@ -77,10 +77,10 @@ type Client struct {
 	state            ClientState
 	authenticated    bool
 
-	context          uint32
-	createContextMap map[uint32]func(doId Doid_t)
-	getContextMap    map[uint32]func(doId Doid_t, dgi *DatagramIterator)
-	queryFieldsContextMap    map[uint32]func(dgi *DatagramIterator)
+	context               uint32
+	createContextMap      map[uint32]func(doId Doid_t)
+	getContextMap         map[uint32]func(doId Doid_t, dgi *DatagramIterator)
+	queryFieldsContextMap map[uint32]func(dgi *DatagramIterator)
 
 	queue         []Datagram
 	queueLock     sync.Mutex
@@ -111,22 +111,22 @@ type Client struct {
 
 func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	c := &Client{
-		config: config,
-		ca: ca,
-		queue: []Datagram{},
-		shouldProcess: make(chan bool),
-		stopChan: make(chan bool),
-		createContextMap: map[uint32]func(doId Doid_t){},
-		getContextMap: map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
+		config:                config,
+		ca:                    ca,
+		queue:                 []Datagram{},
+		shouldProcess:         make(chan bool),
+		stopChan:              make(chan bool),
+		createContextMap:      map[uint32]func(doId Doid_t){},
+		getContextMap:         map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
 		queryFieldsContextMap: map[uint32]func(dgi *DatagramIterator){},
-		authenticated: false,
-		visibleObjects: map[Doid_t]VisibleObject{},
-		declaredObjects: map[Doid_t]DeclaredObject{},
-		ownedObjects: map[Doid_t]OwnedObject{},
-		pendingObjects: map[Doid_t]uint32{},
-		interests: map[uint16]Interest{},
-		pendingInterests: map[uint32]*InterestOperation{},
-		sendableFields: map[Doid_t][]uint16{},
+		authenticated:         false,
+		visibleObjects:        map[Doid_t]VisibleObject{},
+		declaredObjects:       map[Doid_t]DeclaredObject{},
+		ownedObjects:          map[Doid_t]OwnedObject{},
+		pendingObjects:        map[Doid_t]uint32{},
+		interests:             map[uint16]Interest{},
+		pendingInterests:      map[uint32]*InterestOperation{},
+		sendableFields:        map[Doid_t][]uint16{},
 	}
 	c.init(config, conn)
 	c.Init(c)
@@ -139,9 +139,9 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	c.channel = c.allocatedChannel
 
 	c.log = log.WithFields(log.Fields{
-		"name": fmt.Sprintf("Client (%d)", c.channel),
+		"name":    fmt.Sprintf("Client (%d)", c.channel),
 		"modName": "Client",
-		"id": fmt.Sprintf("%d", c.channel),
+		"id":      fmt.Sprintf("%d", c.channel),
 	})
 
 	c.SubscribeChannel(c.channel)
@@ -563,7 +563,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		if sender != c.channel {
 			field := dgi.ReadUint16()
-			dcField := dclass.Get_field_by_index(int(field))
+			dcField := dclass.Get_inherited_field(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
 				c.log.Warnf("Received server-side field update for object %s(%d) with unknown field %d", dclass.Get_name(), do, field)
 				return
@@ -741,10 +741,10 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	default:
 		if luaFunc, ok := c.ca.L.GetGlobal("handleDatagram").(*lua.LFunction); ok {
 			c.ca.CallLuaFunction(luaFunc, c,
-			// Arguments:
-			NewLuaClient(c.ca.L, c),
-			lua.LNumber(msgType),
-			NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
+				// Arguments:
+				NewLuaClient(c.ca.L, c),
+				lua.LNumber(msgType),
+				NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
 		} else {
 			c.log.Errorf("Received unknown server msgtype %d", msgType)
 		}
@@ -752,10 +752,10 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 }
 
 type InterestOperation struct {
-	hasTotal bool
+	hasTotal   bool
 	totalCount int
-	finished bool
-	total    int
+	finished   bool
+	total      int
 
 	timeout      *time.Ticker
 	finishedChan chan bool
@@ -935,7 +935,6 @@ func (c *Client) Terminate(err error) {
 		event.Send()
 	}
 
-
 	c.heartbeat.Stop()
 	// (Sending to these channels from ReceiveDatagram or startHeartbeat
 	// will deadlock, starting a separate goroutine fixes this.)
@@ -992,9 +991,9 @@ func (c *Client) queueLoop() {
 
 					// Pass the datagram over to Lua to handle:
 					c.ca.CallLuaFunction(c.ca.receiveDatagramFunc, c,
-					// Arguments:
-					NewLuaClient(c.ca.L, c),
-					NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
+						// Arguments:
+						NewLuaClient(c.ca.L, c),
+						NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
 					finish <- true
 				}()
 
@@ -1120,7 +1119,6 @@ func (c *Client) handleAddOwnership(do Doid_t, parent Doid_t, zone Zone_t, dc ui
 
 	resp := NewDatagram()
 	resp.AddUint16(uint16(CLIENT_CREATE_OBJECT_REQUIRED_OTHER_OWNER))
-	resp.AddLocation(parent, zone)
 	resp.AddUint16(dc)
 	resp.AddDoid(do)
 	resp.AddData(dgi.ReadRemainder())
@@ -1162,7 +1160,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 		return
 	}
 
-	dcField := dclass.Get_field_by_index(int(field))
+	dcField := dclass.Get_inherited_field(int(field))
 	if dcField == dc.SwigcptrDCField(0) {
 		c.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_FIELD, fmt.Sprintf("Attempted to send field update to %s(%d) with unknown field: %d", dclass.Get_name(), do, field), true)
 		// Skip the data to prevent the excess data ejection.
@@ -1305,7 +1303,6 @@ func (c *Client) handleAddObject(do Doid_t, parent Doid_t, zone Zone_t, dc uint1
 
 	resp := NewDatagram()
 	resp.AddUint16(uint16(msgType))
-	resp.AddLocation(parent, zone)
 	resp.AddUint16(dc)
 	resp.AddDoid(do)
 	resp.AddData(dgi.ReadRemainder())
@@ -1328,10 +1325,10 @@ func (c *Client) handleInterestDone(interestId uint16, context uint32) {
 }
 
 func (c *Client) SetChannel(channel Channel_t) {
-	if (c.channel == channel) {
+	if c.channel == channel {
 		return
 	}
-	if (c.channel != c.allocatedChannel) {
+	if c.channel != c.allocatedChannel {
 		c.UnsubscribeChannel(c.channel)
 	}
 	c.channel = channel
