@@ -47,11 +47,17 @@ func (s *StateServer) InitStateServer(config core.Role, logName string, logModNa
 }
 
 func (s *StateServer) registerObjects(objects []struct{ID int; Class string}) {
-	// Create an ObjectServer object to rep ourself.
+	// Create an ObjectServer or DistributedObject object to rep ourself.
 	dclass := core.DC.Get_class_by_name("ObjectServer")
+
+	if (dclass == dc.SwigcptrDCClass(0)) {
+		// Older client support
+		dclass = core.DC.Get_class_by_name("DistributedObject")
+	}
+
 	if (dclass != dc.SwigcptrDCClass(0)) {
 		dg := NewDatagram()
-		dg.AddString("ObjectServer") // setName
+		dg.AddString(dclass.Get_name()) // setName
 		dg.AddUint32(uint32(core.DC.Get_hash())) // setDcHash
 
 		dgi := NewDatagramIterator(&dg)
