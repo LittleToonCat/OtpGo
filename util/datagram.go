@@ -54,6 +54,11 @@ func (d *Datagram) AddVector(v dc.Vector_uchar) {
 	d.Write((data))
 }
 
+func (d *Datagram) PadBytes(size int) {
+	bs := make([]byte, size)
+	d.Write([]byte(bs))
+}
+
 func (d *Datagram) AddString(v string) {
 	d.AddUint16(uint16(len(v)))
 	d.Write([]byte(v))

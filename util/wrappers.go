@@ -88,6 +88,7 @@ var DatagramMethods = map[string]lua.LGFunction{
 	"addBool": LuaAddBool,
 	"addString": LuaAddString,
 	"addData": LuaAddData,
+	"padBytes": LuaPadBytes,
 }
 
 func LuaAddServerHeader(L *lua.LState) int {
@@ -181,6 +182,13 @@ func LuaAddData(L * lua.LState) int {
 	dg := CheckDatagram(L, 1)
 	v := L.CheckString(2)
 	dg.AddData([]byte(v))
+	return 1
+}
+
+func LuaPadBytes(L * lua.LState) int {
+	dg := CheckDatagram(L, 1)
+	v := L.CheckInt(2)
+	dg.PadBytes(v)
 	return 1
 }
 
