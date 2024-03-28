@@ -12,7 +12,7 @@ import (
 	"github.com/apex/log"
 )
 
-type FieldValues map[dc.DCField]dc.Vector_uchar
+type FieldValues map[dc.DCField][]byte
 
 type DistributedObject struct {
 	sync.Mutex
@@ -85,8 +85,8 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 		zone:           0,
 		dclass:         dclass,
 		zoneObjects:    make(map[Zone_t][]Doid_t),
-		requiredFields: make(map[dc.DCField]dc.Vector_uchar),
-		ramFields:      make(map[dc.DCField]dc.Vector_uchar),
+		requiredFields: make(map[dc.DCField][]byte),
+		ramFields:      make(map[dc.DCField][]byte),
 		log: log.WithFields(log.Fields{
 			"name":    fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
 			"modName": dclass.Get_name(),
@@ -96,14 +96,6 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 
 	DCLock.Lock()
 
-	unpacker := dc.NewDCPacker()
-	defer dc.DeleteDCPacker(unpacker)
-
-	packedData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(packedData)
-
-	unpacker.Set_unpack_data(packedData)
-
 	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
 		field := dclass.Get_inherited_field(i)
 		if field.Is_required() {
@@ -112,38 +104,35 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 					continue
 				}
 			}
-			unpacker.Begin_unpack(field)
-			do.requiredFields[field] = unpacker.Unpack_literal_value().(dc.Vector_uchar)
-			if unpacker.End_unpack() && field.Validate_ranges(do.requiredFields[field]) {
-				do.log.Debugf("Stored REQUIRED field \"%s\": %s", field.Get_name(), field.Format_data(do.requiredFields[field]))
+			if data, ok := dgi.ReadDCField(field, true, false); ok {
+				do.requiredFields[field] = data
+				do.log.Debugf("Stored REQUIRED field \"%s\": %s", field.Get_name(), FormatFieldData(field, do.requiredFields[field]))
 			} else {
-				return false, nil, fmt.Errorf("received truncated data for REQUIRED field \"%s\"\n%s", field.Get_name(), DumpVector(do.requiredFields[field]))
+				return false, nil, fmt.Errorf("received truncated data for REQUIRED field \"%s\"\n%x", field.Get_name(), data)
 			}
 		}
 	}
 
 	if hasOther {
-		count := unpacker.Raw_unpack_uint16().(uint)
+		count := dgi.ReadUint16()
 		for i := 0; i < int(count); i++ {
-			id := unpacker.Raw_unpack_uint16().(uint)
+			id := dgi.ReadUint16()
 			field := dclass.Get_field_by_index(int(id))
 			if field == dc.SwigcptrDCField(0) {
 				do.log.Errorf("Receieved unknown field with ID %d within an OTHER section!  Ignoring.", id)
 				break
 			}
 
-			unpacker.Begin_unpack(field)
 			if !field.Is_ram() {
 				do.log.Errorf("Received non-RAM field %s within an OTHER section!", field.Get_name())
-				unpacker.Unpack_skip()
-				unpacker.End_unpack()
+				dgi.SkipDCField(field, false)
 				continue
 			}
-			do.ramFields[field] = unpacker.Unpack_literal_value().(dc.Vector_uchar)
-			if unpacker.End_unpack() && field.Validate_ranges(do.ramFields[field]) {
-				do.log.Debugf("Stored optional RAM field \"%s\": %s", field.Get_name(), field.Format_data(do.ramFields[field]))
+			if data, ok := dgi.ReadDCField(field, true, false); ok {
+				do.ramFields[field] = data
+				do.log.Debugf("Stored optional RAM field \"%s\": %s", field.Get_name(), FormatFieldData(field, do.ramFields[field]))
 			} else {
-				return false, nil, fmt.Errorf("received truncated data for OTHER field \"%s\"\n%s", field.Get_name(), DumpVector(do.ramFields[field]))
+				return false, nil, fmt.Errorf("received truncated data for OTHER field \"%s\"\n%s", field.Get_name(), dgi)
 			}
 		}
 	}
@@ -198,7 +187,7 @@ func (d *DistributedObject) appendRequiredData(dg Datagram, client bool, owner b
 
 		if field.Is_required() && (!client || field.Is_broadcast() ||
 			field.Is_clrecv() || (owner && field.Is_ownrecv())) {
-			dg.AddVector(d.requiredFields[field])
+			dg.AddData(d.requiredFields[field])
 		}
 	}
 }
@@ -218,7 +207,7 @@ func (d *DistributedObject) appendRequiredDataDoidLast(dg Datagram, client bool,
 
 		if field.Is_required() && (!client || field.Is_broadcast() ||
 			field.Is_clrecv() || (owner && field.Is_ownrecv())) {
-			dg.AddVector(d.requiredFields[field])
+			dg.AddData(d.requiredFields[field])
 		}
 	}
 }
@@ -239,7 +228,7 @@ func (d *DistributedObject) appendOtherData(dg Datagram, client bool, owner bool
 		dg.AddUint16(uint16(len(broadcastFields)))
 		for _, field := range broadcastFields {
 			dg.AddUint16(uint16(field.Get_number()))
-			dg.AddVector(d.ramFields[field])
+			dg.AddData(d.ramFields[field])
 		}
 	} else {
 		var fields []dc.DCField
@@ -253,7 +242,7 @@ func (d *DistributedObject) appendOtherData(dg Datagram, client bool, owner bool
 		dg.AddUint16(uint16(len(fields)))
 		for _, field := range fields {
 			dg.AddUint16(uint16(field.Get_number()))
-			dg.AddVector(d.ramFields[field])
+			dg.AddData(d.ramFields[field])
 		}
 	}
 }
@@ -440,18 +429,6 @@ func (d *DistributedObject) annihilate(sender Channel_t, notifyParent bool) {
 	dg.AddDoid(d.do)
 	d.RouteDatagram(dg)
 
-	// Clean up vectors
-	for field, data := range d.requiredFields {
-		d.log.Debugf("Cleaning up REQUIRED field \"%s\"", field.Get_name())
-		dc.DeleteVector_uchar(data)
-		delete(d.requiredFields, field)
-	}
-	for field, data := range d.ramFields {
-		d.log.Debugf("Cleaning up RAM field \"%s\"", field.Get_name())
-		dc.DeleteVector_uchar(data)
-		delete(d.ramFields, field)
-	}
-
 	d.deleteChildren(sender)
 	delete(d.stateserver.objects, d.do)
 	d.log.Debug("Deleted object.")
@@ -475,21 +452,13 @@ func (d *DistributedObject) wakeChildren() {
 	d.RouteDatagram(dg)
 }
 
-func (d *DistributedObject) saveField(field dc.DCField, data dc.Vector_uchar) bool {
+func (d *DistributedObject) saveField(field dc.DCField, data []byte) bool {
 	if field.Is_required() {
-		d.log.Debugf("Storing REQUIRED field \"%s\": %s", field.Get_name(), field.Format_data(data))
-		if oldData, ok := d.requiredFields[field]; ok {
-			// Clean up old data.
-			dc.DeleteVector_uchar(oldData)
-		}
+		d.log.Debugf("Storing REQUIRED field \"%s\": %s", field.Get_name(), FormatFieldData(field, data))
 		d.requiredFields[field] = data
 		return true
 	} else if field.Is_ram() {
-		d.log.Debugf("Storing RAM field \"%s\": %s", field.Get_name(), field.Format_data(data))
-		if oldData, ok := d.ramFields[field]; ok {
-			// Clean up old data.
-			dc.DeleteVector_uchar(oldData)
-		}
+		d.log.Debugf("Storing RAM field \"%s\": %s", field.Get_name(), FormatFieldData(field, data))
 		d.ramFields[field] = data
 		return true
 	}
@@ -504,86 +473,67 @@ func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channe
 		return false
 	}
 
-	DCLock.Lock()
-	packedData := dgi.ReadRemainderAsVector()
-
-	// Instead of constructing our DCPacker, let's call the field's Validate_ranges
-	// method instead which does the job of validating the data for us.
-	// Also checks for no extra bytes.
-	if !field.Validate_ranges(packedData) {
-		d.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", field.Get_name(), DumpVector(packedData), dgi)
-		dc.DeleteVector_uchar(packedData)
-		DCLock.Unlock()
-		return false
+	// packedData := dgi.ReadRemainderAsVector()
+	offset := dgi.Tell()
+	data, ok := dgi.ReadDCField(field, true, true)
+	if !ok || dgi.RemainingSize() > 0 {
+		dgi.Seek(offset)
+		d.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%x", field.Get_name(), dgi, dgi.ReadRemainder())
 	}
 
-	DCLock.Unlock()
 	// Hand things over to finishHandleUpdate
-	d.finishHandleUpdate(field, packedData, sender)
+	d.finishHandleUpdate(field, data, sender)
 	return true
 }
 
 func (d *DistributedObject) handleMultipleUpdates(dgi *DatagramIterator, count uint16, sender Channel_t) bool {
-	unpacker := dc.NewDCPacker()
-	defer dc.DeleteDCPacker(unpacker)
-
-	remainder := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(remainder)
-
-	unpacker.Set_unpack_data(remainder)
-
 	for i := 0; i < int(count); i++ {
-		fieldId := unpacker.Raw_unpack_uint16().(uint)
+		fieldId := dgi.ReadUint16()
 		field := d.dclass.Get_field_by_index(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			d.log.Warnf("Update received for unknown field ID=%d", fieldId)
 			return false
 		}
 
-		unpacker.Begin_unpack(field)
-		packedData := unpacker.Unpack_literal_value().(dc.Vector_uchar)
-		if !unpacker.End_unpack() {
-			d.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", field.Get_name(), DumpVector(packedData), dgi)
-			dc.DeleteVector_uchar(packedData)
+		offset := dgi.Tell()
+		data, ok := dgi.ReadDCField(field, true, true)
+		if !ok {
+			dgi.Seek(offset)
+			d.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%x", field.Get_name(), dgi, dgi.ReadRemainder())
 			return false
 		}
-		d.finishHandleUpdate(field, packedData, sender)
+		d.finishHandleUpdate(field, data, sender)
 	}
 
 	return true
 }
 
-func (d *DistributedObject) finishHandleUpdate(field dc.DCField, packedData dc.Vector_uchar, sender Channel_t) {
+func (d *DistributedObject) finishHandleUpdate(field dc.DCField, data []byte, sender Channel_t) {
 	DCLock.Lock()
 	defer DCLock.Unlock()
 	// Print out the human formatted data
-	d.log.Debugf("Handling update for field \"%s\": %s", field.Get_name(), field.Format_data(packedData))
-
-	// We need to keep track if the data is stored or not.  That way, we can
-	// cleanly delete it if we don't need it.
-	stored := false
+	d.log.Debugf("Handling update for field \"%s\": %s", field.Get_name(), FormatFieldData(field, data))
 
 	molecular := field.As_molecular_field().(dc.DCMolecularField)
 	if molecular != dc.SwigcptrDCMolecularField(0) {
-		// Time to pull out the DCPacker for this one.
-		unpacker := dc.NewDCPacker()
-		defer dc.DeleteDCPacker(unpacker)
-		unpacker.Set_unpack_data(packedData)
+		// Time to pull out a DatagramIterator for this one.
+		dg := NewDatagram()
+		dg.AddData(data)
+		dgi := NewDatagramIterator(&dg)
 
 		count := molecular.Get_num_atomics()
 		for n := 0; n < count; n++ {
-			atomic := molecular.Get_atomic(n)
-			unpacker.Begin_unpack(atomic)
-			atomicData := unpacker.Unpack_literal_value().(dc.Vector_uchar)
-			if !unpacker.End_unpack() {
-				// TODO
+			atomic := molecular.Get_atomic(n).As_field().(dc.DCField)
+			atomicData, ok := dgi.ReadDCField(atomic, true, false)
+			if !ok {
+				d.log.Errorf("Failed to read atomic field \"%s\" of molecular field \"%s\".", atomic.Get_name(), molecular.Get_name())
+				return
 			}
-			// atomicData is a whole seperate pointer, we do not keep
-			// track of these records.
-			d.saveField(atomic.As_field().(dc.DCField), atomicData)
+			// We save atomic fields seperately, not whole moleculars.
+			d.saveField(atomic, atomicData)
 		}
 	} else {
-		stored = d.saveField(field, packedData)
+		d.saveField(field, data)
 	}
 
 	var targets []Channel_t
@@ -604,13 +554,8 @@ func (d *DistributedObject) finishHandleUpdate(field dc.DCField, packedData dc.V
 		dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_UPDATE_FIELD)
 		dg.AddDoid(d.do)
 		dg.AddUint16(uint16(field.Get_number()))
-		dg.AddVector(packedData)
+		dg.AddData(data)
 		d.RouteDatagram(dg)
-	}
-
-	if !stored {
-		// We haven't stored the data, It's safe to delete.
-		dc.DeleteVector_uchar(packedData)
 	}
 }
 
@@ -638,12 +583,12 @@ func (d *DistributedObject) handleOneGet(out *Datagram, fieldId uint16, allowUns
 		if !subfield {
 			out.AddUint16(fieldId)
 		}
-		out.AddVector(data)
+		out.AddData(data)
 	} else if data, ok := d.ramFields[field]; ok {
 		if !subfield {
 			out.AddUint16(fieldId)
 		}
-		out.AddVector(data)
+		out.AddData(data)
 	} else {
 		return allowUnset
 	}

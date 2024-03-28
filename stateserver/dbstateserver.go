@@ -119,36 +119,26 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 		DCLock.Lock()
 		defer DCLock.Unlock()
 
-		unpacker := dc.NewDCPacker()
-		defer dc.DeleteDCPacker(unpacker)
-
-		remainder := dgi.ReadRemainderAsVector()
-		defer dc.DeleteVector_uchar(remainder)
-		unpacker.Set_unpack_data(remainder)
-
 		for i := uint16(0); i < count; i++ {
-			field := unpacker.Raw_unpack_uint16().(uint)
+			field := dgi.ReadUint16()
 			dcField := dclass.Get_field_by_index(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
 				s.log.Errorf("Received invalid field index %d", field)
 				return
 			}
 
-			unpacker.Begin_unpack(dcField)
 			if !(dcField.Is_required() || dcField.Is_ram()) {
 				s.log.Errorf("Recieved NON-RAM field \"%s\" within an OTHER section", dcField.Get_name())
-				unpacker.Unpack_skip()
-				unpacker.End_unpack()
+				dgi.SkipDCField(dcField, false)
 				continue
 			}
-			packedData := unpacker.Unpack_literal_value().(dc.Vector_uchar)
-			if !unpacker.End_unpack() {
-				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", dcField.Get_name(), DumpUnpacker(unpacker))
-				dc.DeleteVector_uchar(packedData)
+			data, ok := dgi.ReadDCField(dcField, true, false)
+			if !ok {
+				s.log.Errorf("Received invalid update data for field \"%s\"!", dcField.Get_name())
 				continue
 			}
 
-			obj.fieldUpdates[dcField] = packedData
+			obj.fieldUpdates[dcField] = data
 		}
 	}
 
@@ -210,10 +200,10 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 		return
 	}
 
-	packedValues := make([]dc.Vector_uchar, count)
+	packedValues := make([][]byte, count)
 	hasValue := map[string]bool{}
 	for i := uint16(0); i < count; i++ {
-		packedValues[i] = dgi.ReadVector()
+		packedValues[i] = dgi.ReadBlob()
 		hasValue[fields[i]] = dgi.ReadBool()
 		if !hasValue[fields[i]] {
 			s.log.Debugf("Data for field \"%s\" not found", fields[i])
@@ -228,36 +218,28 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 		dcField := obj.dclass.Get_field_by_name(field)
 		if dcField == dc.SwigcptrDCField(0) {
 			s.log.Warnf("Field \"%s\" does not exist for class \"%s\"", field, obj.dclass.Get_name())
-			if found {
-				dc.DeleteVector_uchar(packedValues[i])
-			}
 			continue
 		}
 
 		if !(dcField.Is_required() || dcField.Is_ram()) {
 			s.log.Errorf("Recieved NON-RAM field \"%s\"", field)
-			if found {
-				dc.DeleteVector_uchar(packedValues[i])
-			}
 			continue
 		}
 
 		if _, ok := obj.fieldUpdates[dcField]; ok {
 			// This has already been overridden by the
 			// activate_other message earlier, so ignore.
-			dc.DeleteVector_uchar(packedValues[i])
 			continue
 		}
 
 		if found {
 			data := packedValues[i]
 			// Validate that the data is correct
-			if !dcField.Validate_ranges(data) {
-				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field, DumpVector(data))
-				dc.DeleteVector_uchar(data)
+			if !ValidateDCRanges(dcField, data) {
+				s.log.Errorf("Received invalid update data for field \"%s\"!\n%x", field, data)
 				continue
 			}
-			s.log.Debugf("Got data for field \"%s\": %s", fields[i], dcField.Format_data(data))
+			s.log.Debugf("Got data for field \"%s\": %s", fields[i], FormatFieldData(dcField, data))
 			obj.fieldUpdates[dcField] = data
 		} else {
 			s.log.Debugf("Data for field \"%s\" not found", fields[i])
@@ -279,18 +261,8 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 			delete(obj.fieldUpdates, dcField)
 		} else {
 			// Use the default value.
-
-			// HACK: Because Get_default_value returns a pointer which will
-			// become lost when accidentally deleted, we'd have to copy it.
-			// into a new blob instance.
-			value := dcField.Get_default_value()
-
-			obj.requiredFields[dcField] = dc.NewVector_uchar()
-			for i := int64(0); i < value.Size(); i++ {
-				obj.requiredFields[dcField].Add(value.Get(int(i)))
-			}
-
-			s.log.Debugf("Using default value required for field \"%s\" %s", dcField.Get_name(), dcField.Format_data(obj.requiredFields[dcField]))
+			obj.requiredFields[dcField] = VectorToByte(dcField.Get_default_value())
+			s.log.Debugf("Using default value required for field \"%s\" %s", dcField.Get_name(), FormatFieldData(dcField, obj.requiredFields[dcField]))
 		}
 	} else if dcField.Is_ram() {
 		if data, ok := obj.fieldUpdates[dcField]; ok {
@@ -309,12 +281,6 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 		dgi := NewDatagramIterator(&dg)
 		dgi.SeekPayload()
 		dobj.HandleDatagram(dg, dgi)
-	}
-
-	// Clean up the unused vectors
-	for field, data := range obj.fieldUpdates {
-		dc.DeleteVector_uchar(data)
-		delete(obj.fieldUpdates, field)
 	}
 
 	s.finalizeLoading(obj)
@@ -389,26 +355,22 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator)  {
 		return
 	}
 
-	packedData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(packedData)
+	data, ok := dgi.ReadDCField(field, true, true)
 
-	// Instead of constructing our DCPacker, let's call the field's Validate_ranges
-	// method instead which does the job of validating the data for us.
-	// Also checks for no extra bytes.
-	if !field.Validate_ranges(packedData) {
-		s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), DumpVector(packedData))
+	if !ok || dgi.RemainingSize() > 0 {
+		s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), dgi)
 		return
 	}
 
-	s.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.\n%s", field.Get_name(), field.Format_data(packedData), do, DumpVector(packedData))
+	s.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.\n%s", field.Get_name(), FormatFieldData(field, data), do, dgi)
 
 	dg := NewDatagram()
 	dg.AddServerHeader(s.database, Channel_t(do), DBSERVER_SET_STORED_VALUES)
 	dg.AddDoid(do)
 	dg.AddUint16(1) // Field count
 	dg.AddString(field.Get_name())
-	dg.AddUint16(uint16(packedData.Size()))
-	dg.AddVector(packedData)
+	dg.AddUint16(uint16(len(data)))
+	dg.AddData(data)
 
 	s.RouteDatagram(dg)
 }
@@ -427,17 +389,10 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 	DCLock.Lock()
 	defer DCLock.Unlock()
 
-	unpacker := dc.NewDCPacker()
-	defer dc.DeleteDCPacker(unpacker)
-
-	remainder := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(remainder)
-	unpacker.Set_unpack_data(remainder)
-
-	fieldUpdates := map[string]dc.Vector_uchar{}
+	fieldUpdates := map[string][]byte{}
 
 	for i := 0; i < int(count); i++ {
-		fieldId := unpacker.Raw_unpack_uint16().(uint)
+		fieldId := dgi.ReadUint16()
 		field := core.DC.Get_field_by_index(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			s.log.Warnf("Update received for unknown field ID=%d", fieldId)
@@ -446,24 +401,21 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 
 		if !field.Is_db() {
 			// Skip the data.
-			unpacker.Unpack_skip()
-			// ..and even that could fail.
-			if !unpacker.End_unpack() {
-				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
+			if !dgi.SkipDCField(field, false) {
+				// ..and even that could fail.
+				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), dgi)
 				return
 			}
 			continue
 		}
 
-		unpacker.Begin_unpack(field)
-		packedData := unpacker.Unpack_literal_value().(dc.Vector_uchar)
-		defer dc.DeleteVector_uchar(packedData)
-		if !unpacker.End_unpack() {
-			s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
+		data, ok := dgi.ReadDCField(field, true, false)
+		if !ok {
+			s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), dgi)
 			return
 		}
 
-		fieldUpdates[field.Get_name()] = packedData
+		fieldUpdates[field.Get_name()] = data
 	}
 
 	dg := NewDatagram()
@@ -474,8 +426,8 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 		s.log.Debugf("Forwarding update for field \"%s\" of object id %d to database.", field, do)
 
 		dg.AddString(field)
-		dg.AddUint16(uint16(data.Size()))
-		dg.AddVector(data)
+		dg.AddUint16(uint16(len(data)))
+		dg.AddData(data)
 	}
 
 	s.RouteDatagram(dg)
