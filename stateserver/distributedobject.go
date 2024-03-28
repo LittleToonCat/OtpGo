@@ -425,7 +425,7 @@ func (d *DistributedObject) annihilate(sender Channel_t, notifyParent bool) {
 	}
 
 	dg := NewDatagram()
-	dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_DELETE_RAM)
+	dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
 	dg.AddDoid(d.do)
 	d.RouteDatagram(dg)
 
