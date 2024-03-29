@@ -255,22 +255,22 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 		if molecular != dc.SwigcptrDCMolecularField(0) {
 			continue
 		}
-	if dcField.Is_required() {
-		if data, ok := obj.fieldUpdates[dcField]; ok {
-			obj.requiredFields[dcField] = data
-			delete(obj.fieldUpdates, dcField)
-		} else {
-			// Use the default value.
-			obj.requiredFields[dcField] = VectorToByte(dcField.Get_default_value())
-			s.log.Debugf("Using default value required for field \"%s\" %s", dcField.Get_name(), FormatFieldData(dcField, obj.requiredFields[dcField]))
-		}
-	} else if dcField.Is_ram() {
-		if data, ok := obj.fieldUpdates[dcField]; ok {
-			obj.ramFields[dcField] = data
-			delete(obj.fieldUpdates, dcField)
+		if dcField.Is_required() {
+			if data, ok := obj.fieldUpdates[dcField]; ok {
+				obj.requiredFields[dcField] = data
+				delete(obj.fieldUpdates, dcField)
+			} else {
+				// Use the default value.
+				obj.requiredFields[dcField] = VectorToByte(dcField.Get_default_value())
+				s.log.Debugf("Using default value required for field \"%s\" %s", dcField.Get_name(), FormatFieldData(dcField, obj.requiredFields[dcField]))
+			}
+		} else if dcField.Is_ram() {
+			if data, ok := obj.fieldUpdates[dcField]; ok {
+				obj.ramFields[dcField] = data
+				delete(obj.fieldUpdates, dcField)
+			}
 		}
 	}
-}
 
 	dobj := s.CreateDistributedObjectWithData(obj.do, obj.parent, obj.zone, obj.dclass,
 		obj.requiredFields, obj.ramFields)
@@ -337,7 +337,6 @@ func (s *DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
 
 func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 	do := dgi.ReadDoid()
-
 	if obj, ok := s.loading[do]; ok {
 		// Add to the queue and leave it alone.  It'll be bounced back
 		// when finished.
