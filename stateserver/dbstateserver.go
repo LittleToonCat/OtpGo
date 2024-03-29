@@ -121,7 +121,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 
 		for i := uint16(0); i < count; i++ {
 			field := dgi.ReadUint16()
-			dcField := dclass.Get_field_by_index(int(field))
+			dcField := dclass.Get_inherited_field(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
 				s.log.Errorf("Received invalid field index %d", field)
 				return
@@ -397,7 +397,7 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 
 	for i := 0; i < int(count); i++ {
 		fieldId := dgi.ReadUint16()
-		field := core.DC.Get_field_by_index(int(fieldId))
+		field := obj.dclass.Get_inherited_field(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			s.log.Warnf("Update received for unknown field ID=%d", fieldId)
 			return
