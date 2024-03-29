@@ -270,6 +270,7 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 			delete(obj.fieldUpdates, dcField)
 		}
 	}
+}
 
 	dobj := s.CreateDistributedObjectWithData(obj.do, obj.parent, obj.zone, obj.dclass,
 		obj.requiredFields, obj.ramFields)
