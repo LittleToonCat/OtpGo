@@ -416,19 +416,19 @@ func (d *DistributedObject) annihilate(sender Channel_t, notifyParent bool) {
 		}
 	}
 
-	msgType := STATESERVER_OBJECT_DELETE_RAM
-
 	if d.ownerChannel != INVALID_CHANNEL {
 		targets = append(targets, d.ownerChannel)
-		msgType = STATESERVER_OBJECT_LEAVING_AI_INTEREST
 	}
 
 	if d.aiChannel != INVALID_CHANNEL {
-		targets = append(targets, d.aiChannel)
+		dg := NewDatagram()
+		dg.AddServerHeader(d.aiChannel, sender, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
+		dg.AddDoid(d.do)
+		d.RouteDatagram(dg)
 	}
 
 	dg := NewDatagram()
-	dg.AddMultipleServerHeader(targets, sender, uint16(msgType))
+	dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_DELETE_RAM)
 	dg.AddDoid(d.do)
 	d.RouteDatagram(dg)
 
