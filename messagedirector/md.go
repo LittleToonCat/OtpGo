@@ -83,7 +83,7 @@ func Start() {
 		}
 	}()
 	go MD.queueLoop()
-	go MD.Start(bindAddr, errChan)
+	go MD.Start(bindAddr, errChan, false)
 }
 
 func (m *MessageDirector) getDatagramFromQueue() QueueEntry {

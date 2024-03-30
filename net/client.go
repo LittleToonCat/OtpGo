@@ -8,6 +8,8 @@ import (
 	. "otpgo/util"
 	"sync"
 	"time"
+
+	"github.com/pires/go-proxyproto"
 )
 
 const BUFF_SIZE = 4096
@@ -32,6 +34,9 @@ type Client struct {
 
 	remote *gonet.TCPAddr
 	local  *gonet.TCPAddr
+
+	// PROXY protocol TLVs
+	tlvs   []byte
 }
 
 func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Client {
@@ -40,6 +45,7 @@ func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Cl
 		handler: handler,
 		remote:  tr.Conn().RemoteAddr().(*gonet.TCPAddr),
 		local:   tr.Conn().LocalAddr().(*gonet.TCPAddr),
+		tlvs:    []byte{},
 	}
 	client.initialize()
 	client.timeout = timeout
@@ -47,6 +53,20 @@ func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Cl
 }
 
 func (c *Client) initialize() {
+	// FIXME: Properly test this.
+	if proxyConn, ok := c.tr.Conn().(*proxyproto.Conn); ok {
+		header := proxyConn.ProxyHeader()
+		if header != nil {
+			tlvs, err := header.TLVs()
+			if err != nil {
+				return
+			}
+			c.tlvs, err = proxyproto.JoinTLVs(tlvs)
+			if err != nil {
+				return
+			}
+		}
+	}
 	go c.read()
 }
 
@@ -171,4 +191,8 @@ func (c *Client) LocalIP() string {
 
 func (c *Client) LocalPort() uint16 {
 	return uint16(c.local.Port)
+}
+
+func (c *Client) Tlvs() []byte {
+	return c.tlvs
 }

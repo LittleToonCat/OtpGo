@@ -24,6 +24,7 @@ type Role struct {
 
 	// CLIENT
 	Bind    string
+	Proxy   bool
 	Version string
 	DC_Hash int
 	Tuning  struct {

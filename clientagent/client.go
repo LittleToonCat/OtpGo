@@ -1,7 +1,6 @@
 package clientagent
 
 import (
-	"errors"
 	"otpgo/core"
 	"slices"
 	"sort"
@@ -113,6 +112,7 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	c := &Client{
 		config: config,
 		ca: ca,
+		conn: conn,
 		queue: []Datagram{},
 		shouldProcess: make(chan bool),
 		stopChan: make(chan bool),
@@ -163,7 +163,7 @@ func (c *Client) sendDisconnect(reason uint16, message string, security bool) {
 		eventType = "client-ejected"
 	}
 
-	event := eventlogger.NewLoggedEvent(eventType, "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10), fmt.Sprintf("%d|%d", reason, message))
+	event := eventlogger.NewLoggedEvent(eventType, "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10), fmt.Sprintf("%d|%s", reason, message))
 	event.Send()
 
 	if c.client.Connected() {
@@ -174,7 +174,7 @@ func (c *Client) sendDisconnect(reason uint16, message string, security bool) {
 		c.client.SendDatagram(resp)
 
 		c.cleanDisconnect = true
-		c.Terminate(errors.New(message))
+		c.Terminate(nil)
 	}
 }
 
@@ -446,10 +446,8 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		c.sendDisconnect(reason, error, false)
 	case CLIENTAGENT_DROP:
 		c.lock.Lock()
-		c.Terminate(errors.New("Dropped"))
+		c.Terminate(fmt.Errorf("dropped by outside sender: %d", sender))
 		c.lock.Unlock()
-	case CLIENTAGENT_SET_STATE:
-		c.state = ClientState(dgi.ReadUint16())
 	case CLIENTAGENT_ADD_INTEREST:
 		// c.context++
 		// int := c.buildInterest(dgi, false)
@@ -538,9 +536,8 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		resp := NewDatagram()
 		resp.AddServerHeader(sender, c.channel, CLIENTAGENT_GET_TLVS_RESP)
 		resp.AddUint32(dgi.ReadUint32())
-		// resp.AddDataBlob(c.client.Tlvs())
+		resp.AddDataBlob(c.client.Tlvs())
 		c.RouteDatagram(resp)
-		// TODO: Implement HAProxy
 	case CLIENTAGENT_GET_NETWORK_ADDRESS:
 		resp := NewDatagram()
 		resp.AddServerHeader(sender, c.channel, CLIENTAGENT_GET_NETWORK_ADDRESS_RESP)
@@ -905,12 +902,10 @@ func (c *Client) init(config core.Role, conn gonet.Conn) {
 		time.Duration(config.Client.Keepalive)*time.Second, config.Client.Write_Buffer_Size)
 	c.client = net.NewClient(socket, c, time.Duration(5)*time.Second)
 
-	if !c.client.Local() {
-		event := eventlogger.NewLoggedEvent("client-connected", "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10),
-			fmt.Sprintf("%s|%s", conn.RemoteAddr().String(), conn.LocalAddr().String()),
-		)
-		event.Send()
-	}
+	event := eventlogger.NewLoggedEvent("client-connected", "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10),
+		fmt.Sprintf("%s|%s", conn.RemoteAddr().String(), conn.LocalAddr().String()),
+	)
+	event.Send()
 }
 
 func (c *Client) startHeartbeat() {
@@ -928,9 +923,9 @@ func (c *Client) startHeartbeat() {
 }
 
 func (c *Client) Terminate(err error) {
-	if !c.cleanDisconnect && !c.client.Local() {
+	if !c.cleanDisconnect && err != nil {
 		event := eventlogger.NewLoggedEvent("client-lost", "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10),
-			fmt.Sprintf("%s|%s", c.conn.RemoteAddr().String(), c.conn.LocalAddr().String()),
+			fmt.Sprintf("%s|%s|%s", c.conn.RemoteAddr().String(), c.conn.LocalAddr().String(), err.Error()),
 		)
 		event.Send()
 	}
