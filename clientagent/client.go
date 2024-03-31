@@ -474,9 +474,9 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case CLIENTAGENT_CLOSE_CHANNEL:
 		c.UnsubscribeChannel(dgi.ReadChannel())
 	case CLIENTAGENT_ADD_POST_REMOVE:
-		c.AddPostRemove(c.allocatedChannel, *dgi.ReadDatagram())
+		c.AddPostRemove(*dgi.ReadDatagram())
 	case CLIENTAGENT_CLEAR_POST_REMOVES:
-		c.ClearPostRemoves(c.allocatedChannel)
+		c.ClearPostRemoves()
 	case CLIENTAGENT_DECLARE_OBJECT:
 		do, dc := dgi.ReadDoid(), dgi.ReadUint16()
 

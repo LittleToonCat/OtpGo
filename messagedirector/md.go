@@ -182,21 +182,19 @@ func (m *MessageDirector) HandleConnect(conn gonet.Conn) {
 	NewMDParticipant(conn)
 }
 
-func (m *MessageDirector) PreroutePostRemove(sender Channel_t, pr Datagram) {
+func (m *MessageDirector) PreroutePostRemove(pr Datagram) {
 	if m.upstream != nil {
 		dg := NewDatagram()
 		dg.AddControlHeader(CONTROL_ADD_POST_REMOVE)
-		dg.AddChannel(sender)
 		dg.AddBlob(&pr)
 		m.upstream.HandleDatagram(dg, nil)
 	}
 }
 
-func (m *MessageDirector) RecallPostRemoves(sender Channel_t) {
+func (m *MessageDirector) RecallPostRemoves() {
 	if m.upstream != nil {
 		dg := NewDatagram()
 		dg.AddControlHeader(CONTROL_CLEAR_POST_REMOVES)
-		dg.AddChannel(sender)
 		m.upstream.HandleDatagram(dg, nil)
 	}
 }

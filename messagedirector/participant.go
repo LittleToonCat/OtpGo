@@ -29,7 +29,7 @@ type MDParticipantBase struct {
 	MDParticipant
 
 	subscriber  *Subscriber
-	postRemoves map[Channel_t][]Datagram
+	postRemoves []Datagram
 
 	name       string
 	url        string
@@ -39,7 +39,7 @@ type MDParticipantBase struct {
 }
 
 func (m *MDParticipantBase) Init(handler MDParticipant) {
-	m.postRemoves = make(map[Channel_t][]Datagram)
+	m.postRemoves = []Datagram{}
 	m.subscriber = &Subscriber{participant: handler, active: true}
 	MD.participants = append(MD.participants, m)
 }
@@ -60,29 +60,27 @@ func (m *MDParticipantBase) RouteDatagram(datagram Datagram) {
 }
 
 func (m *MDParticipantBase) PostRemove() {
-	for sender, dgt := range m.postRemoves {
-		for _, dg := range dgt {
-			m.RouteDatagram(dg)
-		}
-
-		MD.RecallPostRemoves(sender)
+	for _, dg := range m.postRemoves {
+		m.RouteDatagram(dg)
 	}
+
+	MD.RecallPostRemoves()
 }
 
-func (m *MDParticipantBase) AddPostRemove(ch Channel_t, dg Datagram) {
+func (m *MDParticipantBase) AddPostRemove(dg Datagram) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.postRemoves[ch] = append(m.postRemoves[ch], dg)
-	MD.PreroutePostRemove(ch, dg)
+	m.postRemoves = append(m.postRemoves, dg)
+	MD.PreroutePostRemove(dg)
 }
 
-func (m *MDParticipantBase) ClearPostRemoves(ch Channel_t) {
+func (m *MDParticipantBase) ClearPostRemoves() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(m.postRemoves, ch)
-	MD.RecallPostRemoves(ch)
+	clear(m.postRemoves)
+	MD.RecallPostRemoves()
 }
 
 func (m *MDParticipantBase) SubscribeChannel(ch Channel_t) {
@@ -169,9 +167,9 @@ func (m *MDNetworkParticipant) ReceiveDatagram(dg Datagram) {
 		case CONTROL_REMOVE_RANGE:
 			m.UnsubscribeRange(Range{dgi.ReadChannel(), dgi.ReadChannel()})
 		case CONTROL_ADD_POST_REMOVE:
-			m.AddPostRemove(0, *dgi.ReadDatagram())
+			m.AddPostRemove(*dgi.ReadDatagram())
 		case CONTROL_CLEAR_POST_REMOVES:
-			m.ClearPostRemoves(dgi.ReadChannel())
+			m.ClearPostRemoves()
 		case CONTROL_SET_CON_NAME:
 			m.name = dgi.ReadString()
 		case CONTROL_SET_CON_URL:
