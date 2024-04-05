@@ -25,6 +25,7 @@ func NewMDUpstream(md *MessageDirector, address string) *MDUpstream {
 	}
 	socket := net.NewSocketTransport(conn, 0, 4096)
 	up.client = net.NewClient(socket, up, 60*time.Second)
+	MDLog.Infof("Successfully connected to upstream at %s", address)
 	return up
 }
 

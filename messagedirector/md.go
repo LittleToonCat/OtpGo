@@ -63,27 +63,26 @@ func Start() {
 	channelMap.init()
 
 	bindAddr := core.Config.MessageDirector.Bind
-	if bindAddr == "" {
-		bindAddr = "127.0.0.1:7199"
+	if bindAddr != "" {
+		errChan := make(chan error)
+		go func() {
+			err := <-errChan
+			switch err {
+			case nil:
+				MDLog.Info(fmt.Sprintf("Opened listening socket at %s", bindAddr))
+			default:
+				MDLog.Fatal(err.Error())
+			}
+		}()
+		go MD.Start(bindAddr, errChan, false)
 	}
+
+	go MD.queueLoop()
 
 	connectAddr := core.Config.MessageDirector.Connect
 	if connectAddr != "" {
 		MD.upstream = NewMDUpstream(MD, connectAddr)
 	}
-
-	errChan := make(chan error)
-	go func() {
-		err := <-errChan
-		switch err {
-		case nil:
-			MDLog.Info(fmt.Sprintf("Opened listening socket at %s", bindAddr))
-		default:
-			MDLog.Fatal(err.Error())
-		}
-	}()
-	go MD.queueLoop()
-	go MD.Start(bindAddr, errChan, false)
 }
 
 func (m *MessageDirector) getDatagramFromQueue() QueueEntry {
