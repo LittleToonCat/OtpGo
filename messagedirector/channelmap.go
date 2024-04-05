@@ -350,24 +350,6 @@ func (r *RangeMap) Send(ch Channel_t, data *MDDatagram) {
 		}
 	}
 
-	//  Because OtpGo is completely asynchronous, datagrams sent directly after a DistributedObject's
-	//  generate will often get lost. Because of this, we need a system which will store datagrams that
-	//  the channelmap could not find any recipients for and store them for the DO to use after generation.
-	//  Sadly, this still does not account for the edge case where something else is already listening to
-	//  the DO's channel, but this case is *extremely* unlikely and could only be done by a malicious attacker
-	//  with MD privileges-- even then, the results of not having datagrams replayed at generation are inconsequential.
-	// if !found {
-	// 	ReplayLock.Lock()
-	// 	ReplayPool[ch] = append(ReplayPool[ch], *data.dg.Dg)
-	// 	ReplayLock.Unlock()
-	// 	go func() {
-	// 		time.Sleep(1 * time.Second)
-	// 		ReplayLock.Lock()
-	// 		ReplayPool[ch] = nil
-	// 		ReplayLock.Unlock()
-	// 	}()
-	// }
-
 	data.sendLock.Unlock()
 }
 
@@ -456,6 +438,9 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 
 	if subs.Count() == 0 {
 		channelMap.subscriptions.Delete(ch)
+	}
+
+	if !c.IsAnySubscribed(ch) {
 		MD.RemoveChannel(ch)
 	}
 }
@@ -511,7 +496,20 @@ func (c *ChannelMap) Send(ch Channel_t, data *MDDatagram) {
 		data.sendLock.Unlock()
 	}
 	c.ranges.Send(ch, data)
+}
 
+func (c *ChannelMap) IsAnySubscribed(ch Channel_t) bool {
+	if _, ok := c.subscriptions.Load(ch); ok {
+		return true
+	}
+
+	for rng := range c.ranges.intervals {
+		if rng.Min <= ch && rng.Max >= ch {
+			return true
+		}
+	}
+
+	return false
 }
 
 func init() {
