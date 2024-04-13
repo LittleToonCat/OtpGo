@@ -112,6 +112,7 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	c := &Client{
 		config: config,
 		ca: ca,
+		conn: conn,
 		queue: []Datagram{},
 		shouldProcess: make(chan bool),
 		stopChan: make(chan bool),
