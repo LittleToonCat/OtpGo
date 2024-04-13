@@ -147,7 +147,7 @@ func NewClientAgent(config core.Role) *ClientAgent {
 		}
 	}()
 	go ca.queueLoop()
-	go ca.Start(config.Bind, errChan)
+	go ca.Start(config.Bind, errChan, config.Proxy)
 	return ca
 }
 

@@ -133,7 +133,7 @@ Revision: %s
 		}()
 	}
 
-	eventlogger.StartEventLogger()
+	eventlogger.StartEventSender(core.Config.General.Eventlogger)
 	messagedirector.Start()
 
 	// Configure UberDOG list
@@ -160,6 +160,8 @@ Revision: %s
 			database.NewDatabaseServer(role)
 		case "dbss":
 			stateserver.NewDatabaseStateServer(role)
+		case "eventlogger":
+			eventlogger.StartEventLogger(role)
 		case "lua":
 			luarole.NewLuaRole(role)
 		case "stateserver":

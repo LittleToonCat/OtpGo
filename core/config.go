@@ -24,6 +24,7 @@ type Role struct {
 
 	// CLIENT
 	Bind    string
+	Proxy   bool
 	Version string
 	DC_Hash int
 	Tuning  struct {
@@ -71,6 +72,10 @@ type Role struct {
 		// YAML BACKEND
 		Directory string
 	}
+
+	// EVENT LOGGER
+	Output         string
+	RotateInterval string
 }
 
 type ServerConfig struct {
@@ -88,10 +93,6 @@ type ServerConfig struct {
 	MessageDirector struct {
 		Bind    string
 		Connect string
-	}
-	Eventlogger struct {
-		Bind   string
-		Output string
 	}
 	Debug struct {
 		Pprof bool

@@ -19,65 +19,40 @@ var EventLoggerLog *log.Entry
 var logfile *os.File
 var server *net.UDPConn
 
-type LoggedEvent struct {
-	eventType string
-	roleName string
-	channel string
-	description string
-}
-
-func NewLoggedEvent(eventType string, roleName string, channel string, description string) LoggedEvent {
-	le := &LoggedEvent{
-		eventType: eventType,
-		roleName: roleName,
-		channel: channel,
-		description: description,
-	}
-	return *le
-}
-
-func (l LoggedEvent) Send() {
-	processLoggedEvent(l)
-}
-
-func StartEventLogger() {
-	if core.Config.Eventlogger.Bind == "" {
-		core.Config.Eventlogger.Bind = "0.0.0.0:4343"
+func StartEventLogger(config core.Role) {
+	if config.Output == "" {
+		config.Output = "events-%Y%m%d-%H%M%S.log"
 	}
 
-	if core.Config.Eventlogger.Output == "" {
-		core.Config.Eventlogger.Output = "events-%Y%m%d-%H%M%S.log"
-	}
-
-	createLog()
+	createLog(config)
 
 	EventLoggerLog.Info("Opening UDP socket...")
-	addr, err := net.ResolveUDPAddr("udp", core.Config.Eventlogger.Bind)
+	addr, err := net.ResolveUDPAddr("udp", config.Bind)
 	if err != nil {
-		EventLoggerLog.Fatalf("Unable to open socket: %s", err)
+		EventLoggerLog.Fatalf("Unable to resolve UDP address \"%s\": %s", config.Bind, err)
 	}
 
 	server, err = net.ListenUDP("udp", addr)
 	if err != nil {
 		EventLoggerLog.Fatalf("Unable to open socket: %s", err)
 	}
-	EventLoggerLog.Infof("Opened UDP socket at %s", core.Config.Eventlogger.Bind)
+	EventLoggerLog.Infof("Opened UDP socket at %s", config.Bind)
 
-	event := NewLoggedEvent("logOpened", "EventLogger", core.Config.Eventlogger.Bind, "Log opened upon Event Logger startup.")
+	event := NewLoggedEvent("logOpened", "EventLogger", config.Bind, "Log opened upon Event Logger startup.")
 	processLoggedEvent(event)
 
 	handleInterrupts()
 	go listen()
 }
 
-func createLog() {
+func createLog(config core.Role) {
 	var err error
 	if logfile != nil {
 		logfile.Close()
 	}
 
 	t := time.Now()
-	logfile, err = os.OpenFile(strftime.Format(core.Config.Eventlogger.Output, t), os.O_RDWR|os.O_CREATE, 0600)
+	logfile, err = os.OpenFile(strftime.Format(config.Output, t), os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		EventLoggerLog.Fatalf("failed to open logfile: %s", err)
 		return
@@ -128,8 +103,21 @@ func processPacket(dg Datagram, addr *net.UDPAddr) {
 
 	var serverTypeString string
 	switch serverType {
+	case 1:
+		serverTypeString = "MessageDirector"
+	case 2:
+		serverTypeString = "StateServer"
+	case 3:
+		serverTypeString = "ClientAgent"
+	case 4:
+		serverTypeString = "Client"
+	case 5:
+		serverTypeString = "DatabaseServer"
 	case 6:
 		serverTypeString = fmt.Sprintf("AIEvent:%d", fromChannel)
+	case 7:
+		// Other
+		serverTypeString = dgi.ReadString()
 	default:
 		serverTypeString = fmt.Sprintf("UnknownEvent:%d", serverType)
 	}
@@ -177,5 +165,10 @@ func init() {
 	EventLoggerLog = log.WithFields(log.Fields{
 		"name": "EventLogger",
 		"modName": "EventLogger",
+	})
+
+	senderLog = log.WithFields(log.Fields{
+		"name": "EventSender",
+		"modName": "EventSender",
 	})
 }

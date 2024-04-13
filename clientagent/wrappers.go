@@ -975,14 +975,14 @@ func LuaAddPostRemove(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	dg := CheckDatagram(L, 2)
 
-	client.AddPostRemove(client.allocatedChannel, *dg)
+	client.AddPostRemove(*dg)
 	return 1
 }
 
 func LuaClearPostRemoves(L *lua.LState) int {
 	client := CheckClient(L, 1)
 
-	client.ClearPostRemoves(client.allocatedChannel)
+	client.ClearPostRemoves()
 	return 1
 }
 

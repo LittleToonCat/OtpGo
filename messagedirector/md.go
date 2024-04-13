@@ -63,27 +63,26 @@ func Start() {
 	channelMap.init()
 
 	bindAddr := core.Config.MessageDirector.Bind
-	if bindAddr == "" {
-		bindAddr = "127.0.0.1:7199"
+	if bindAddr != "" {
+		errChan := make(chan error)
+		go func() {
+			err := <-errChan
+			switch err {
+			case nil:
+				MDLog.Info(fmt.Sprintf("Opened listening socket at %s", bindAddr))
+			default:
+				MDLog.Fatal(err.Error())
+			}
+		}()
+		go MD.Start(bindAddr, errChan, false)
 	}
+
+	go MD.queueLoop()
 
 	connectAddr := core.Config.MessageDirector.Connect
 	if connectAddr != "" {
 		MD.upstream = NewMDUpstream(MD, connectAddr)
 	}
-
-	errChan := make(chan error)
-	go func() {
-		err := <-errChan
-		switch err {
-		case nil:
-			MDLog.Info(fmt.Sprintf("Opened listening socket at %s", bindAddr))
-		default:
-			MDLog.Fatal(err.Error())
-		}
-	}()
-	go MD.queueLoop()
-	go MD.Start(bindAddr, errChan)
 }
 
 func (m *MessageDirector) getDatagramFromQueue() QueueEntry {
@@ -182,21 +181,19 @@ func (m *MessageDirector) HandleConnect(conn gonet.Conn) {
 	NewMDParticipant(conn)
 }
 
-func (m *MessageDirector) PreroutePostRemove(sender Channel_t, pr Datagram) {
+func (m *MessageDirector) PreroutePostRemove(pr Datagram) {
 	if m.upstream != nil {
 		dg := NewDatagram()
 		dg.AddControlHeader(CONTROL_ADD_POST_REMOVE)
-		dg.AddChannel(sender)
 		dg.AddBlob(&pr)
 		m.upstream.HandleDatagram(dg, nil)
 	}
 }
 
-func (m *MessageDirector) RecallPostRemoves(sender Channel_t) {
+func (m *MessageDirector) RecallPostRemoves() {
 	if m.upstream != nil {
 		dg := NewDatagram()
 		dg.AddControlHeader(CONTROL_CLEAR_POST_REMOVES)
-		dg.AddChannel(sender)
 		m.upstream.HandleDatagram(dg, nil)
 	}
 }

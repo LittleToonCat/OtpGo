@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	proxyproto "github.com/pires/go-proxyproto"
 )
 
 // Server is an interface which allows a network listening mechanism to pass accepted connections to
@@ -27,8 +29,8 @@ type NetworkServer struct {
 	listening uint32
 }
 
-func (s *NetworkServer) Start(bindAddr string, errChan chan error) {
-	if err := s.listenConn(bindAddr, errChan); err != nil {
+func (s *NetworkServer) Start(bindAddr string, errChan chan error, useProxyProto bool) {
+	if err := s.listenConn(bindAddr, errChan, useProxyProto); err != nil {
 		errChan <- err
 	}
 }
@@ -42,18 +44,26 @@ func (s *NetworkServer) Shutdown() error {
 	return nil
 }
 
-func (s *NetworkServer) listenConn(address string, errChan chan error) error {
+func (s *NetworkServer) listenConn(address string, errChan chan error, useProxyProto bool) error {
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
-	s.ln = ln
+	if useProxyProto {
+		// Wrap listener with proxyproto's listener
+		s.ln = &proxyproto.Listener{Listener: ln, Policy: func(upstream net.Addr) (proxyproto.Policy, error) {
+			// Don't accept clients if no PROXY header is present.
+			return proxyproto.REQUIRE, nil
+		}}
+	} else {
+		s.ln = ln
+	}
 
 	errChan <- nil
 	s.handleInterrupts()
 	atomic.StoreUint32(&s.listening, 1)
 	for atomic.LoadUint32(&s.listening) == 1 {
-		conn, err := ln.Accept()
+		conn, err := s.ln.Accept()
 		if err == nil {
 			s.Handler.HandleConnect(conn)
 			continue
