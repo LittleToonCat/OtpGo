@@ -241,6 +241,10 @@ func (c *Client) addInterest(i Interest, context uint32, caller Channel_t) {
 
 		if prevInt.parent == i.parent {
 			for _, zone := range prevInt.zones {
+				if len(c.lookupInterests(i.parent, zone)) > 1 {
+					// Another interest has this zone, so ignore it
+					continue
+				}
 				if !i.hasZone(zone) {
 					killedZones = append(killedZones, zone)
 				}
