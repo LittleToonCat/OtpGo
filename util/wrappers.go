@@ -10,6 +10,8 @@ import (
 
 const luaDatagramTypeName = "datagram"
 const luaDgiTypeName = "dgi"
+const luaInt64TypeName = "int64"
+const luaUint64TypeName = "uint64"
 
 func RegisterDatagramType(L *lua.LState)  {
 	mt := L.NewTypeMetatable(luaDatagramTypeName)
@@ -18,6 +20,7 @@ func RegisterDatagramType(L *lua.LState)  {
 	L.SetField(mt, "new", L.NewFunction(NewLuaDatagram))
 	// Methods
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), DatagramMethods))
+	L.SetField(mt, "__tostring", L.NewFunction(LuaDatagramToString))
 }
 
 func NewLuaDatagram(L *lua.LState) int {
@@ -45,6 +48,7 @@ func RegisterDatagramIteratorType(L *lua.LState)  {
 	L.SetField(mt, "new", L.NewFunction(NewLuaDatagramIteratorFromLua))
 	// Methods
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), DatagramIteratorMethods))
+	L.SetField(mt, "__tostring", L.NewFunction(LuaDgiToString))
 }
 
 func NewLuaDatagramIteratorFromExisting(L *lua.LState, dgi *DatagramIterator) *lua.LUserData {
@@ -76,6 +80,67 @@ func CheckDatagramIterator(L *lua.LState, n int) *DatagramIterator {
 	return nil
 }
 
+func RegisterInt64Type(L *lua.LState) {
+	mt := L.NewTypeMetatable(luaInt64TypeName)
+	L.SetGlobal(luaInt64TypeName, mt)
+	// Methods
+	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), Int64Methods))
+	L.SetField(mt, "__tostring", L.NewFunction(Int64ToString))
+	L.SetField(mt, "__add", L.NewFunction(Int64Add))
+	L.SetField(mt, "__sub", L.NewFunction(Int64Subtract))
+	L.SetField(mt, "__eq", L.NewFunction(Int64Equal))
+}
+
+func NewLuaInt64(L *lua.LState, i int64) *lua.LUserData {
+	ud := L.NewUserData()
+	ud.Value = i
+	L.SetMetatable(ud, L.GetTypeMetatable(luaInt64TypeName))
+	return ud
+}
+
+func CheckInt64(L *lua.LState, n int) int64 {
+	ud := L.CheckUserData(n)
+	if i, ok := ud.Value.(int64); ok {
+		return i
+	}
+	L.ArgError(n, "Int64 expected")
+	return 0
+}
+
+func RegisterUint64Type(L *lua.LState) {
+	mt := L.NewTypeMetatable(luaUint64TypeName)
+	L.SetGlobal(luaUint64TypeName, mt)
+	// Methods
+	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), Uint64Methods))
+	L.SetField(mt, "__tostring", L.NewFunction(Uint64ToString))
+	L.SetField(mt, "__add", L.NewFunction(Uint64Add))
+	L.SetField(mt, "__sub", L.NewFunction(Uint64Subtract))
+	L.SetField(mt, "__eq", L.NewFunction(Uint64Equal))
+}
+
+func NewLuaUint64(L *lua.LState, i uint64) *lua.LUserData {
+	ud := L.NewUserData()
+	ud.Value = i
+	L.SetMetatable(ud, L.GetTypeMetatable(luaUint64TypeName))
+	return ud
+}
+
+func CheckUint64(L *lua.LState, n int) uint64 {
+	ud := L.CheckUserData(n)
+	if i, ok := ud.Value.(uint64); ok {
+		return i
+	}
+	L.ArgError(n, "Uint64 expected")
+	return 0
+}
+
+func RegisterLuaUtilTypes(L *lua.LState) {
+	RegisterInt64Type(L)
+	RegisterUint64Type(L)
+	RegisterDatagramType(L)
+	RegisterDatagramIteratorType(L)
+}
+
 var DatagramMethods = map[string]lua.LGFunction{
 	"addServerHeader": LuaAddServerHeader,
 	"addInt8": LuaAddInt8,
@@ -85,9 +150,16 @@ var DatagramMethods = map[string]lua.LGFunction{
 	"addInt32": LuaAddInt32,
 	"addUint32": LuaAddUint32,
 	"addInt64": LuaAddInt64,
+	"addUint64": LuaAddUint64,
 	"addBool": LuaAddBool,
 	"addString": LuaAddString,
 	"addData": LuaAddData,
+}
+
+func LuaDatagramToString(L *lua.LState) int {
+	dg := CheckDatagram(L, 1)
+	L.Push(lua.LString(dg.String()))
+	return 1
 }
 
 func LuaAddServerHeader(L *lua.LState) int {
@@ -158,8 +230,39 @@ func LuaAddUint32(L *lua.LState) int {
 
 func LuaAddInt64(L *lua.LState) int {
 	dg := CheckDatagram(L, 1)
-	v := L.CheckInt64(2)
-	dg.AddInt64(v)
+	v := L.Get(2)
+
+	switch v.Type() {
+	case lua.LTUserData:
+		if v, ok := v.(*lua.LUserData).Value.(int64); ok {
+			dg.AddInt64(v)
+		} else {
+			L.ArgError(2, "UserData is not Int64")
+		}
+	case lua.LTNumber:
+		dg.AddInt64(int64(v.(lua.LNumber)))
+	default:
+		L.ArgError(2, "Int64 or number expected.")
+	}
+	return 1
+}
+
+func LuaAddUint64(L *lua.LState) int {
+	dg := CheckDatagram(L, 1)
+	v := L.Get(2)
+
+	switch v.Type() {
+	case lua.LTUserData:
+		if v, ok := v.(*lua.LUserData).Value.(uint64); ok {
+			dg.AddUint64(v)
+		} else {
+			L.ArgError(2, "UserData is not Uint64")
+		}
+	case lua.LTNumber:
+		dg.AddUint64(uint64(v.(lua.LNumber)))
+	default:
+		L.ArgError(2, "Uint64 or number expected.")
+	}
 	return 1
 }
 
@@ -185,7 +288,6 @@ func LuaAddData(L * lua.LState) int {
 }
 
 var DatagramIteratorMethods = map[string]lua.LGFunction{
-	"dumpHex": LuaDgiDumpHex,
 	"getRemainingSize": LuaGetRemainingSize,
 	"readInt8": LuaReadInt8,
 	"readUint8": LuaReadUint8,
@@ -201,7 +303,7 @@ var DatagramIteratorMethods = map[string]lua.LGFunction{
 	"readFixedString": LuaReadFixedString,
 }
 
-func LuaDgiDumpHex(L *lua.LState) int {
+func LuaDgiToString(L *lua.LState) int {
 	dgi := CheckDatagramIterator(L, 1)
 	L.Push(lua.LString(dgi.String()))
 	return 1
@@ -250,11 +352,9 @@ func LuaReadUint32(L *lua.LState) int {
 }
 
 func LuaReadInt64(L *lua.LState) int {
-	// NOTE: Lua has no native int64 type support.
-	// Use at your own risk.
 	dgi := CheckDatagramIterator(L, 1)
 	v := dgi.ReadInt64()
-	L.Push(lua.LNumber(v))
+	L.Push(NewLuaInt64(L, v))
 	return 1
 }
 
@@ -263,7 +363,7 @@ func LuaReadUint64(L *lua.LState) int {
 	// Use at your own risk.
 	dgi := CheckDatagramIterator(L, 1)
 	v := dgi.ReadUint64()
-	L.Push(lua.LNumber(v))
+	L.Push(NewLuaUint64(L, v))
 	return 1
 }
 
@@ -300,5 +400,153 @@ func LuaReadFixedString(L *lua.LState) int {
 	size := L.CheckInt(2)
 	v := dgi.ReadData(Dgsize_t(size))
 	L.Push(lua.LString(v))
+	return 1
+}
+
+var Int64Methods = map[string]lua.LGFunction{
+	"tonumber": Int64ToNumber,
+}
+
+func Int64ToString(L *lua.LState) int {
+	i := CheckInt64(L, 1)
+
+	L.Push(lua.LString(fmt.Sprintf("Int64(%d)", i)))
+	return 1
+}
+
+func Int64Add(L *lua.LState) int {
+	i := CheckInt64(L, 1)
+	other := L.Get(2)
+
+	switch other.Type() {
+	case lua.LTUserData:
+		if otherInt64, ok := other.(*lua.LUserData).Value.(int64); ok {
+			L.Push(NewLuaInt64(L, i + otherInt64))
+		} else {
+			L.Push(NewLuaInt64(L, i))
+		}
+	case lua.LTNumber:
+		L.Push(NewLuaInt64(L, i + int64(other.(lua.LNumber))))
+	default:
+		L.ArgError(2, "Int64 or number expected.")
+	}
+	return 1
+}
+
+func Int64Subtract(L *lua.LState) int {
+	i := CheckInt64(L, 1)
+	other := L.Get(2)
+
+	switch other.Type() {
+	case lua.LTUserData:
+		if otherInt64, ok := other.(*lua.LUserData).Value.(int64); ok {
+			L.Push(NewLuaInt64(L, i - otherInt64))
+		} else {
+			L.Push(NewLuaInt64(L, i))
+		}
+	case lua.LTNumber:
+		L.Push(NewLuaInt64(L, i - int64(other.(lua.LNumber))))
+	default:
+		L.ArgError(2, "Int64 or number expected.")
+	}
+	return 1
+}
+
+func Int64Equal(L *lua.LState) int {
+	i := CheckInt64(L, 1)
+	other := L.Get(2)
+
+	switch other.Type() {
+	case lua.LTUserData:
+		if otherInt64, ok := other.(*lua.LUserData).Value.(int64); ok {
+			L.Push(lua.LBool(i == otherInt64))
+		} else {
+			L.Push(lua.LBool(false))
+		}
+	case lua.LTNumber:
+		L.Push(lua.LBool(i == int64(other.(lua.LNumber))))
+	default:
+		L.ArgError(2, "Int64 or number expected.")
+	}
+	return 1
+}
+
+func Int64ToNumber(L *lua.LState) int {
+	i := CheckInt64(L, 1)
+	L.Push(lua.LNumber(i))
+	return 1
+}
+
+var Uint64Methods = map[string]lua.LGFunction{
+	"tonumber": Uint64ToNumber,
+}
+
+func Uint64ToString(L *lua.LState) int {
+	i := CheckUint64(L, 1)
+
+	L.Push(lua.LString(fmt.Sprintf("Uint64(%d)", i)))
+	return 1
+}
+
+func Uint64Add(L *lua.LState) int {
+	i := CheckUint64(L, 1)
+	other := L.Get(2)
+
+	switch other.Type() {
+	case lua.LTUserData:
+		if otherUint64, ok := other.(*lua.LUserData).Value.(uint64); ok {
+			L.Push(NewLuaUint64(L, i + otherUint64))
+		} else {
+			L.Push(NewLuaUint64(L, i))
+		}
+	case lua.LTNumber:
+		L.Push(NewLuaUint64(L, i + uint64(other.(lua.LNumber))))
+	default:
+		L.ArgError(2, "Uint64 or number expected.")
+	}
+	return 1
+}
+
+func Uint64Subtract(L *lua.LState) int {
+	i := CheckUint64(L, 1)
+	other := L.Get(2)
+
+	switch other.Type() {
+	case lua.LTUserData:
+		if otherUint64, ok := other.(*lua.LUserData).Value.(uint64); ok {
+			L.Push(NewLuaUint64(L, i - otherUint64))
+		} else {
+			L.Push(NewLuaUint64(L, i))
+		}
+	case lua.LTNumber:
+		L.Push(NewLuaUint64(L, i - uint64(other.(lua.LNumber))))
+	default:
+		L.ArgError(2, "Uint64 or number expected.")
+	}
+	return 1
+}
+
+func Uint64Equal(L *lua.LState) int {
+	i := CheckUint64(L, 1)
+	other := L.Get(2)
+
+	switch other.Type() {
+	case lua.LTUserData:
+		if otherUint64, ok := other.(*lua.LUserData).Value.(uint64); ok {
+			L.Push(lua.LBool(i == otherUint64))
+		} else {
+			L.Push(lua.LBool(false))
+		}
+	case lua.LTNumber:
+		L.Push(lua.LBool(i == uint64(other.(lua.LNumber))))
+	default:
+		L.ArgError(2, "Uint64 or number expected.")
+	}
+	return 1
+}
+
+func Uint64ToNumber(L *lua.LState) int {
+	i := CheckUint64(L, 1)
+	L.Push(lua.LNumber(i))
 	return 1
 }

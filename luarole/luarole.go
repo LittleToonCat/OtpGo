@@ -76,9 +76,12 @@ func NewLuaRole(config core.Role) *LuaRole {
 	gluacrypto.Preload(role.L)
 	// Used for web requests within Lua
 	role.L.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
-	RegisterDatagramType(role.L)
-	RegisterDatagramIteratorType(role.L)
+	RegisterLuaUtilTypes(role.L)
+	core.RegisterLuaDCTypes(role.L)
 	RegisterLuaParticipantType(role.L)
+
+	// Set globals
+	role.L.SetGlobal("dcFile", core.NewLuaDCFile(role.L, core.DC))
 
 	role.log.Infof("Running Lua script: %s", role.config.Lua_File)
 	if err := role.L.DoFile(role.config.Lua_File); err != nil {

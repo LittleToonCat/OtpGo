@@ -109,8 +109,8 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	// Used for web requests within Lua
 	ca.L.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
 
-	RegisterDatagramType(ca.L)
-	RegisterDatagramIteratorType(ca.L)
+	RegisterLuaUtilTypes(ca.L)
+	core.RegisterLuaDCTypes(ca.L)
 	RegisterClientType(ca.L)
 
 	// Set globals
@@ -120,6 +120,9 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	} else {
 		ca.L.SetGlobal("DC_HASH", lua.LNumber(core.DC.Get_hash()))
 	}
+
+	ca.L.SetGlobal("dcFile", core.NewLuaDCFile(ca.L, core.DC))
+
 
 	ca.log.Infof("Running Lua script: %s", ca.config.Lua_File)
 	if err := ca.L.DoFile(ca.config.Lua_File); err != nil {

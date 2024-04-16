@@ -82,7 +82,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 	do := &DistributedObject{
 		stateserver:    ss,
 		do:             doid,
-		zone:           0,
+		zone:           INVALID_ZONE,
 		dclass:         dclass,
 		zoneObjects:    make(map[Zone_t][]Doid_t),
 		requiredFields: make(map[dc.DCField][]byte),
@@ -435,6 +435,10 @@ func (d *DistributedObject) annihilate(sender Channel_t, notifyParent bool) {
 	d.deleteChildren(sender)
 	delete(d.stateserver.objects, d.do)
 	d.log.Debug("Deleted object.")
+
+	clear(d.zoneObjects)
+	clear(d.requiredFields)
+	clear(d.ramFields)
 
 	d.Cleanup()
 }
