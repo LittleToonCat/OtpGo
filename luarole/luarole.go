@@ -69,6 +69,7 @@ func NewLuaRole(config core.Role) *LuaRole {
 	}
 
 	role.Init(role)
+	role.SetName(name)
 
 	libs.Preload(role.L)
 	// Replace gopher-lua-libs's crypto module with

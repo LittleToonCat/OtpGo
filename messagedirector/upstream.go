@@ -1,10 +1,11 @@
 package messagedirector
 
 import (
-	"otpgo/net"
-	. "otpgo/util"
 	gonet "net"
 	"os"
+	"otpgo/core"
+	"otpgo/net"
+	. "otpgo/util"
 	"time"
 )
 
@@ -26,6 +27,9 @@ func NewMDUpstream(md *MessageDirector, address string) *MDUpstream {
 	socket := net.NewSocketTransport(conn, 0, 4096)
 	up.client = net.NewClient(socket, up, 60*time.Second)
 	MDLog.Infof("Successfully connected to upstream at %s", address)
+	if core.Config.Daemon.Name != "" {
+		up.SetName(core.Config.Daemon.Name)
+	}
 	return up
 }
 
@@ -56,6 +60,13 @@ func (m *MDUpstream) UnsubscribeRange(lo Channel_t, hi Channel_t) {
 	dg.AddControlHeader(CONTROL_REMOVE_RANGE)
 	dg.AddChannel(lo)
 	dg.AddChannel(hi)
+	m.client.SendDatagram(dg)
+}
+
+func (m *MDUpstream) SetName(name string) {
+	dg := NewDatagram()
+	dg.AddControlHeader(CONTROL_SET_CON_NAME)
+	dg.AddString(name)
 	m.client.SendDatagram(dg)
 }
 

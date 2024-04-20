@@ -44,6 +44,7 @@ func (s *StateServer) InitStateServer(config core.Role, logName string, logModNa
 		"modName": logModName,
 		"id": logId,
 	})
+	s.SetName(logName)
 }
 
 func (s *StateServer) registerObjects(objects []struct{ID int; Class string}) {

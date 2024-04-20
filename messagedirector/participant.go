@@ -21,7 +21,9 @@ type MDParticipant interface {
 	SubscribeRange(Range)
 	UnsubscribeRange(Range)
 
+	SetName(string)
 	Name() string
+
 	Subscriber() *Subscriber
 }
 
@@ -99,6 +101,10 @@ func (m *MDParticipantBase) UnsubscribeRange(rng Range) {
 	channelMap.UnsubscribeRange(m.subscriber, rng)
 }
 
+func (m *MDParticipantBase) SetName(name string) {
+	m.name = name
+}
+
 func (m *MDParticipantBase) Name() string {
 	return m.name
 }
@@ -134,6 +140,7 @@ func NewMDParticipant(conn gonet.Conn) *MDNetworkParticipant {
 	socket := net.NewSocketTransport(conn, 0, 4096)
 
 	participant.client = net.NewClient(socket, participant, 60*time.Second)
+	participant.SetName(conn.RemoteAddr().String())
 	return participant
 }
 

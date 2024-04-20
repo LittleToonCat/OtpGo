@@ -137,9 +137,10 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 		return nil
 	}
 	c.channel = c.allocatedChannel
+	c.SetName(fmt.Sprintf("Client (%d)", c.channel))
 
 	c.log = log.WithFields(log.Fields{
-		"name": fmt.Sprintf("Client (%d)", c.channel),
+		"name": c.Name(),
 		"modName": "Client",
 		"id": fmt.Sprintf("%d", c.channel),
 	})

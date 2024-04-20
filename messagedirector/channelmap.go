@@ -403,7 +403,7 @@ func (c *ChannelMap) SubscribeRange(p *Subscriber, rng Range) {
 	c.ranges.Add(rng, p)
 	p.ranges = c.ranges.Ranges(p)
 
-	MDLog.Debugf("Subscribed to range %d - %d", rng.Min, rng.Max)
+	MDLog.Debugf("%s has subscribed to range %d - %d", p.participant.Name(), rng.Min, rng.Max)
 
 }
 
@@ -411,7 +411,7 @@ func (c *ChannelMap) UnsubscribeRange(p *Subscriber, rng Range) {
 	c.ranges.Remove(rng, p)
 	p.ranges = c.ranges.Ranges(p)
 
-	MDLog.Debugf("Unsubscribed to range %d - %d", rng.Min, rng.Max)
+	MDLog.Debugf("%s has unsubscribed from range %d - %d", p.participant.Name(), rng.Min, rng.Max)
 
 }
 
@@ -434,7 +434,7 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 		c.ranges.Remove(Range{ch, ch}, p)
 	}
 
-	MDLog.Debugf("Unsubscribed to channel %d", ch)
+	MDLog.Debugf("%s has unsubscribed from channel %d", p.participant.Name(), ch)
 
 	if subs.Count() == 0 {
 		channelMap.subscriptions.Delete(ch)
@@ -473,7 +473,7 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 	subs.Increment()
 	p.channels = append(p.channels, ch)
 
-	MDLog.Debugf("Subscribed to channel %d", ch)
+	MDLog.Debugf("%s has subscribed to channel %d", p.participant.Name(), ch)
 
 	if subs.Count() == 1 {
 		MD.AddChannel(ch)
