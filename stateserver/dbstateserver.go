@@ -69,6 +69,7 @@ func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
 	dbss.InitStateServer(config, fmt.Sprintf("DBSS (%d - %d)", dbss.config.Ranges.Min, dbss.config.Ranges.Max), "DBSS", "*")
 
 	dbss.Init(dbss)
+	dbss.SetName(fmt.Sprintf("DBSS (%d - %d)", dbss.config.Ranges.Min, dbss.config.Ranges.Max))
 
 	dbss.SubscribeRange(dbss.config.Ranges)
 

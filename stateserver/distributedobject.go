@@ -56,6 +56,7 @@ func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
 	}
 
 	do.Init(do)
+	do.SetName(fmt.Sprintf("%s (%d)", dclass.Get_name(), doid))
 
 	do.log.Debug("Object instantiated ...")
 
@@ -138,6 +139,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 	}
 
 	do.Init(do)
+	do.SetName(fmt.Sprintf("%s (%d)", dclass.Get_name(), doid))
 
 	do.log.Debug("Object instantiated ...")
 

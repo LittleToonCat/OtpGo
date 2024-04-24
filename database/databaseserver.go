@@ -93,6 +93,7 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 	}
 
 	db.Init(db)
+	db.SetName(fmt.Sprintf("DatabaseServer (%d)", config.Control))
 
 	db.SubscribeChannel(Channel_t(db.control))
 	db.SubscribeChannel(BCHAN_DBSERVERS)
