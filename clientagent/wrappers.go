@@ -10,7 +10,7 @@ import (
 	"strconv"
 
 	dc "github.com/LittleToonCat/dcparser-go"
-	"github.com/yuin/gopher-lua"
+	lua "github.com/yuin/gopher-lua"
 )
 
 // Client wrappers for Lua
@@ -41,45 +41,45 @@ func CheckClient(L *lua.LState, n int) *Client {
 }
 
 var ClientMethods = map[string]lua.LGFunction{
-	"addServerHeader": LuaClientAddServerHeader,
-	"addServerHeaderWithAvatarId": LuaAddServerHeaderWithAvatarId,
+	"addServerHeader":              LuaClientAddServerHeader,
+	"addServerHeaderWithAvatarId":  LuaAddServerHeaderWithAvatarId,
 	"addServerHeaderWithAccountId": LuaAddServerHeaderWithAccountId,
-	"addSessionObject": LuaAddSessionObject,
-	"addPostRemove": LuaAddPostRemove,
-	"authenticated": LuaGetSetAuthenticated,
-	"clearPostRemoves": LuaClearPostRemoves,
-	"createDatabaseObject": LuaCreateDatabaseObject,
-	"declareObject": LuaDeclareObject,
-	"debug": LuaDebug,
-	"error": LuaError,
-	"getAllRequiredFromDatabase": LuaGetAllRequiredFromDatabase,
-	"getDatabaseValues": LuaGetDatabaseValues,
-	"setDatabaseValues": LuaSetDatabaseValues,
-	"handleAddInterest": LuaHandleAddInterest,
-	"handleDisconnect": LuaHandleDisconnect,
-	"handleHeartbeat": LuaHandleHeartbeat,
-	"handleRemoveInterest": LuaHandleRemoveInterest,
-	"handleUpdateField": LuaHandleUpdateField,
-	"info": LuaInfo,
-	"objectSetOwner": LuaObjectSetOwner,
-	"packFieldToDatagram": LuaPackFieldToDatagram,
-	"queryAllRequiredFields": LuaQueryAllRequiredFields,
-	"queryObjectFields": LuaQueryObjectFields,
-	"removeSessionObject": LuaRemoveSessionObject,
-	"routeDatagram": LuaRouteDatagram,
-	"sendActivateObject": LuaSendActivateObject,
-	"sendDatagram": LuaSendDatagram,
-	"sendDisconnect": LuaSendDisconnect,
-	"setLocation": LuaSetLocation,
-	"subscribeChannel": LuaSubscribeChannel,
-	"subscribePuppetChannel": LuaSubscribePuppetChannel,
-	"setChannel": LuaSetChannel,
-	"undeclareObject": LuaUndeclareObject,
-	"undeclareAllObjects": LuaUndeclareAllObjects,
-	"unsubscribePuppetChannel": LuaUnsubscribePuppetChannel,
-	"userTable": LuaGetSetUserTable,
-	"warn": LuaWarn,
-	"writeServerEvent": LuaWriteServerEvent,
+	"addSessionObject":             LuaAddSessionObject,
+	"addPostRemove":                LuaAddPostRemove,
+	"authenticated":                LuaGetSetAuthenticated,
+	"clearPostRemoves":             LuaClearPostRemoves,
+	"createDatabaseObject":         LuaCreateDatabaseObject,
+	"declareObject":                LuaDeclareObject,
+	"debug":                        LuaDebug,
+	"error":                        LuaError,
+	"getAllRequiredFromDatabase":   LuaGetAllRequiredFromDatabase,
+	"getDatabaseValues":            LuaGetDatabaseValues,
+	"setDatabaseValues":            LuaSetDatabaseValues,
+	"handleAddInterest":            LuaHandleAddInterest,
+	"handleDisconnect":             LuaHandleDisconnect,
+	"handleHeartbeat":              LuaHandleHeartbeat,
+	"handleRemoveInterest":         LuaHandleRemoveInterest,
+	"handleUpdateField":            LuaHandleUpdateField,
+	"info":                         LuaInfo,
+	"objectSetOwner":               LuaObjectSetOwner,
+	"packFieldToDatagram":          LuaPackFieldToDatagram,
+	"queryAllRequiredFields":       LuaQueryAllRequiredFields,
+	"queryObjectFields":            LuaQueryObjectFields,
+	"removeSessionObject":          LuaRemoveSessionObject,
+	"routeDatagram":                LuaRouteDatagram,
+	"sendActivateObject":           LuaSendActivateObject,
+	"sendDatagram":                 LuaSendDatagram,
+	"sendDisconnect":               LuaSendDisconnect,
+	"setLocation":                  LuaSetLocation,
+	"subscribeChannel":             LuaSubscribeChannel,
+	"subscribePuppetChannel":       LuaSubscribePuppetChannel,
+	"setChannel":                   LuaSetChannel,
+	"undeclareObject":              LuaUndeclareObject,
+	"undeclareAllObjects":          LuaUndeclareAllObjects,
+	"unsubscribePuppetChannel":     LuaUnsubscribePuppetChannel,
+	"userTable":                    LuaGetSetUserTable,
+	"warn":                         LuaWarn,
+	"writeServerEvent":             LuaWriteServerEvent,
 }
 
 func LuaInfo(L *lua.LState) int {
@@ -136,7 +136,7 @@ func LuaAddServerHeaderWithAvatarId(L *lua.LState) int {
 	avatarId := (L.CheckNumber(3))
 	msgType := uint16(L.CheckNumber(4))
 
-	dg.AddServerHeader(Channel_t(avatarId + (1 << 32)), client.channel, msgType)
+	dg.AddServerHeader(Channel_t(avatarId+(1<<32)), client.channel, msgType)
 	return 1
 }
 
@@ -148,7 +148,7 @@ func LuaAddServerHeaderWithAccountId(L *lua.LState) int {
 	accountId := (L.CheckNumber(3))
 	msgType := uint16(L.CheckNumber(4))
 
-	dg.AddServerHeader(Channel_t(accountId + (3 << 32)), client.channel, msgType)
+	dg.AddServerHeader(Channel_t(accountId+(3<<32)), client.channel, msgType)
 	return 1
 }
 
@@ -218,7 +218,7 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 	value := L.Get(5)
 	includeFieldId := L.CheckBool(6)
 	includeLength := false
-	if (L.GetTop() == 7) {
+	if L.GetTop() == 7 {
 		includeLength = L.CheckBool(7)
 	}
 
@@ -717,7 +717,7 @@ func LuaGetSetUserTable(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	if L.GetTop() == 2 {
 		table := L.CheckTable(2)
-		client.userTable = table;
+		client.userTable = table
 	} else {
 		if client.userTable == nil {
 			client.userTable = L.NewTable()
@@ -822,7 +822,7 @@ func LuaSetChannel(L *lua.LState) int {
 		// client:setChannel(accountId, avatarId)
 		account := L.CheckInt(2)
 		avatar := L.CheckInt(3)
-		channel = Channel_t(account) << 32 | Channel_t(avatar)
+		channel = Channel_t(account)<<32 | Channel_t(avatar)
 	}
 	client.SetChannel(channel)
 	return 1
@@ -833,7 +833,7 @@ func LuaSubscribePuppetChannel(L *lua.LState) int {
 	do := Channel_t(L.CheckInt(2))
 	puppetType := Channel_t(L.CheckInt(3))
 
-	client.SubscribeChannel(do + puppetType << 32)
+	client.SubscribeChannel(do + puppetType<<32)
 	return 1
 }
 
@@ -842,7 +842,7 @@ func LuaUnsubscribePuppetChannel(L *lua.LState) int {
 	do := Channel_t(L.CheckInt(2))
 	puppetType := Channel_t(L.CheckInt(3))
 
-	client.UnsubscribeChannel(do + puppetType << 32)
+	client.UnsubscribeChannel(do + puppetType<<32)
 	return 1
 }
 
@@ -874,9 +874,9 @@ func LuaSendActivateObject(L *lua.LState) int {
 
 	dg := NewDatagram()
 	if fields != nil {
-		dg.AddServerHeader(Channel_t(do), client.channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER)
+		dg.AddServerHeader(Channel_t(do), client.channel, STATESERVER_OBJECT_CREATE_WITH_REQUIR_OTHER_CONTEXT)
 	} else {
-		dg.AddServerHeader(Channel_t(do), client.channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+		dg.AddServerHeader(Channel_t(do), client.channel, STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT)
 	}
 	dg.AddDoid(do)
 	dg.AddLocation(0, 0)
@@ -919,7 +919,7 @@ func LuaSendActivateObject(L *lua.LState) int {
 	return 1
 }
 
-func LuaObjectSetOwner(L * lua.LState) int {
+func LuaObjectSetOwner(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	do := Doid_t(L.CheckInt(2))
 	all := L.CheckBool(3)
@@ -1017,7 +1017,7 @@ func LuaUndeclareObject(L *lua.LState) int {
 	return 1
 }
 
-func LuaUndeclareAllObjects(L * lua.LState) int {
+func LuaUndeclareAllObjects(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	clear(client.declaredObjects)
 	return 1
