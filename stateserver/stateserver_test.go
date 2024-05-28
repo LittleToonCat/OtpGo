@@ -1988,7 +1988,7 @@ func TestDatabaseStateServer_Activate(t *testing.T) {
 
 	shard.AddChannel(LocationAsChannel(80000, 100))
 
-	dg := (&TestDatagram{}).Create([]Channel_t{do1}, 5, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+	dg := (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT)
 	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
 	shard.SendDatagram(*dg)
 
@@ -2031,7 +2031,7 @@ func TestDatabaseStateServer_Activate(t *testing.T) {
 	shard.Expect(t, *dg, false)
 
 	// Try to activate an already active object.
-	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT)
 	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
 	shard.SendDatagram(*dg)
 
@@ -2045,7 +2045,7 @@ func TestDatabaseStateServer_Activate(t *testing.T) {
 	shard.Flush()
 
 	// Test for Activate on Database object with other fields
-	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER)
+	dg = (&TestDatagram{}).Create([]Channel_t{do1}, 5, STATESERVER_OBJECT_CREATE_WITH_REQUIR_OTHER_CONTEXT)
 	appendMeta(dg, 9001, 80000, 100, DistributedTestObject5)
 	dg.AddUint16(2) // Two other fields:
 	dg.AddUint16(SetRequired1)
@@ -2101,7 +2101,7 @@ func TestDatabaseStateServer_Activate(t *testing.T) {
 	shard.Flush()
 
 	// Test for Activate on non-existent Database object
-	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+	dg = (&TestDatagram{}).Create([]Channel_t{do2}, 5, STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT)
 	appendMeta(dg, 9002, 80000, 100, DistributedTestObject5)
 	shard.SendDatagram(*dg)
 

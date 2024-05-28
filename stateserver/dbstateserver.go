@@ -477,10 +477,10 @@ func (s *DatabaseStateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator)
 		s.handleQueryFields(dgi, sender, msgType == STATESERVER_OBJECT_QUERY_FIELDS)
 	case STATESERVER_QUERY_OBJECT_ALL:
 		s.handleQueryAll(dgi, sender, Doid_t(receivers[0]))
-	case DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS:
+	case STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT:
 		fallthrough
-	case DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER:
-		s.handleActivate(dgi, msgType == DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER)
+	case STATESERVER_OBJECT_CREATE_WITH_REQUIR_OTHER_CONTEXT:
+		s.handleActivate(dgi, msgType == STATESERVER_OBJECT_CREATE_WITH_REQUIR_OTHER_CONTEXT)
 	case DBSS_OBJECT_GET_ACTIVATED:
 		context := dgi.ReadUint32()
 		doId := dgi.ReadDoid()

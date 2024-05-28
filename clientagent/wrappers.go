@@ -874,9 +874,9 @@ func LuaSendActivateObject(L *lua.LState) int {
 
 	dg := NewDatagram()
 	if fields != nil {
-		dg.AddServerHeader(Channel_t(do), client.channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS_OTHER)
+		dg.AddServerHeader(Channel_t(do), client.channel, STATESERVER_OBJECT_CREATE_WITH_REQUIR_OTHER_CONTEXT)
 	} else {
-		dg.AddServerHeader(Channel_t(do), client.channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS)
+		dg.AddServerHeader(Channel_t(do), client.channel, STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT)
 	}
 	dg.AddDoid(do)
 	dg.AddLocation(0, 0)
