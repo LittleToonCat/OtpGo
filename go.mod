@@ -82,4 +82,4 @@ require (
 )
 
 // This exists until https://github.com/yuin/gopher-lua/pull/465 and https://github.com/yuin/gopher-lua/pull/283 has been merged.
-replace github.com/yuin/gopher-lua => github.com/rocketprogrammer/gopher-lua v0.0.0-20231210210735-90501ab9848b
+replace github.com/yuin/gopher-lua => github.com/rocketprogrammer/gopher-lua v0.0.0-20240527-8595878.0.20240531215802-bd95e3881f84

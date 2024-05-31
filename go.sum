@@ -195,8 +195,8 @@ github.com/prometheus/procfs v0.15.0/go.mod h1:Y0RJ/Y5g5wJpkTisOtqwDSo4HwhGmLB4V
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
 github.com/rivo/uniseg v0.4.7 h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=
 github.com/rivo/uniseg v0.4.7/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
-github.com/rocketprogrammer/gopher-lua v0.0.0-20231210210735-90501ab9848b h1:98+pcmeE2mLtzFajnMrN2hOV36UkFc6dMwaTicaUsOk=
-github.com/rocketprogrammer/gopher-lua v0.0.0-20231210210735-90501ab9848b/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=
+github.com/rocketprogrammer/gopher-lua v0.0.0-20240527-8595878.0.20240531215802-bd95e3881f84 h1:VTmdeCUIlC+x2PD+OGx7SvXS9bxAa8uyNyrcgt/AzzQ=
+github.com/rocketprogrammer/gopher-lua v0.0.0-20240527-8595878.0.20240531215802-bd95e3881f84/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=
 github.com/rogpeppe/fastuuid v1.1.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
 github.com/rogpeppe/go-internal v1.10.0 h1:TMyTOH3F/DB16zRVcYyreMH6GnZZrwQVAoYjRBZyWFQ=
 github.com/rogpeppe/go-internal v1.10.0/go.mod h1:UQnix2H7Ngw/k4C5ijL5+65zddjncjaFoBhdsK/akog=
