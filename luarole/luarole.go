@@ -299,7 +299,6 @@ func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 	defer dc.DeleteVector_uchar(packedData)
 	if !dcField.Validate_ranges(packedData) {
 		l.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", dcField.Get_name(), DumpVector(packedData), dgi)
-		DCLock.Unlock()
 		return
 	}
 
