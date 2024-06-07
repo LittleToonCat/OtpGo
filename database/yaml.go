@@ -277,6 +277,11 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 	dg.AddUint8(0) // return code
 	dg.AddDoid(doId)
 	b.db.RouteDatagram(dg)
+
+	// Cleanup
+	for _, data := range datas {
+		dc.DeleteVector_uchar(data)
+	}
 }
 
 func (b *YAMLBackend) SendGetStoredValuesError(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
