@@ -383,7 +383,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 			continue
 		}
 
-		packedData[field] = dcField.Parse_string(value)
+		packedData[field] = parsedData
 	}
 
 	dg := NewDatagram()
