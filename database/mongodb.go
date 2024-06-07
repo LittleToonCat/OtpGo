@@ -233,6 +233,8 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 	DCLock.Lock()
 	defer DCLock.Unlock()
 
+	defaults := map[dc.DCField]dc.Vector_uchar{}
+
 	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
 		field := dclass.Get_inherited_field(i)
 		if field.Is_db() {
@@ -254,6 +256,7 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 					for i := int64(0); i < value.Size(); i++ {
 						data.Add(value.Get(int(i)))
 					}
+					defaults[field] = data
 				} else {
 					// Move on.
 					continue
@@ -280,6 +283,9 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 				for _, data := range datas {
 					dc.DeleteVector_uchar(data)
 				}
+				for _, data := range defaults {
+					dc.DeleteVector_uchar(data)
+				}
 			}
 		}
 	}
@@ -302,6 +308,9 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 		for _, data := range datas {
 			dc.DeleteVector_uchar(data)
 		}
+		for _, data := range defaults {
+			dc.DeleteVector_uchar(data)
+		}
 		return
 	}
 
@@ -321,6 +330,9 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
+			dc.DeleteVector_uchar(data)
+		}
+		for _, data := range defaults {
 			dc.DeleteVector_uchar(data)
 		}
 		return
