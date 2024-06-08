@@ -358,9 +358,6 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 			dcField := cls.Get_field_by_name(field)
 			if dcField == dc.SwigcptrDCField(0) {
 				client.log.Warnf("GetStoredValues: Field \"%s\" does not exist for class \"%s\"", field, clsName)
-				if found {
-					dc.DeleteVector_uchar(packedValues[i])
-				}
 				continue
 			}
 
@@ -369,7 +366,6 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				// Validate that the data is correct
 				if !dcField.Validate_ranges(data) {
 					client.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpVector(data))
-					dc.DeleteVector_uchar(data)
 					continue
 				}
 
@@ -378,10 +374,15 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				fieldTable.RawSetString(fields[i], core.UnpackDataToLuaValue(unpacker, L))
 				unpacker.End_unpack()
 
-				dc.DeleteVector_uchar(data)
 			}
 		}
 		DCLock.Unlock()
+
+		// Cleanup
+		for _, data := range packedValues {
+			dc.DeleteVector_uchar(data)
+		}
+
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 

@@ -352,6 +352,9 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 	for _, data := range datas {
 		dc.DeleteVector_uchar(data)
 	}
+	for _, data := range defaults {
+		dc.DeleteVector_uchar(data)
+	}
 }
 
 func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
