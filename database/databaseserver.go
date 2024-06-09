@@ -119,6 +119,7 @@ func (d *DatabaseServer) getOperationFromQueue() OperationQueueEntry {
 	defer d.queueLock.Unlock()
 
 	op := d.queue[0]
+	d.queue[0] = OperationQueueEntry{}
 	d.queue = d.queue[1:]
 	return op
 }

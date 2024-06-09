@@ -159,6 +159,7 @@ func (c *ClientAgent) getEntryFromQueue() LuaQueueEntry {
 	defer c.Unlock()
 
 	op := c.LQueue[0]
+	c.LQueue[0] = LuaQueueEntry{}
 	c.LQueue = c.LQueue[1:]
 	return op
 }
