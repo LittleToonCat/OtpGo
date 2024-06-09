@@ -90,6 +90,7 @@ func (m *MessageDirector) getDatagramFromQueue() QueueEntry {
 	defer m.queueLock.Unlock()
 
 	obj := MD.Queue[0]
+	MD.Queue[0] = QueueEntry{}
 	MD.Queue = MD.Queue[1:]
 	return obj
 }

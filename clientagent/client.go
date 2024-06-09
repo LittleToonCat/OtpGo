@@ -966,6 +966,7 @@ func (c *Client) getDatagramFromQueue() Datagram {
 	defer c.queueLock.Unlock()
 
 	dg := c.queue[0]
+	c.queue[0] = Datagram{}
 	c.queue = c.queue[1:]
 	return dg
 }

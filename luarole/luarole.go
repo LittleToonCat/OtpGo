@@ -118,6 +118,7 @@ func (l *LuaRole) getEntryFromQueue() LuaQueueEntry {
 	defer l.Unlock()
 
 	op := l.LQueue[0]
+	l.LQueue[0] = LuaQueueEntry{}
 	l.LQueue = l.LQueue[1:]
 	return op
 }
