@@ -1,15 +1,16 @@
 package messagedirector
 
 import (
-	"otpgo/core"
-	"otpgo/net"
-	. "otpgo/util"
 	"fmt"
-	"github.com/apex/log"
 	gonet "net"
 	"os"
 	"os/signal"
+	"otpgo/core"
+	"otpgo/net"
+	. "otpgo/util"
 	"sync"
+
+	"github.com/apex/log"
 )
 
 type QueueEntry struct {
@@ -92,6 +93,10 @@ func (m *MessageDirector) getDatagramFromQueue() QueueEntry {
 	obj := MD.Queue[0]
 	MD.Queue[0] = QueueEntry{}
 	MD.Queue = MD.Queue[1:]
+	if len(MD.Queue) == 0 {
+		// Recreate the queue slice. This prevents the capacity from growing indefinitely and allows old entries to drop off as soon as possible from the backing array.
+		MD.Queue = make([]QueueEntry, 0)
+	}
 	return obj
 }
 
@@ -201,10 +206,12 @@ func (m *MessageDirector) RecallPostRemoves() {
 
 func (m *MessageDirector) RemoveParticipant(p MDParticipant) {
 	m.Lock()
-	for n, participant := range MD.participants {
-		if participant == p {
-			MD.participants = append(MD.participants[:n], MD.participants[n+1:]...)
+	tempParticipantSlice := make([]MDParticipant, 0)
+	for _, participant := range MD.participants {
+		if participant != p {
+			tempParticipantSlice = append(tempParticipantSlice, participant)
 		}
 	}
+	MD.participants = tempParticipantSlice
 	m.Unlock()
 }

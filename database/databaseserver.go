@@ -2,12 +2,12 @@ package database
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
 	"otpgo/core"
 	"otpgo/messagedirector"
 	. "otpgo/util"
 	"sync"
-	"os"
-	"os/signal"
 
 	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/apex/log"
@@ -121,6 +121,10 @@ func (d *DatabaseServer) getOperationFromQueue() OperationQueueEntry {
 	op := d.queue[0]
 	d.queue[0] = OperationQueueEntry{}
 	d.queue = d.queue[1:]
+	if len(d.queue) == 0 {
+		// Recreate the queue slice. This prevents the capacity from growing indefinitely and allows old entries to drop off as soon as possible from the backing array.
+		d.queue = make([]OperationQueueEntry, 0)
+	}
 	return op
 }
 

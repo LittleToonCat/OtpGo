@@ -964,11 +964,14 @@ func LuaRemoveSessionObject(L *lua.LState) int {
 	}
 
 	client.log.Debugf("Removed session object with ID %d", do)
-	for i, o := range client.sessionObjects {
-		if o == do {
-			client.sessionObjects = append(client.sessionObjects[:i], client.sessionObjects[i+1:]...)
+
+	tempSessionObjectSlice := make([]Doid_t, 0)
+	for _, o := range client.sessionObjects {
+		if o != do {
+			tempSessionObjectSlice = append(tempSessionObjectSlice, o)
 		}
 	}
+	client.sessionObjects = tempSessionObjectSlice
 	return 1
 }
 

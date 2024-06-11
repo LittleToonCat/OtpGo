@@ -120,6 +120,10 @@ func (l *LuaRole) getEntryFromQueue() LuaQueueEntry {
 	op := l.LQueue[0]
 	l.LQueue[0] = LuaQueueEntry{}
 	l.LQueue = l.LQueue[1:]
+	if len(l.LQueue) == 0 {
+		// Recreate the queue slice. This prevents the capacity from growing indefinitely and allows old entries to drop off as soon as possible from the backing array.
+		l.LQueue = make([]LuaQueueEntry, 0)
+	}
 	return op
 }
 
