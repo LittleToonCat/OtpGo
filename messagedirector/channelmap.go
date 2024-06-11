@@ -66,16 +66,16 @@ func (r *RangeMap) Split(rng Range, hi Channel_t, mid Channel_t, lo Channel_t, f
 	rnglo := Range{lo, mid}
 	rnghi := Range{mid + 1, hi}
 
+	tempSplitSlice := make([]Range, 0)
+
 	for _, sub := range irng {
 		intSubs := r.intervalSubs[sub]
-		idx := 0
 		for _, srng := range intSubs {
 			if srng != rng && srng != rnglo && srng != rnghi {
-				intSubs[idx] = srng
-				idx++
+				tempSplitSlice = append(tempSplitSlice, srng)
 			}
 		}
-		intSubs = intSubs[:idx]
+		intSubs = tempSplitSlice
 		intSubs = addRange(intSubs, rnghi)
 		intSubs = addRange(intSubs, rnglo)
 		r.intervalSubs[sub] = intSubs
@@ -179,30 +179,26 @@ func (r *RangeMap) add(rng Range, sub *Subscriber) {
 }
 
 func (r *RangeMap) removeSubInterval(p *Subscriber, rmv Range) {
+	tempSubIntervalSlice := make([]Range, 0)
 	if rng, ok := r.intervalSubs[p]; ok {
-		idx := 0
 		for _, v := range rng {
 			if v != rmv {
-				rng[idx] = v
-				idx++
-			}
+				tempSubIntervalSlice = append(tempSubIntervalSlice, v)
+			} 
 		}
-		rng = rng[:idx]
-		r.intervalSubs[p] = rng
+		r.intervalSubs[p] = tempSubIntervalSlice
 	}
 }
 
 func (r *RangeMap) removeIntervalSub(int Range, p *Subscriber) {
+	tempIntervalSubSlice := make([]*Subscriber, 0)
 	if rng, ok := r.intervals[int]; ok {
-		idx := 0
 		for _, v := range rng {
 			if v != p {
-				rng[idx] = v
-				idx++
-			}
+				tempIntervalSubSlice = append(tempIntervalSubSlice, v)
+			} 
 		}
-		rng = rng[:idx]
-		r.intervals[int] = rng
+		r.intervals[int] = tempIntervalSubSlice
 	}
 }
 
@@ -406,11 +402,15 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 	subs := c.subscriptions[ch];
 	if len(subs) > 0 {
 		i := slices.Index(subs, p)
-		// Delete element
-		subs = append(subs[:i], subs[i+1:]...)
+		// Delete element. We have to recreate the slice, otherwise participants may get stuck in the backing array.
+		tempSubsSlice := make([]*Subscriber, 0)
+		tempSubsSlice = append(subs[:i], subs[i+1:]...)
+		subs = tempSubsSlice
 		for n, userCh := range p.channels {
 			if userCh == ch {
-				p.channels = append(p.channels[:n], p.channels[n+1:]...)
+				tempChannelsSlice := make([]Channel_t, 0)
+				tempChannelsSlice = append(p.channels[:n], p.channels[n+1:]...)
+				p.channels = tempChannelsSlice
 			}
 		}
 	} else {

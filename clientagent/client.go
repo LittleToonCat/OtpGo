@@ -322,11 +322,13 @@ func (c *Client) closeZones(parent Doid_t, zones []Zone_t) {
 				}
 
 				c.handleRemoveObject(obj.do, false)
-				for i, o := range c.seenObjects {
-					if o == obj.do {
-						c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
+				tempSeenObjectSlice := make([]Doid_t, 0)
+				for _, o := range c.seenObjects {
+					if o != obj.do {
+						tempSeenObjectSlice = append(tempSeenObjectSlice, o)
 					}
 				}
+				c.seenObjects = tempSeenObjectSlice
 				toRemove = append(toRemove, obj.do)
 			}
 		}
@@ -532,11 +534,13 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 
 		c.log.Debugf("Removed session object with ID %d", do)
-		for i, o := range c.sessionObjects {
-			if o == do {
-				c.sessionObjects = append(c.sessionObjects[:i], c.sessionObjects[i+1:]...)
+		tempSessionObjectSlice := make([]Doid_t, 0)
+		for _, o := range c.sessionObjects {
+			if o != do {
+				tempSessionObjectSlice = append(tempSessionObjectSlice, o)
 			}
 		}
+		c.sessionObjects = tempSessionObjectSlice
 	case CLIENTAGENT_GET_TLVS:
 		resp := NewDatagram()
 		resp.AddServerHeader(sender, c.channel, CLIENTAGENT_GET_TLVS_RESP)
@@ -596,20 +600,27 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 
 		c.log.Debugf("Deleting server-side object %d", do)
-		for i, so := range c.sessionObjects {
-			if so == do {
-				c.sessionObjects = append(c.sessionObjects[:i], c.sessionObjects[i+1:]...)
+		tempSessionObjectSlice := make([]Doid_t, 0)
+		for _, so := range c.sessionObjects {
+			if so != do {
+				tempSessionObjectSlice = append(tempSessionObjectSlice, so)
+			} else {
 				c.sendDisconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED,
-					fmt.Sprintf("The session object with id %d has been unexpectedly deleted", do), false)
+				fmt.Sprintf("The session object with id %d has been unexpectedly deleted", do), false)
 			}
 		}
 
-		for i, so := range c.seenObjects {
-			if so == do {
-				c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
+		c.sessionObjects = tempSessionObjectSlice
+
+		tempSeenObjectSlice := make([]Doid_t, 0)
+		for _, so := range c.seenObjects {
+			if so != do {
+				tempSeenObjectSlice = append(tempSeenObjectSlice, so)
+			} else {
 				c.handleRemoveObject(do, false)
 			}
 		}
+		c.seenObjects = tempSeenObjectSlice
 
 		if _, ok := c.ownedObjects[do]; ok {
 			c.handleRemoveOwnership(do)
@@ -715,12 +726,16 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				c.client.SendDatagram(dg)
 			} else {
 				// Not interested, delete.
-				for i, so := range c.seenObjects {
-					if so == do {
-						c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
+				tempSeenObjectSlice := make([]Doid_t, 0)
+				for _, so := range c.seenObjects {
+					if so != do {
+						tempSeenObjectSlice = append(tempSeenObjectSlice, so)
+					} else {
 						c.handleRemoveObject(do, false)
 					}
 				}
+				
+				c.seenObjects = tempSeenObjectSlice
 
 				if _, ok := c.ownedObjects[do]; ok {
 					c.handleRemoveOwnership(do)
@@ -968,6 +983,10 @@ func (c *Client) getDatagramFromQueue() Datagram {
 	dg := c.queue[0]
 	c.queue[0] = Datagram{}
 	c.queue = c.queue[1:]
+	if len(c.queue) == 0 {
+		// Recreate the queue slice. This prevents the capacity from growing indefinitely and allows old entries to drop off as soon as possible from the backing array.
+		c.queue = make([]Datagram, 0)
+	}
 	return dg
 }
 

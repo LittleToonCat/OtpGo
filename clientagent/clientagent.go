@@ -11,12 +11,13 @@ import (
 	. "otpgo/util"
 	"sync"
 
+	"net/http"
+
 	"github.com/apex/log"
 	gluahttp "github.com/cjoudrey/gluahttp"
 	gluacrypto "github.com/tengattack/gluacrypto"
 	libs "github.com/vadv/gopher-lua-libs"
 	lua "github.com/yuin/gopher-lua"
-	"net/http"
 )
 
 type ChannelTracker struct {
@@ -161,6 +162,10 @@ func (c *ClientAgent) getEntryFromQueue() LuaQueueEntry {
 	op := c.LQueue[0]
 	c.LQueue[0] = LuaQueueEntry{}
 	c.LQueue = c.LQueue[1:]
+	if len(c.LQueue) == 0 {
+		// Recreate the queue slice. This prevents the capacity from growing indefinitely and allows old entries to drop off as soon as possible from the backing array.
+		c.LQueue = make([]LuaQueueEntry, 0)
+	}
 	return op
 }
 

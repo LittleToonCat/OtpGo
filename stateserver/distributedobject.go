@@ -707,14 +707,13 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		oldParent := dgi.ReadDoid()
 		oldZone := dgi.ReadZone()
 		eraseFromSlice := func(slice []Doid_t, element Doid_t) []Doid_t {
-			idx := 0
+			tempSlice := make([]Doid_t, 0)
 			for _, do := range slice {
 				if do != element {
-					slice[idx] = do
-					idx++
+					tempSlice = append(tempSlice, do)
 				}
 			}
-			return slice[:idx]
+			return tempSlice
 		}
 		if newParent == d.do {
 			if d.do == oldParent {
