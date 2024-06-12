@@ -206,7 +206,7 @@ func (m *MessageDirector) RecallPostRemoves() {
 
 func (m *MessageDirector) RemoveParticipant(p MDParticipant) {
 	m.Lock()
-	tempParticipantSlice := make([]MDParticipant, 0)
+	tempParticipantSlice := make([]MDParticipant, 0, cap(MD.participants))
 	for _, participant := range MD.participants {
 		if participant != p {
 			tempParticipantSlice = append(tempParticipantSlice, participant)
