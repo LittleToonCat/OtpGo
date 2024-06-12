@@ -144,12 +144,16 @@ func (c *Client) SendDatagram(datagram Datagram) {
 		c.disconnect(err)
 	}
 
+	writeTimer := time.NewTimer(c.timeout)
 	select {
 	case err := <-c.tr.Flush():
+		if !writeTimer.Stop() {
+			<-writeTimer.C
+		}
 		if err != nil {
 			c.disconnect(err)
 		}
-	case <-time.After(c.timeout):
+	case <-writeTimer.C:
 		c.disconnect(errors.New("write timeout"))
 	}
 
