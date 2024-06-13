@@ -448,7 +448,7 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 			}
 		}
 
-		fieldTable := L.NewTable()
+		resultTable := L.NewTable()
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)
 
@@ -485,13 +485,17 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 
 			unpacker.Set_unpack_data(data)
 			unpacker.Begin_unpack(dcField)
-			fieldTable.RawSetString(fields[i], core.UnpackDataToLuaValue(unpacker, L))
+			fieldTable := L.NewTable()
+			fieldTable.Append(lua.LString(fields[i]))
+			fieldTable.Append(core.UnpackDataToLuaValue(unpacker, L))
 			unpacker.End_unpack()
+
+			resultTable.Append(fieldTable)
 
 			dc.DeleteVector_uchar(data)
 		}
 		DCLock.Unlock()
-		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, resultTable)
 	}
 
 	client.getDatabaseValues(doId, fields, callbackFunc)
@@ -626,7 +630,7 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 		found := dgi.ReadUint16()
 		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
 
-		fieldTable := client.ca.L.NewTable()
+		resultTable := client.ca.L.NewTable()
 
 		DCLock.Lock()
 		defer DCLock.Unlock()
@@ -651,10 +655,14 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 				client.log.Warnf("queryObjectFields: Unable to unpack field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
 				continue
 			}
-			fieldTable.RawSetString(field.Get_name(), lValue)
+			fieldTable := client.ca.L.NewTable()
+			fieldTable.Append(lua.LString(field.Get_name()))
+			fieldTable.Append(lValue)
+
+			resultTable.Append(fieldTable)
 		}
 
-		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, resultTable)
 	}
 
 	client.queryFieldsContextMap[client.context] = callbackFunc
