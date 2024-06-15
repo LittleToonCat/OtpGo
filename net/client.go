@@ -37,6 +37,8 @@ type Client struct {
 
 	// PROXY protocol TLVs
 	tlvs   []byte
+	writeTimer *time.Timer
+	readBufferPool sync.Pool
 }
 
 func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Client {
@@ -46,6 +48,13 @@ func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Cl
 		remote:  tr.Conn().RemoteAddr().(*gonet.TCPAddr),
 		local:   tr.Conn().LocalAddr().(*gonet.TCPAddr),
 		tlvs:    []byte{},
+		writeTimer: time.NewTimer(timeout),
+		readBufferPool: sync.Pool{
+			New: func() any {
+				buff := make([]byte, BUFF_SIZE)
+				return &buff
+			},
+		},
 	}
 	client.initialize()
 	client.timeout = timeout
@@ -120,9 +129,12 @@ func (c *Client) processInput(len int, data []byte) {
 }
 
 func (c *Client) read() {
-	buff := make([]byte, BUFF_SIZE)
-	if n, err := c.tr.Read(buff); err == nil {
-		c.processInput(n, buff[0:n])
+	buff := c.readBufferPool.Get().(*[]byte)
+	// Make sure the buffer is zeroed.
+	clear(*buff)
+	if n, err := c.tr.Read(*buff); err == nil {
+		c.processInput(n, (*buff)[0:n])
+		c.readBufferPool.Put(buff)
 		c.read()
 	} else {
 		c.disconnect(err)
@@ -144,16 +156,20 @@ func (c *Client) SendDatagram(datagram Datagram) {
 		c.disconnect(err)
 	}
 
-	writeTimer := time.NewTimer(c.timeout)
+	if !c.writeTimer.Stop() {
+		<-c.writeTimer.C
+	}
+	c.writeTimer.Reset(c.timeout)
+
 	select {
 	case err := <-c.tr.Flush():
-		if !writeTimer.Stop() {
-			<-writeTimer.C
+		if !c.writeTimer.Stop() {
+			<-c.writeTimer.C
 		}
 		if err != nil {
 			c.disconnect(err)
 		}
-	case <-writeTimer.C:
+	case <-c.writeTimer.C:
 		c.disconnect(errors.New("write timeout"))
 	}
 
