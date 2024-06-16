@@ -127,15 +127,17 @@ func (c *Client) processInput(len int, data []byte) {
 }
 
 func (c *Client) read() {
-	buff := c.readBufferPool.Get().(*[]byte)
-	// Make sure the buffer is zeroed.
-	clear(*buff)
-	if n, err := c.tr.Read(*buff); err == nil {
-		c.processInput(n, (*buff)[0:n])
-		c.readBufferPool.Put(buff)
-		c.read()
-	} else {
-		c.disconnect(err)
+	for {
+		buff := c.readBufferPool.Get().(*[]byte)
+		// Make sure the buffer is zeroed.
+		clear(*buff)
+		if n, err := c.tr.Read(*buff); err == nil {
+			c.processInput(n, (*buff)[0:n])
+			c.readBufferPool.Put(buff)
+		} else {
+			c.disconnect(err)
+			return
+		}
 	}
 }
 
