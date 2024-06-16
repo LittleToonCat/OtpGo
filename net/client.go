@@ -158,7 +158,7 @@ func (c *Client) SendDatagram(datagram Datagram) {
 
 	select {
 	case err := <-c.tr.Flush():
-		if writeTimer.Stop() {
+		if !writeTimer.Stop() {
 			<-writeTimer.C
 		}
 		if err != nil {
