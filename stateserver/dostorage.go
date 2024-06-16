@@ -49,7 +49,7 @@ func (doStore *DOStorage) recycleDO(do *DistributedObject) {
 	do.ownerChannel = 0
 	do.explicitAi = false
 	do.parentSynchronized = false
-
+	do.RecycleParticipant()
 	doStore.DOPool.Put(do)
 }
 

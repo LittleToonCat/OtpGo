@@ -123,6 +123,17 @@ func (m *MDParticipantBase) Cleanup() {
 	MD.RemoveParticipant(m)
 }
 
+func (m *MDParticipantBase) RecycleParticipant() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.subscriber = nil
+	clear(m.postRemoves)
+	m.name = ""
+	m.url = ""
+	m.terminated = false
+}
+
 func (m *MDParticipantBase) Terminate(err error) { /* virtual */ }
 
 // MDNetworkParticipant represents a downstream MD connection
