@@ -1,9 +1,10 @@
 package core
 
 import (
-	dc "github.com/LittleToonCat/dcparser-go"
-	"otpgo/util"
 	"fmt"
+	"otpgo/util"
+
+	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/spf13/viper"
 )
 
@@ -49,6 +50,7 @@ type Role struct {
 		ID        int
 		Class     string
 	}
+	DO_Preallocation_Amount int
 
 	// DBSS
 	Ranges struct {
