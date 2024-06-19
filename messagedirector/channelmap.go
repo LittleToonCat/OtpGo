@@ -184,7 +184,7 @@ func (r *RangeMap) removeSubInterval(p *Subscriber, rmv Range) {
 		for _, v := range rng {
 			if v != rmv {
 				tempSubIntervalSlice = append(tempSubIntervalSlice, v)
-			} 
+			}
 		}
 		r.intervalSubs[p] = tempSubIntervalSlice
 	}
@@ -196,7 +196,7 @@ func (r *RangeMap) removeIntervalSub(int Range, p *Subscriber) {
 		for _, v := range rng {
 			if v != p {
 				tempIntervalSubSlice = append(tempIntervalSubSlice, v)
-			} 
+			}
 		}
 		r.intervals[int] = tempIntervalSubSlice
 	}
@@ -466,7 +466,8 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 
 func (c *ChannelMap) Send(ch Channel_t, data *MDDatagram) {
 	lock.Lock()
-	subs := c.subscriptions[ch]
+	subs := make([]*Subscriber, len(c.subscriptions[ch]))
+	copy(subs, c.subscriptions[ch])
 	lock.Unlock()
 	if len(subs) > 0 {
 		data.sendLock.Lock()
