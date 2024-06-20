@@ -335,6 +335,7 @@ func (c *Client) closeZones(parent Doid_t, zones []Zone_t) {
 	}
 
 	for _, do := range toRemove {
+		c.addHistoricalObject(do)
 		delete(c.visibleObjects, do)
 	}
 
@@ -350,6 +351,13 @@ func (c *Client) historicalObject(do Doid_t) bool {
 		}
 	}
 	return false
+}
+
+func (c *Client) addHistoricalObject(do Doid_t) {
+	if c.historicalObject(do) {
+		return
+	}
+	c.historicalObjects = append(c.historicalObjects, do)
 }
 
 func (c *Client) lookupObject(do Doid_t) dc.DCClass {
@@ -627,7 +635,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			delete(c.ownedObjects, do)
 		}
 
-		c.historicalObjects = append(c.historicalObjects, do)
+		c.addHistoricalObject(do)
 		delete(c.visibleObjects, do)
 	case STATESERVER_OBJECT_ENTER_OWNER_RECV:
 		do, parent, zone, dc := dgi.ReadDoid(), dgi.ReadDoid(), dgi.ReadZone(), dgi.ReadUint16()
@@ -734,7 +742,6 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 						c.handleRemoveObject(do, false)
 					}
 				}
-				
 				c.seenObjects = tempSeenObjectSlice
 
 				if _, ok := c.ownedObjects[do]; ok {
@@ -742,7 +749,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 					delete(c.ownedObjects, do)
 				}
 
-				c.historicalObjects = append(c.historicalObjects, do)
+				c.addHistoricalObject(do)
 				delete(c.visibleObjects, do)
 			}
 		}
