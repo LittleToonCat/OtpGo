@@ -27,9 +27,9 @@ type LuaQueueEntry struct {
 type LuaRole struct {
 	messagedirector.MDParticipantBase
 	queueLock sync.Mutex
-	cMapLock sync.Mutex
-	gMapLock sync.Mutex
-	qMapLock sync.Mutex
+	cMapLock sync.RWMutex
+	gMapLock sync.RWMutex
+	qMapLock sync.RWMutex
 
 	config core.Role
 	log    *log.Entry
@@ -217,9 +217,9 @@ func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, p
 }
 
 func (c *LuaRole) handleCreateDatabaseResp(context uint32, code uint8, doId Doid_t) {
-	c.cMapLock.Lock()
+	c.cMapLock.RLock()
 	callback, ok := c.createContextMap[context]
-	c.cMapLock.Unlock()
+	c.cMapLock.RUnlock()
 
 	if !ok {
 		c.log.Warnf("Got CreateDatabaseRsp with missing context %d", context)
@@ -259,9 +259,9 @@ func (l *LuaRole) handleGetStoredValuesResp(dgi *DatagramIterator) {
 	context := dgi.ReadUint32()
 	doId := dgi.ReadDoid()
 
-	l.gMapLock.Lock()
+	l.gMapLock.RLock()
 	callback, ok := l.getContextMap[context]
-	l.gMapLock.Unlock()
+	l.gMapLock.RUnlock()
 
 	if !ok {
 		l.log.Warnf("Got GetStoredResp with missing context %d", context)
@@ -280,9 +280,9 @@ func (l *LuaRole) handleQueryFieldsResp(dgi *DatagramIterator) {
 
 	context := dgi.ReadUint32()
 
-	l.qMapLock.Lock()
+	l.qMapLock.RLock()
 	callback, ok := l.queryContextMap[context]
-	l.qMapLock.Unlock()
+	l.qMapLock.RUnlock()
 
 	if !ok {
 		l.log.Warnf("Got QueryFieldsResp with missing context %d", context)
