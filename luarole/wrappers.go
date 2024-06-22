@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	dc "github.com/LittleToonCat/dcparser-go"
-	"github.com/yuin/gopher-lua"
+	lua "github.com/yuin/gopher-lua"
 )
 
 // Participant wrappers for Lua
@@ -455,6 +455,9 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
+	participant.qMapLock.Lock()
+	defer participant.qMapLock.Unlock()
+	
 	participant.queryContextMap[participant.context] = callbackFunc
 
 	dg := NewDatagram()
