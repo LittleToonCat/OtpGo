@@ -9,6 +9,7 @@ import (
 	"otpgo/messagedirector"
 	. "otpgo/util"
 	"sync"
+	"sync/atomic"
 
 	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/apex/log"
@@ -39,7 +40,7 @@ type LuaRole struct {
 	// a float64 type) may cause some problems.
 	sender Channel_t
 
-	context          uint32
+	context          atomic.Uint32
 	createContextMap map[uint32]func(doId Doid_t)
 	getContextMap    map[uint32]func(doId Doid_t, dgi *DatagramIterator)
 	queryContextMap  map[uint32]func(dgi *DatagramIterator)
@@ -197,11 +198,12 @@ func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, p
 	c.cMapLock.Lock()
 	defer c.cMapLock.Unlock()
 	
-	c.createContextMap[c.context] = callback
+	context := c.context.Add(1)
+	c.createContextMap[context] = callback
 
 	dg := NewDatagram()
 	dg.AddServerHeader(dbChannel, from, DBSERVER_CREATE_STORED_OBJECT)
-	dg.AddUint32(c.context)
+	dg.AddUint32(context)
 	dg.AddString("") // Unknown
 	dg.AddUint16(objectType)
 	dg.AddUint16(uint16(len(packedValues)))
@@ -213,7 +215,6 @@ func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, p
 		dc.DeleteVector_uchar(value)
 	}
 	c.RouteDatagram(dg)
-	c.context++
 }
 
 func (c *LuaRole) handleCreateDatabaseResp(context uint32, code uint8, doId Doid_t) {
@@ -241,18 +242,18 @@ func (l *LuaRole) getDatabaseValues(dbChannel Channel_t, doId Doid_t, fields []s
 	l.gMapLock.Lock()
 	defer l.gMapLock.Unlock()
 	
-	l.getContextMap[l.context] = callback
+	context := l.context.Add(1)
+	l.getContextMap[context] = callback
 
 	dg := NewDatagram()
 	dg.AddServerHeader(dbChannel, from, DBSERVER_GET_STORED_VALUES)
-	dg.AddUint32(l.context)
+	dg.AddUint32(context)
 	dg.AddDoid(doId)
 	dg.AddUint16(uint16(len(fields)))
 	for _, name := range fields {
 		dg.AddString(name)
 	}
 	l.RouteDatagram(dg)
-	l.context++
 }
 
 func (l *LuaRole) handleGetStoredValuesResp(dgi *DatagramIterator) {
