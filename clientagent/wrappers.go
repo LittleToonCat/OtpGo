@@ -579,17 +579,20 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
-	client.queryFieldsContextMap[client.context] = callbackFunc
+	client.qMapLock.Lock()
+	defer client.qMapLock.Unlock()
+
+	context := client.context.Add(1)
+	client.queryFieldsContextMap[context] = callbackFunc
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddDoid(doId)
-	dg.AddUint32(client.context)
+	dg.AddUint32(context)
 	for _, fieldId := range fieldIds {
 		dg.AddUint16(fieldId)
 	}
 	client.RouteDatagram(dg)
-	client.context++
 	return 1
 }
 
@@ -665,17 +668,20 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, resultTable)
 	}
 
-	client.queryFieldsContextMap[client.context] = callbackFunc
+	client.qMapLock.Lock()
+	defer client.qMapLock.Unlock()
+
+	context := client.context.Add(1)
+	client.queryFieldsContextMap[context] = callbackFunc
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddDoid(doId)
-	dg.AddUint32(client.context)
+	dg.AddUint32(context)
 	for _, fieldId := range fieldIds {
 		dg.AddUint16(fieldId)
 	}
 	client.RouteDatagram(dg)
-	client.context++
 	return 1
 }
 
