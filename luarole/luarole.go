@@ -26,7 +26,7 @@ type LuaQueueEntry struct {
 
 type LuaRole struct {
 	messagedirector.MDParticipantBase
-	sync.Mutex
+	queueLock sync.Mutex
 	cMapLock sync.Mutex
 	gMapLock sync.Mutex
 	qMapLock sync.Mutex
@@ -117,8 +117,8 @@ func NewLuaRole(config core.Role) *LuaRole {
 }
 
 func (l *LuaRole) getEntryFromQueue() LuaQueueEntry {
-	l.Lock()
-	defer l.Unlock()
+	l.queueLock.Lock()
+	defer l.queueLock.Unlock()
 
 	op := l.LQueue[0]
 	l.LQueue[0] = LuaQueueEntry{}
@@ -160,10 +160,10 @@ func (l *LuaRole) queueLoop() {
 
 func (l *LuaRole) CallLuaFunction(fn lua.LValue, sender Channel_t, args ...lua.LValue) {
 	// Queue the call
-	l.Lock()
+	l.queueLock.Lock()
 	entry := LuaQueueEntry{fn, sender, args}
 	l.LQueue = append(l.LQueue, entry)
-	l.Unlock()
+	l.queueLock.Unlock()
 
 	select {
 	case l.processQueue <- true:
