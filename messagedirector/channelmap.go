@@ -2,34 +2,16 @@ package messagedirector
 
 import (
 	. "otpgo/util"
+	"slices"
 	"sort"
 	"sync"
-	"sync/atomic"
 )
 
 // TODO: Rewrite everything for efficiency
 
 var lock sync.Mutex
+var rangeLock sync.Mutex
 var channelMap *ChannelMap
-// var ReplayPool map[Channel_t][]Datagram
-var ReplayLock sync.Mutex
-
-type SubscriptionMap struct {
-	sync.Map
-	counter int32
-}
-
-func (s *SubscriptionMap) Increment() {
-	atomic.AddInt32(&s.counter, 1)
-}
-
-func (s *SubscriptionMap) Decrement() {
-	atomic.AddInt32(&s.counter, -1)
-}
-
-func (s *SubscriptionMap) Count() int32 {
-	return atomic.LoadInt32(&s.counter)
-}
 
 type MDDatagram struct {
 	dg       *DatagramIterator
@@ -84,16 +66,16 @@ func (r *RangeMap) Split(rng Range, hi Channel_t, mid Channel_t, lo Channel_t, f
 	rnglo := Range{lo, mid}
 	rnghi := Range{mid + 1, hi}
 
+	tempSplitSlice := make([]Range, 0)
+
 	for _, sub := range irng {
 		intSubs := r.intervalSubs[sub]
-		idx := 0
 		for _, srng := range intSubs {
 			if srng != rng && srng != rnglo && srng != rnghi {
-				intSubs[idx] = srng
-				idx++
+				tempSplitSlice = append(tempSplitSlice, srng)
 			}
 		}
-		intSubs = intSubs[:idx]
+		intSubs = tempSplitSlice
 		intSubs = addRange(intSubs, rnghi)
 		intSubs = addRange(intSubs, rnglo)
 		r.intervalSubs[sub] = intSubs
@@ -130,10 +112,10 @@ func addRange(slice []Range, r Range) []Range {
 }
 
 func (r *RangeMap) Add(rng Range, sub *Subscriber) {
-	lock.Lock()
+	rangeLock.Lock()
 	r.add(rng, sub)
 	MD.AddRange(rng.Min, rng.Max)
-	lock.Unlock()
+	rangeLock.Unlock()
 }
 
 func (r *RangeMap) add(rng Range, sub *Subscriber) {
@@ -197,37 +179,33 @@ func (r *RangeMap) add(rng Range, sub *Subscriber) {
 }
 
 func (r *RangeMap) removeSubInterval(p *Subscriber, rmv Range) {
+	tempSubIntervalSlice := make([]Range, 0)
 	if rng, ok := r.intervalSubs[p]; ok {
-		idx := 0
 		for _, v := range rng {
 			if v != rmv {
-				rng[idx] = v
-				idx++
+				tempSubIntervalSlice = append(tempSubIntervalSlice, v)
 			}
 		}
-		rng = rng[:idx]
-		r.intervalSubs[p] = rng
+		r.intervalSubs[p] = tempSubIntervalSlice
 	}
 }
 
 func (r *RangeMap) removeIntervalSub(int Range, p *Subscriber) {
+	tempIntervalSubSlice := make([]*Subscriber, 0)
 	if rng, ok := r.intervals[int]; ok {
-		idx := 0
 		for _, v := range rng {
 			if v != p {
-				rng[idx] = v
-				idx++
+				tempIntervalSubSlice = append(tempIntervalSubSlice, v)
 			}
 		}
-		rng = rng[:idx]
-		r.intervals[int] = rng
+		r.intervals[int] = tempIntervalSubSlice
 	}
 }
 
 func (r *RangeMap) Remove(rng Range, sub *Subscriber) {
-	lock.Lock()
+	rangeLock.Lock()
 	r.remove(rng, sub, false)
-	lock.Unlock()
+	rangeLock.Unlock()
 }
 
 func (r *RangeMap) remove(rng Range, sub *Subscriber, nested bool) {
@@ -330,12 +308,11 @@ func (r *RangeMap) remove(rng Range, sub *Subscriber, nested bool) {
 }
 
 func (r *RangeMap) Send(ch Channel_t, data *MDDatagram) {
-	lock.Lock()
-	defer lock.Unlock()
+	rangeLock.Lock()
+	defer rangeLock.Unlock()
 
 	data.sendLock.Lock()
 
-	// var found bool
 	for rng, subs := range r.intervals {
 		if rng.Min <= ch && rng.Max >= ch {
 			for _, sub := range subs {
@@ -365,8 +342,7 @@ type Subscriber struct {
 }
 
 type ChannelMap struct {
-	// Subscriptions maps channels to other sync.Map's which stores subscriptions by present keys
-	subscriptions sync.Map
+	subscriptions map[Channel_t][]*Subscriber
 
 	// Ranges points to a RangeMap singularity
 	ranges *RangeMap
@@ -389,6 +365,7 @@ func (s *Subscriber) Subscribed(ch Channel_t) bool {
 }
 
 func (c *ChannelMap) init() {
+	c.subscriptions = map[Channel_t][]*Subscriber{}
 	c.ranges = NewRangeMap()
 }
 
@@ -420,14 +397,20 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 		return
 	}
 
-	loaded, _ := c.subscriptions.LoadOrStore(ch, &SubscriptionMap{})
-	subs := loaded.(*SubscriptionMap)
-	if _, ok := subs.Load(p); ok {
-		subs.Delete(p)
-		subs.Decrement()
+	lock.Lock()
+
+	subs := c.subscriptions[ch];
+	if len(subs) > 0 {
+		i := slices.Index(subs, p)
+		// Delete element. We have to recreate the slice, otherwise participants may get stuck in the backing array.
+		tempSubsSlice := make([]*Subscriber, 0)
+		tempSubsSlice = append(subs[:i], subs[i+1:]...)
+		subs = tempSubsSlice
 		for n, userCh := range p.channels {
 			if userCh == ch {
-				p.channels = append(p.channels[:n], p.channels[n+1:]...)
+				tempChannelsSlice := make([]Channel_t, 0)
+				tempChannelsSlice = append(p.channels[:n], p.channels[n+1:]...)
+				p.channels = tempChannelsSlice
 			}
 		}
 	} else {
@@ -436,9 +419,12 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 
 	MDLog.Debugf("%s has unsubscribed from channel %d", p.participant.Name(), ch)
 
-	if subs.Count() == 0 {
-		channelMap.subscriptions.Delete(ch)
+	if len(subs) == 0 {
+		delete(c.subscriptions, ch)
+	} else {
+		c.subscriptions[ch] = subs;
 	}
+	lock.Unlock()
 
 	if !c.IsAnySubscribed(ch) {
 		MD.RemoveChannel(ch)
@@ -466,40 +452,40 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 		return
 	}
 
-
-	loaded, _ := c.subscriptions.LoadOrStore(ch, &SubscriptionMap{})
-	subs := loaded.(*SubscriptionMap)
-	subs.Store(p, true)
-	subs.Increment()
+	lock.Lock()
+	c.subscriptions[ch] = append(c.subscriptions[ch], p)
 	p.channels = append(p.channels, ch)
+	lock.Unlock()
 
 	MDLog.Debugf("%s has subscribed to channel %d", p.participant.Name(), ch)
 
-	if subs.Count() == 1 {
+	if len(c.subscriptions[ch]) == 1 {
 		MD.AddChannel(ch)
 	}
 }
 
 func (c *ChannelMap) Send(ch Channel_t, data *MDDatagram) {
-	if subs, ok := c.subscriptions.Load(ch); ok {
+	lock.Lock()
+	subs := make([]*Subscriber, len(c.subscriptions[ch]))
+	copy(subs, c.subscriptions[ch])
+	lock.Unlock()
+	if len(subs) > 0 {
 		data.sendLock.Lock()
-		subs.(*SubscriptionMap).Range(func(iSub, _ interface{}) bool {
-			sub := iSub.(*Subscriber)
+		for _, sub := range subs {
 			if data.sender == nil || sub.participant.Subscriber() != data.sender.Subscriber() {
 				if !data.HasSent(sub.participant.Subscriber()) {
 					data.sent = append(data.sent, sub.participant.Subscriber())
 					sub.participant.HandleDatagram(*data.dg.Dg, data.dg.Copy())
 				}
 			}
-			return true
-		})
+		}
 		data.sendLock.Unlock()
 	}
 	c.ranges.Send(ch, data)
 }
 
 func (c *ChannelMap) IsAnySubscribed(ch Channel_t) bool {
-	if _, ok := c.subscriptions.Load(ch); ok {
+	if len(c.subscriptions[ch]) > 0 {
 		return true
 	}
 
@@ -513,7 +499,6 @@ func (c *ChannelMap) IsAnySubscribed(ch Channel_t) bool {
 }
 
 func init() {
-	// ReplayPool = make(map[Channel_t][]Datagram)
 	channelMap = &ChannelMap{}
 	channelMap.init()
 }

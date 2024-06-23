@@ -358,9 +358,6 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 			dcField := cls.Get_field_by_name(field)
 			if dcField == dc.SwigcptrDCField(0) {
 				client.log.Warnf("GetStoredValues: Field \"%s\" does not exist for class \"%s\"", field, clsName)
-				if found {
-					dc.DeleteVector_uchar(packedValues[i])
-				}
 				continue
 			}
 
@@ -369,7 +366,6 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				// Validate that the data is correct
 				if !dcField.Validate_ranges(data) {
 					client.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpVector(data))
-					dc.DeleteVector_uchar(data)
 					continue
 				}
 
@@ -378,10 +374,15 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				fieldTable.RawSetString(fields[i], core.UnpackDataToLuaValue(unpacker, L))
 				unpacker.End_unpack()
 
-				dc.DeleteVector_uchar(data)
 			}
 		}
 		DCLock.Unlock()
+
+		// Cleanup
+		for _, data := range packedValues {
+			dc.DeleteVector_uchar(data)
+		}
+
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
@@ -447,7 +448,7 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 			}
 		}
 
-		fieldTable := L.NewTable()
+		resultTable := L.NewTable()
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)
 
@@ -484,13 +485,17 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 
 			unpacker.Set_unpack_data(data)
 			unpacker.Begin_unpack(dcField)
-			fieldTable.RawSetString(fields[i], core.UnpackDataToLuaValue(unpacker, L))
+			fieldTable := L.NewTable()
+			fieldTable.Append(lua.LString(fields[i]))
+			fieldTable.Append(core.UnpackDataToLuaValue(unpacker, L))
 			unpacker.End_unpack()
+
+			resultTable.Append(fieldTable)
 
 			dc.DeleteVector_uchar(data)
 		}
 		DCLock.Unlock()
-		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, resultTable)
 	}
 
 	client.getDatabaseValues(doId, fields, callbackFunc)
@@ -574,17 +579,20 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
-	client.queryFieldsContextMap[client.context] = callbackFunc
+	client.qMapLock.Lock()
+	defer client.qMapLock.Unlock()
+
+	context := client.context.Add(1)
+	client.queryFieldsContextMap[context] = callbackFunc
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddDoid(doId)
-	dg.AddUint32(client.context)
+	dg.AddUint32(context)
 	for _, fieldId := range fieldIds {
 		dg.AddUint16(fieldId)
 	}
 	client.RouteDatagram(dg)
-	client.context++
 	return 1
 }
 
@@ -625,7 +633,7 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 		found := dgi.ReadUint16()
 		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
 
-		fieldTable := client.ca.L.NewTable()
+		resultTable := client.ca.L.NewTable()
 
 		DCLock.Lock()
 		defer DCLock.Unlock()
@@ -650,23 +658,30 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 				client.log.Warnf("queryObjectFields: Unable to unpack field \"%s\"!\n%s", field.Get_name(), DumpUnpacker(unpacker))
 				continue
 			}
-			fieldTable.RawSetString(field.Get_name(), lValue)
+			fieldTable := client.ca.L.NewTable()
+			fieldTable.Append(lua.LString(field.Get_name()))
+			fieldTable.Append(lValue)
+
+			resultTable.Append(fieldTable)
 		}
 
-		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
+		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, resultTable)
 	}
 
-	client.queryFieldsContextMap[client.context] = callbackFunc
+	client.qMapLock.Lock()
+	defer client.qMapLock.Unlock()
+
+	context := client.context.Add(1)
+	client.queryFieldsContextMap[context] = callbackFunc
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddDoid(doId)
-	dg.AddUint32(client.context)
+	dg.AddUint32(context)
 	for _, fieldId := range fieldIds {
 		dg.AddUint16(fieldId)
 	}
 	client.RouteDatagram(dg)
-	client.context++
 	return 1
 }
 
@@ -963,11 +978,14 @@ func LuaRemoveSessionObject(L *lua.LState) int {
 	}
 
 	client.log.Debugf("Removed session object with ID %d", do)
-	for i, o := range client.sessionObjects {
-		if o == do {
-			client.sessionObjects = append(client.sessionObjects[:i], client.sessionObjects[i+1:]...)
+
+	tempSessionObjectSlice := make([]Doid_t, 0)
+	for _, o := range client.sessionObjects {
+		if o != do {
+			tempSessionObjectSlice = append(tempSessionObjectSlice, o)
 		}
 	}
+	client.sessionObjects = tempSessionObjectSlice
 	return 1
 }
 

@@ -9,6 +9,7 @@ import (
 	"otpgo/messagedirector"
 	. "otpgo/util"
 	"sync"
+	"sync/atomic"
 
 	dc "github.com/LittleToonCat/dcparser-go"
 	"github.com/apex/log"
@@ -26,7 +27,10 @@ type LuaQueueEntry struct {
 
 type LuaRole struct {
 	messagedirector.MDParticipantBase
-	sync.Mutex
+	queueLock sync.Mutex
+	cMapLock sync.RWMutex
+	gMapLock sync.RWMutex
+	qMapLock sync.RWMutex
 
 	config core.Role
 	log    *log.Entry
@@ -36,7 +40,7 @@ type LuaRole struct {
 	// a float64 type) may cause some problems.
 	sender Channel_t
 
-	context          uint32
+	context          atomic.Uint32
 	createContextMap map[uint32]func(doId Doid_t)
 	getContextMap    map[uint32]func(doId Doid_t, dgi *DatagramIterator)
 	queryContextMap  map[uint32]func(dgi *DatagramIterator)
@@ -114,11 +118,16 @@ func NewLuaRole(config core.Role) *LuaRole {
 }
 
 func (l *LuaRole) getEntryFromQueue() LuaQueueEntry {
-	l.Lock()
-	defer l.Unlock()
+	l.queueLock.Lock()
+	defer l.queueLock.Unlock()
 
 	op := l.LQueue[0]
+	l.LQueue[0] = LuaQueueEntry{}
 	l.LQueue = l.LQueue[1:]
+	if len(l.LQueue) == 0 {
+		// Recreate the queue slice. This prevents the capacity from growing indefinitely and allows old entries to drop off as soon as possible from the backing array.
+		l.LQueue = make([]LuaQueueEntry, 0)
+	}
 	return op
 }
 
@@ -152,10 +161,10 @@ func (l *LuaRole) queueLoop() {
 
 func (l *LuaRole) CallLuaFunction(fn lua.LValue, sender Channel_t, args ...lua.LValue) {
 	// Queue the call
-	l.Lock()
+	l.queueLock.Lock()
 	entry := LuaQueueEntry{fn, sender, args}
 	l.LQueue = append(l.LQueue, entry)
-	l.Unlock()
+	l.queueLock.Unlock()
 
 	select {
 	case l.processQueue <- true:
@@ -186,11 +195,15 @@ func (l *LuaRole) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 }
 
 func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, packedValues map[string]dc.Vector_uchar, from Channel_t, callback func(doId Doid_t)) {
-	c.createContextMap[c.context] = callback
+	c.cMapLock.Lock()
+	defer c.cMapLock.Unlock()
+	
+	context := c.context.Add(1)
+	c.createContextMap[context] = callback
 
 	dg := NewDatagram()
 	dg.AddServerHeader(dbChannel, from, DBSERVER_CREATE_STORED_OBJECT)
-	dg.AddUint32(c.context)
+	dg.AddUint32(context)
 	dg.AddString("") // Unknown
 	dg.AddUint16(objectType)
 	dg.AddUint16(uint16(len(packedValues)))
@@ -202,11 +215,13 @@ func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, p
 		dc.DeleteVector_uchar(value)
 	}
 	c.RouteDatagram(dg)
-	c.context++
 }
 
 func (c *LuaRole) handleCreateDatabaseResp(context uint32, code uint8, doId Doid_t) {
+	c.cMapLock.RLock()
 	callback, ok := c.createContextMap[context]
+	c.cMapLock.RUnlock()
+
 	if !ok {
 		c.log.Warnf("Got CreateDatabaseRsp with missing context %d", context)
 		return
@@ -217,36 +232,48 @@ func (c *LuaRole) handleCreateDatabaseResp(context uint32, code uint8, doId Doid
 	}
 
 	callback(doId)
+
+	c.cMapLock.Lock()
 	delete(c.createContextMap, context)
+	c.cMapLock.Unlock()
 }
 
 func (l *LuaRole) getDatabaseValues(dbChannel Channel_t, doId Doid_t, fields []string, from Channel_t, callback func(doId Doid_t, dgi *DatagramIterator)) {
-	l.getContextMap[l.context] = callback
+	l.gMapLock.Lock()
+	defer l.gMapLock.Unlock()
+	
+	context := l.context.Add(1)
+	l.getContextMap[context] = callback
 
 	dg := NewDatagram()
 	dg.AddServerHeader(dbChannel, from, DBSERVER_GET_STORED_VALUES)
-	dg.AddUint32(l.context)
+	dg.AddUint32(context)
 	dg.AddDoid(doId)
 	dg.AddUint16(uint16(len(fields)))
 	for _, name := range fields {
 		dg.AddString(name)
 	}
 	l.RouteDatagram(dg)
-	l.context++
 }
 
 func (l *LuaRole) handleGetStoredValuesResp(dgi *DatagramIterator) {
 	context := dgi.ReadUint32()
 	doId := dgi.ReadDoid()
 
+	l.gMapLock.RLock()
 	callback, ok := l.getContextMap[context]
+	l.gMapLock.RUnlock()
+
 	if !ok {
 		l.log.Warnf("Got GetStoredResp with missing context %d", context)
 		return
 	}
 
 	callback(doId, dgi)
+
+	l.gMapLock.Lock()
 	delete(l.getContextMap, context)
+	l.gMapLock.Unlock()
 }
 
 func (l *LuaRole) handleQueryFieldsResp(dgi *DatagramIterator) {
@@ -254,14 +281,20 @@ func (l *LuaRole) handleQueryFieldsResp(dgi *DatagramIterator) {
 
 	context := dgi.ReadUint32()
 
+	l.qMapLock.RLock()
 	callback, ok := l.queryContextMap[context]
+	l.qMapLock.RUnlock()
+
 	if !ok {
 		l.log.Warnf("Got QueryFieldsResp with missing context %d", context)
 		return
 	}
 
 	callback(dgi)
+
+	l.qMapLock.Lock()
 	delete(l.queryContextMap, context)
+	l.qMapLock.Unlock()
 }
 
 func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValues map[string]dc.Vector_uchar) {
@@ -296,10 +329,9 @@ func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 	DCLock.Lock()
 	defer DCLock.Unlock()
 	packedData := dgi.ReadRemainderAsVector()
+	defer dc.DeleteVector_uchar(packedData)
 	if !dcField.Validate_ranges(packedData) {
 		l.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", dcField.Get_name(), DumpVector(packedData), dgi)
-		dc.DeleteVector_uchar(packedData)
-		DCLock.Unlock()
 		return
 	}
 

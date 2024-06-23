@@ -62,6 +62,7 @@ func UnpackDataToBsonArray(unpacker dc.DCPacker, array *bson.A, log log.Entry) {
 			data = append(data, vector.Get(int(i)))
 		}
 		*array = append(*array, data)
+		dc.DeleteVector_uchar(vector)
 	default:
 		// More nested fields, nest call this exact function.
 		nestedArray := bson.A{}
@@ -99,6 +100,7 @@ func UnpackDataToBsonDocument(unpacker dc.DCPacker, name string, doc *bson.D, lo
 			data = append(data, vector.Get(int(i)))
 		}
 		*doc = append(*doc, bson.E{name, data})
+		dc.DeleteVector_uchar(vector)
 	default:
 		// If we reached here, that means it is a list
 		// of nested fields (e.g. an array type, an atomic field, a
@@ -231,6 +233,8 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 	DCLock.Lock()
 	defer DCLock.Unlock()
 
+	defaults := map[dc.DCField]dc.Vector_uchar{}
+
 	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
 		field := dclass.Get_inherited_field(i)
 		if field.Is_db() {
@@ -252,6 +256,7 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 					for i := int64(0); i < value.Size(); i++ {
 						data.Add(value.Get(int(i)))
 					}
+					defaults[field] = data
 				} else {
 					// Move on.
 					continue
@@ -278,6 +283,9 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 				for _, data := range datas {
 					dc.DeleteVector_uchar(data)
 				}
+				for _, data := range defaults {
+					dc.DeleteVector_uchar(data)
+				}
 			}
 		}
 	}
@@ -298,6 +306,9 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
+			dc.DeleteVector_uchar(data)
+		}
+		for _, data := range defaults {
 			dc.DeleteVector_uchar(data)
 		}
 		return
@@ -321,6 +332,9 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 		for _, data := range datas {
 			dc.DeleteVector_uchar(data)
 		}
+		for _, data := range defaults {
+			dc.DeleteVector_uchar(data)
+		}
 		return
 	}
 
@@ -333,6 +347,14 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 	dg.AddUint8(0) // return code
 	dg.AddDoid(doId)
 	b.db.RouteDatagram(dg)
+
+	// Cleanup
+	for _, data := range datas {
+		dc.DeleteVector_uchar(data)
+	}
+	for _, data := range defaults {
+		dc.DeleteVector_uchar(data)
+	}
 }
 
 func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {

@@ -1,12 +1,13 @@
 package stateserver
 
 import (
+	"fmt"
 	"otpgo/core"
 	"otpgo/messagedirector"
 	. "otpgo/util"
-	"fmt"
-	"github.com/apex/log"
+
 	dc "github.com/LittleToonCat/dcparser-go"
+	"github.com/apex/log"
 )
 
 type StateServer struct {
@@ -16,7 +17,8 @@ type StateServer struct {
 	log     *log.Entry
 	control Channel_t
 	objects map[Doid_t]*DistributedObject
-	mainObj *DistributedObject;
+	mainObj *DistributedObject
+	doStore *DOStorage
 }
 
 func NewStateServer(config core.Role) *StateServer {
@@ -38,6 +40,8 @@ func NewStateServer(config core.Role) *StateServer {
 
 func (s *StateServer) InitStateServer(config core.Role, logName string, logModName string, logId string,) {
 	s.config = config
+	doPreallocAmount := s.config.DO_Preallocation_Amount
+	s.doStore = NewDOStorage(doPreallocAmount)
 	s.objects = map[Doid_t]*DistributedObject{}
 	s.log = log.WithFields(log.Fields{
 		"name": logName,

@@ -455,17 +455,20 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
-	participant.queryContextMap[participant.context] = callbackFunc
+	participant.qMapLock.Lock()
+	defer participant.qMapLock.Unlock()
+	
+	context := participant.context.Add(1)
+	participant.queryContextMap[context] = callbackFunc
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), from, STATESERVER_OBJECT_QUERY_FIELDS)
 	dg.AddDoid(doId)
-	dg.AddUint32(participant.context)
+	dg.AddUint32(context)
 	for _, fieldId := range fieldIds {
 		dg.AddUint16(fieldId)
 	}
 	participant.RouteDatagram(dg)
-	participant.context++
 	return 1
 }
 

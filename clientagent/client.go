@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"sync/atomic"
 
 	"fmt"
 	gonet "net"
@@ -76,13 +77,16 @@ type Client struct {
 	state            ClientState
 	authenticated    bool
 
-	context               uint32
-	createContextMap      map[uint32]func(doId Doid_t)
-	getContextMap         map[uint32]func(doId Doid_t, dgi *DatagramIterator)
-	queryFieldsContextMap map[uint32]func(dgi *DatagramIterator)
+	context          atomic.Uint32
+	createContextMap map[uint32]func(doId Doid_t)
+	getContextMap    map[uint32]func(doId Doid_t, dgi *DatagramIterator)
+	queryFieldsContextMap    map[uint32]func(dgi *DatagramIterator)
 
 	queue         []Datagram
 	queueLock     sync.Mutex
+	cMapLock      sync.RWMutex
+	gMapLock      sync.RWMutex
+	qMapLock      sync.RWMutex
 	shouldProcess chan bool
 	stopChan      chan bool
 
@@ -266,14 +270,14 @@ func (c *Client) addInterest(i Interest, context uint32, caller Channel_t) {
 	}
 
 	// Build a new IOP otherwise
-	c.context++
+	iopContext := c.context.Add(1)
 	iop := NewInterestOperation(c, c.config.Tuning.Interest_Timeout, i.id,
-		context, c.context, i.parent, zones, caller)
-	c.pendingInterests[c.context] = iop
+		context, iopContext, i.parent, zones, caller)
+	c.pendingInterests[iopContext] = iop
 
 	resp := NewDatagram()
 	resp.AddServerHeader(Channel_t(i.parent), c.channel, STATESERVER_OBJECT_GET_ZONES_OBJECTS)
-	resp.AddUint32(c.context)
+	resp.AddUint32(iopContext)
 	resp.AddDoid(i.parent)
 	resp.AddUint16(uint16(len(zones)))
 	for _, zone := range zones {
@@ -322,17 +326,20 @@ func (c *Client) closeZones(parent Doid_t, zones []Zone_t) {
 				}
 
 				c.handleRemoveObject(obj.do, false)
-				for i, o := range c.seenObjects {
-					if o == obj.do {
-						c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
+				tempSeenObjectSlice := make([]Doid_t, 0)
+				for _, o := range c.seenObjects {
+					if o != obj.do {
+						tempSeenObjectSlice = append(tempSeenObjectSlice, o)
 					}
 				}
+				c.seenObjects = tempSeenObjectSlice
 				toRemove = append(toRemove, obj.do)
 			}
 		}
 	}
 
 	for _, do := range toRemove {
+		c.addHistoricalObject(do)
 		delete(c.visibleObjects, do)
 	}
 
@@ -348,6 +355,13 @@ func (c *Client) historicalObject(do Doid_t) bool {
 		}
 	}
 	return false
+}
+
+func (c *Client) addHistoricalObject(do Doid_t) {
+	if c.historicalObject(do) {
+		return
+	}
+	c.historicalObjects = append(c.historicalObjects, do)
 }
 
 func (c *Client) lookupObject(do Doid_t) dc.DCClass {
@@ -532,11 +546,13 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 
 		c.log.Debugf("Removed session object with ID %d", do)
-		for i, o := range c.sessionObjects {
-			if o == do {
-				c.sessionObjects = append(c.sessionObjects[:i], c.sessionObjects[i+1:]...)
+		tempSessionObjectSlice := make([]Doid_t, 0)
+		for _, o := range c.sessionObjects {
+			if o != do {
+				tempSessionObjectSlice = append(tempSessionObjectSlice, o)
 			}
 		}
+		c.sessionObjects = tempSessionObjectSlice
 	case CLIENTAGENT_GET_TLVS:
 		resp := NewDatagram()
 		resp.AddServerHeader(sender, c.channel, CLIENTAGENT_GET_TLVS_RESP)
@@ -596,27 +612,34 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 
 		c.log.Debugf("Deleting server-side object %d", do)
-		for i, so := range c.sessionObjects {
-			if so == do {
-				c.sessionObjects = append(c.sessionObjects[:i], c.sessionObjects[i+1:]...)
+		tempSessionObjectSlice := make([]Doid_t, 0)
+		for _, so := range c.sessionObjects {
+			if so != do {
+				tempSessionObjectSlice = append(tempSessionObjectSlice, so)
+			} else {
 				c.sendDisconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED,
-					fmt.Sprintf("The session object with id %d has been unexpectedly deleted", do), false)
+				fmt.Sprintf("The session object with id %d has been unexpectedly deleted", do), false)
 			}
 		}
 
-		for i, so := range c.seenObjects {
-			if so == do {
-				c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
+		c.sessionObjects = tempSessionObjectSlice
+
+		tempSeenObjectSlice := make([]Doid_t, 0)
+		for _, so := range c.seenObjects {
+			if so != do {
+				tempSeenObjectSlice = append(tempSeenObjectSlice, so)
+			} else {
 				c.handleRemoveObject(do, false)
 			}
 		}
+		c.seenObjects = tempSeenObjectSlice
 
 		if _, ok := c.ownedObjects[do]; ok {
 			c.handleRemoveOwnership(do)
 			delete(c.ownedObjects, do)
 		}
 
-		c.historicalObjects = append(c.historicalObjects, do)
+		c.addHistoricalObject(do)
 		delete(c.visibleObjects, do)
 	case STATESERVER_OBJECT_ENTER_OWNER_RECV:
 		do, parent, zone, dc := dgi.ReadDoid(), dgi.ReadDoid(), dgi.ReadZone(), dgi.ReadUint16()
@@ -715,19 +738,22 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				c.client.SendDatagram(dg)
 			} else {
 				// Not interested, delete.
-				for i, so := range c.seenObjects {
-					if so == do {
-						c.seenObjects = append(c.seenObjects[:i], c.seenObjects[i+1:]...)
+				tempSeenObjectSlice := make([]Doid_t, 0)
+				for _, so := range c.seenObjects {
+					if so != do {
+						tempSeenObjectSlice = append(tempSeenObjectSlice, so)
+					} else {
 						c.handleRemoveObject(do, false)
 					}
 				}
+				c.seenObjects = tempSeenObjectSlice
 
 				if _, ok := c.ownedObjects[do]; ok {
 					c.handleRemoveOwnership(do)
 					delete(c.ownedObjects, do)
 				}
 
-				c.historicalObjects = append(c.historicalObjects, do)
+				c.addHistoricalObject(do)
 				delete(c.visibleObjects, do)
 			}
 		}
@@ -965,7 +991,12 @@ func (c *Client) getDatagramFromQueue() Datagram {
 	defer c.queueLock.Unlock()
 
 	dg := c.queue[0]
+	c.queue[0] = Datagram{}
 	c.queue = c.queue[1:]
+	if len(c.queue) == 0 {
+		// Recreate the queue slice. This prevents the capacity from growing indefinitely and allows old entries to drop off as soon as possible from the backing array.
+		c.queue = make([]Datagram, 0)
+	}
 	return dg
 }
 
@@ -1014,11 +1045,15 @@ func (c *Client) handleHeartbeat() {
 }
 
 func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string]dc.Vector_uchar, callback func(doId Doid_t)) {
-	c.createContextMap[c.context] = callback
+	c.cMapLock.Lock()
+	defer c.cMapLock.Unlock()
+
+	context := c.context.Add(1)
+	c.createContextMap[context] = callback
 
 	dg := NewDatagram()
 	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_CREATE_STORED_OBJECT)
-	dg.AddUint32(c.context)
+	dg.AddUint32(context)
 	dg.AddString("") // Unknown
 	dg.AddUint16(objectType)
 	dg.AddUint16(uint16(len(packedValues)))
@@ -1030,11 +1065,13 @@ func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string
 		dc.DeleteVector_uchar(value)
 	}
 	c.RouteDatagram(dg)
-	c.context++
 }
 
 func (c *Client) handleCreateDatabaseResp(context uint32, code uint8, doId Doid_t) {
+	c.cMapLock.RLock()
 	callback, ok := c.createContextMap[context]
+	c.cMapLock.RUnlock()
+
 	if !ok {
 		c.log.Warnf("Got CreateDatabaseRsp with missing context %d", context)
 		return
@@ -1045,36 +1082,48 @@ func (c *Client) handleCreateDatabaseResp(context uint32, code uint8, doId Doid_
 	}
 
 	callback(doId)
+
+	c.cMapLock.Lock()
 	delete(c.createContextMap, context)
+	c.cMapLock.Unlock()
 }
 
 func (c *Client) getDatabaseValues(doId Doid_t, fields []string, callback func(doId Doid_t, dgi *DatagramIterator)) {
-	c.getContextMap[c.context] = callback
+	c.gMapLock.Lock()
+	defer c.gMapLock.Unlock()
+
+	context := c.context.Add(1)
+	c.getContextMap[context] = callback
 
 	dg := NewDatagram()
 	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_GET_STORED_VALUES)
-	dg.AddUint32(c.context)
+	dg.AddUint32(context)
 	dg.AddDoid(doId)
 	dg.AddUint16(uint16(len(fields)))
 	for _, name := range fields {
 		dg.AddString(name)
 	}
 	c.RouteDatagram(dg)
-	c.context++
 }
 
 func (c *Client) handleGetStoredValuesResp(dgi *DatagramIterator) {
 	context := dgi.ReadUint32()
 	doId := dgi.ReadDoid()
 
+	c.gMapLock.RLock()
 	callback, ok := c.getContextMap[context]
+	c.gMapLock.RUnlock()
+
 	if !ok {
 		c.log.Warnf("Got GetStoredResp with missing context %d", context)
 		return
 	}
 
 	callback(doId, dgi)
+
+	c.gMapLock.Lock()
 	delete(c.getContextMap, context)
+	c.gMapLock.Unlock()
 }
 
 func (c *Client) handleQueryFieldsResp(dgi *DatagramIterator) {
@@ -1082,14 +1131,20 @@ func (c *Client) handleQueryFieldsResp(dgi *DatagramIterator) {
 
 	context := dgi.ReadUint32()
 
+	c.qMapLock.RLock()
 	callback, ok := c.queryFieldsContextMap[context]
+	c.qMapLock.RUnlock()
+
 	if !ok {
 		c.log.Warnf("Got QueryFieldsResp with missing context %d", context)
 		return
 	}
 
 	callback(dgi)
+
+	c.qMapLock.Lock()
 	delete(c.queryFieldsContextMap, context)
+	c.qMapLock.Unlock()
 }
 
 func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string]dc.Vector_uchar) {

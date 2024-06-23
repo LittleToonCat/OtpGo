@@ -138,6 +138,8 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 	DCLock.Lock()
 	defer DCLock.Unlock()
 
+	defaults := map[dc.DCField]dc.Vector_uchar{}
+
 	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
 		field := dclass.Get_inherited_field(i)
 		if field.Is_db() {
@@ -159,6 +161,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 					for i := int64(0); i < value.Size(); i++ {
 						data.Add(value.Get(int(i)))
 					}
+					defaults[field] = data
 				} else {
 					// Move on.
 					continue
@@ -177,6 +180,9 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 				dg.AddDoid(INVALID_DOID)
 				b.db.RouteDatagram(dg)
 				for _, data := range datas {
+					dc.DeleteVector_uchar(data)
+				}
+				for _, data := range defaults {
 					dc.DeleteVector_uchar(data)
 				}
 				return
@@ -198,6 +204,9 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		for _, data := range datas {
 			dc.DeleteVector_uchar(data)
 		}
+		for _, data := range defaults {
+			dc.DeleteVector_uchar(data)
+		}
 		return
 	}
 	obj.ID = doId
@@ -213,6 +222,9 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
+			dc.DeleteVector_uchar(data)
+		}
+		for _, data := range defaults {
 			dc.DeleteVector_uchar(data)
 		}
 		return
@@ -231,6 +243,9 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		for _, data := range datas {
 			dc.DeleteVector_uchar(data)
 		}
+		for _, data := range defaults {
+			dc.DeleteVector_uchar(data)
+		}
 		return
 	}
 
@@ -245,6 +260,9 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
+			dc.DeleteVector_uchar(data)
+		}
+		for _, data := range defaults {
 			dc.DeleteVector_uchar(data)
 		}
 		return
@@ -265,6 +283,9 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		for _, data := range datas {
 			dc.DeleteVector_uchar(data)
 		}
+		for _, data := range defaults {
+			dc.DeleteVector_uchar(data)
+		}
 		return
 	}
 
@@ -277,6 +298,14 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 	dg.AddUint8(0) // return code
 	dg.AddDoid(doId)
 	b.db.RouteDatagram(dg)
+
+	// Cleanup
+	for _, data := range datas {
+		dc.DeleteVector_uchar(data)
+	}
+	for _, data := range defaults {
+		dc.DeleteVector_uchar(data)
+	}
 }
 
 func (b *YAMLBackend) SendGetStoredValuesError(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
@@ -383,7 +412,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 			continue
 		}
 
-		packedData[field] = dcField.Parse_string(value)
+		packedData[field] = parsedData
 	}
 
 	dg := NewDatagram()

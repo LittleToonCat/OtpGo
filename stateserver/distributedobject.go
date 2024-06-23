@@ -40,21 +40,9 @@ type DistributedObject struct {
 func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
 	zone Zone_t, dclass dc.DCClass, requiredFields FieldValues,
 	ramFields FieldValues) *DistributedObject {
-	do := &DistributedObject{
-		stateserver:    ss,
-		do:             doid,
-		zone:           0,
-		dclass:         dclass,
-		zoneObjects:    make(map[Zone_t][]Doid_t),
-		requiredFields: requiredFields,
-		ramFields:      ramFields,
-		log: log.WithFields(log.Fields{
-			"name":    fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
-			"modName": dclass.Get_name(),
-			"id":      fmt.Sprintf("%d", doid),
-		}),
-	}
 
+	do := ss.doStore.createDO(ss, doid, dclass, requiredFields, ramFields)
+	
 	do.Init(do)
 	do.SetName(fmt.Sprintf("%s (%d)", dclass.Get_name(), doid))
 
@@ -80,20 +68,8 @@ func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
 func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 	zone Zone_t, dclass dc.DCClass, dgi *DatagramIterator, hasOther bool,
 	isMainObj bool) (bool, *DistributedObject, error) {
-	do := &DistributedObject{
-		stateserver:    ss,
-		do:             doid,
-		zone:           INVALID_ZONE,
-		dclass:         dclass,
-		zoneObjects:    make(map[Zone_t][]Doid_t),
-		requiredFields: make(map[dc.DCField][]byte),
-		ramFields:      make(map[dc.DCField][]byte),
-		log: log.WithFields(log.Fields{
-			"name":    fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
-			"modName": dclass.Get_name(),
-			"id":      fmt.Sprintf("%d", doid),
-		}),
-	}
+
+	do := ss.doStore.createDO(ss, doid, dclass, nil, nil)
 
 	DCLock.Lock()
 
@@ -443,6 +419,7 @@ func (d *DistributedObject) annihilate(sender Channel_t, notifyParent bool) {
 	clear(d.ramFields)
 
 	d.Cleanup()
+	d.stateserver.doStore.recycleDO(d)
 }
 
 func (d *DistributedObject) deleteChildren(sender Channel_t) {
@@ -707,14 +684,13 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		oldParent := dgi.ReadDoid()
 		oldZone := dgi.ReadZone()
 		eraseFromSlice := func(slice []Doid_t, element Doid_t) []Doid_t {
-			idx := 0
+			tempSlice := make([]Doid_t, 0)
 			for _, do := range slice {
 				if do != element {
-					slice[idx] = do
-					idx++
+					tempSlice = append(tempSlice, do)
 				}
 			}
-			return slice[:idx]
+			return tempSlice
 		}
 		if newParent == d.do {
 			if d.do == oldParent {
