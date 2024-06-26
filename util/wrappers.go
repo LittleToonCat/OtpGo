@@ -359,8 +359,6 @@ func LuaReadInt64(L *lua.LState) int {
 }
 
 func LuaReadUint64(L *lua.LState) int {
-	// NOTE: Lua has no native uint64 type support.
-	// Use at your own risk.
 	dgi := CheckDatagramIterator(L, 1)
 	v := dgi.ReadUint64()
 	L.Push(NewLuaUint64(L, v))
