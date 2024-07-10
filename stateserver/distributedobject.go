@@ -42,7 +42,7 @@ func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
 	ramFields FieldValues) *DistributedObject {
 
 	do := ss.doStore.createDO(ss, doid, dclass, requiredFields, ramFields)
-	
+
 	do.Init(do)
 	do.SetName(fmt.Sprintf("%s (%d)", dclass.Get_name(), doid))
 
@@ -150,7 +150,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 	return true, do, nil
 }
 
-func (d *DistributedObject) appendRequiredData(dg Datagram, client bool, owner bool) {
+func (d *DistributedObject) appendRequiredData(dg Datagram, client bool) {
 	dg.AddDoid(d.do)
 	dg.AddLocation(d.parent, d.zone)
 	dg.AddUint16(uint16(d.dclass.Get_number()))
@@ -164,13 +164,13 @@ func (d *DistributedObject) appendRequiredData(dg Datagram, client bool, owner b
 		}
 
 		if field.Is_required() && (!client || field.Is_broadcast() ||
-			field.Is_clrecv() || (owner && field.Is_ownrecv())) {
+			field.Is_clrecv()) {
 			dg.AddData(d.requiredFields[field])
 		}
 	}
 }
 
-func (d *DistributedObject) appendRequiredDataDoidLast(dg Datagram, client bool, owner bool) {
+func (d *DistributedObject) appendRequiredDataDoidLast(dg Datagram, client bool) {
 	dg.AddLocation(d.parent, d.zone)
 	dg.AddUint16(uint16(d.dclass.Get_number()))
 	dg.AddDoid(d.do)
@@ -184,18 +184,17 @@ func (d *DistributedObject) appendRequiredDataDoidLast(dg Datagram, client bool,
 		}
 
 		if field.Is_required() && (!client || field.Is_broadcast() ||
-			field.Is_clrecv() || (owner && field.Is_ownrecv())) {
+			field.Is_clrecv()) {
 			dg.AddData(d.requiredFields[field])
 		}
 	}
 }
 
-func (d *DistributedObject) appendOtherData(dg Datagram, client bool, owner bool) {
+func (d *DistributedObject) appendOtherData(dg Datagram, client bool) {
 	if client {
 		var broadcastFields []dc.DCField
 		for field := range d.ramFields {
-			if field.Is_broadcast() || field.Is_clrecv() ||
-				(owner && field.Is_ownrecv()) {
+			if field.Is_broadcast() || field.Is_clrecv() {
 				broadcastFields = append(broadcastFields, field)
 			}
 		}
@@ -233,9 +232,9 @@ func (d *DistributedObject) sendInterestEntry(location Channel_t, context uint32
 	dg := NewDatagram()
 	dg.AddServerHeader(location, Channel_t(d.do), uint16(msgType))
 	dg.AddUint32(context)
-	d.appendRequiredData(dg, true, false)
+	d.appendRequiredData(dg, true)
 	if len(d.ramFields) != 0 {
-		d.appendOtherData(dg, true, false)
+		d.appendOtherData(dg, true)
 	}
 	d.RouteDatagram(dg)
 }
@@ -247,9 +246,9 @@ func (d *DistributedObject) sendLocationEntry(location Channel_t) {
 	}
 	dg := NewDatagram()
 	dg.AddServerHeader(location, Channel_t(d.do), uint16(msgType))
-	d.appendRequiredData(dg, true, false)
+	d.appendRequiredData(dg, true)
 	if len(d.ramFields) != 0 {
-		d.appendOtherData(dg, true, false)
+		d.appendOtherData(dg, true)
 	}
 	d.RouteDatagram(dg)
 }
@@ -265,8 +264,8 @@ func (d *DistributedObject) sendAiEntry(ai Channel_t, sender Channel_t) {
 	dg := NewDatagram()
 	dg.AddServerHeader(ai, Channel_t(d.do), uint16(msgType))
 	dg.AddUint32(0) // Dummy context
-	d.appendRequiredDataDoidLast(dg, false, false)
-	d.appendOtherData(dg, false, false)
+	d.appendRequiredDataDoidLast(dg, false)
+	d.appendOtherData(dg, false)
 	d.RouteDatagram(dg)
 }
 
@@ -274,8 +273,11 @@ func (d *DistributedObject) sendOwnerEntry(owner Channel_t, client bool) {
 	msgType := STATESERVER_OBJECT_ENTER_OWNER_RECV
 	dg := NewDatagram()
 	dg.AddServerHeader(owner, Channel_t(d.do), uint16(msgType))
-	d.appendRequiredData(dg, client, client)
-	d.appendOtherData(dg, client, client)
+	// NOTE: We don't filter for ownrecv fields.  The receiver is expected to filter
+	// that out itselves.  This is the case for original Panda3D message handling:
+	// https://github.com/rocketprogrammer/panda3d/blob/otp-with-decompile/direct/src/dcparser/dcClass_ext.cxx#L162
+	d.appendRequiredData(dg, client)
+	d.appendOtherData(dg, client)
 	d.RouteDatagram(dg)
 }
 
@@ -586,8 +588,8 @@ func (d *DistributedObject) handleQueryAll(sender Channel_t, context uint32) {
 	dg := NewDatagram()
 	dg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_QUERY_OBJECT_ALL_RESP)
 	dg.AddUint32(context)
-	d.appendRequiredDataDoidLast(dg, false, false)
-	d.appendOtherData(dg, false, false)
+	d.appendRequiredDataDoidLast(dg, false)
+	d.appendOtherData(dg, false)
 	d.RouteDatagram(dg)
 }
 
