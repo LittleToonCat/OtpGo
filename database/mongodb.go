@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"otpgo/core"
 	. "otpgo/util"
 	"time"
@@ -148,12 +149,39 @@ func PackBsonValue(packer dc.DCPacker, value interface{}) {
 			packer.Pack_string(string(binData.Data))
 		}
 	default:
-		array := value.(bson.A)
-		packer.Push()
-		for _, v := range array {
-			PackBsonValue(packer, v)
+		if array, ok := value.(bson.A); ok {
+			packer.Push()
+			for _, v := range array {
+				PackBsonValue(packer, v)
+			}
+			packer.Pop()
+		} else if doc, ok := value.(bson.M); ok {
+			// This is for Astron database compatibility.
+			// They store atomic (method) field values as a document,
+			// using their names as keys.  They will be replaced as an
+			// array upon restorage.
+			packer.Push()
+			numValues := len(doc)
+			for i := 0; i < numValues; i++ {
+				field := packer.Get_current_field().As_field().(dc.DCField)
+				name := field.Get_name()
+				if name == "" {
+					name = fmt.Sprintf("_%d", i)
+				}
+				if v, ok := doc[name]; ok {
+					PackBsonValue(packer, v)
+				} else {
+					// Maybe "_{element_number}" is the key instead.
+					if name != "" {
+						name = fmt.Sprintf("_%d", i)
+						if v, ok := doc[name]; ok {
+							PackBsonValue(packer, v)
+						}
+					}
+				}
+			}
+			packer.Pop()
 		}
-		packer.Pop()
 	}
 }
 
