@@ -176,12 +176,16 @@ func (c *Client) SendDatagram(datagram Datagram) {
 func (c *Client) Close() {
 	c.Mutex.Lock()
 	defer c.Mutex.Unlock()
-	c.tr.Close()
+	if c.Connected() {
+		c.tr.Close()
+	}
 }
 
 func (c *Client) disconnect(err error) {
 	c.Mutex.Lock()
-	c.tr.Close()
+	if c.Connected() {
+		c.tr.Close()
+	}
 	c.Mutex.Unlock()
 	c.handler.Terminate(err)
 }

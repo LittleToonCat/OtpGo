@@ -207,6 +207,9 @@ func (m *MDNetworkParticipant) ReceiveDatagram(dg Datagram) {
 }
 
 func (m *MDNetworkParticipant) Terminate(err error) {
+	if m.terminated {
+		return
+	}
 	MDLog.Infof("Lost connection from %s: %s", m.conn.RemoteAddr(), err.Error())
 	m.Cleanup()
 	m.client.Close()
