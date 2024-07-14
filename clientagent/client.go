@@ -786,6 +786,7 @@ type InterestOperation struct {
 	total    int
 
 	timeout      *time.Ticker
+	timedOut     bool
 	finishedChan chan bool
 
 	client         *Client
@@ -800,6 +801,7 @@ type InterestOperation struct {
 	// generateQueue []Datagram
 	generateQueue map[uint16][]Datagram
 	pendingQueue  []Datagram
+	
 }
 
 func NewInterestOperation(client *Client, timeout int, interestId uint16,
@@ -824,6 +826,7 @@ func NewInterestOperation(client *Client, timeout int, interestId uint16,
 		case <-iop.timeout.C:
 			if !iop.finished {
 				client.log.Warnf("Interest operation timed out; Got %d generates and was expecting %d. Forcing finish.", len(iop.generateQueue), iop.total)
+				iop.timedOut = true
 				iop.finish()
 			}
 		case <-iop.finishedChan:
@@ -865,9 +868,11 @@ func (i *InterestOperation) finish() {
 
 	i.finished = true
 	i.timeout.Stop()
-	go func() {
-		i.finishedChan <- true
-	}()
+	if !i.timedOut {
+		go func() {
+			i.finishedChan <- true
+		}()
+	}
 
 	// Sort generates by class number
 	keys := make([]int, len(i.generateQueue))
