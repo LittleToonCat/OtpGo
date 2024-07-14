@@ -461,7 +461,6 @@ func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channe
 		return false
 	}
 
-	// packedData := dgi.ReadRemainderAsVector()
 	offset := dgi.Tell()
 	data, ok := dgi.ReadDCField(field, true, true)
 	if !ok || dgi.RemainingSize() > 0 {

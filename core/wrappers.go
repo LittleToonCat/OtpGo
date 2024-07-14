@@ -116,10 +116,22 @@ func RegisterDCFieldType(L *lua.LState) {
 	L.SetField(mt, "__tostring", L.NewFunction(LuaFieldToString))
 }
 
+const luaDCPackerType = "dcpacker"
+
+func RegisterDCPackerType(L *lua.LState) {
+	mt := L.NewTypeMetatable(luaDCPackerType)
+	L.SetGlobal(luaDCPackerType, mt)
+	// Static attributes
+	L.SetField(mt, "new", L.NewFunction(NewLuaDCPacker))
+	// Methods
+	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), DCPackerMethods))
+}
+
 func RegisterLuaDCTypes(L *lua.LState) {
 	RegisterDCFileType(L)
 	RegisterDCClassType(L)
 	RegisterDCFieldType(L)
+	RegisterDCPackerType(L)
 }
 
 func NewLuaDCFile(L *lua.LState, dcFile dc.DCFile) *lua.LUserData {
@@ -288,7 +300,7 @@ func LuaGetParent(L *lua.LState) int {
 func LuaGetNumFields(L *lua.LState) int {
 	dclass := CheckDCClass(L, 1)
 
-	L.Push(lua.LNumber(dclass.Get_num_fields()))
+	L.Push(lua.LNumber(dclass.Get_num_inherited_fields()))
 	return 1
 }
 
@@ -296,7 +308,7 @@ func LuaGetField(L *lua.LState) int {
 	dcClass := CheckDCClass(L, 1)
 	n := L.CheckInt(2)
 
-	dcField := dcClass.Get_field(n)
+	dcField := dcClass.Get_inherited_field(n)
 	if dcField == dc.SwigcptrDCField(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find field %d", n))
 		return 0
@@ -339,6 +351,7 @@ var DCFieldMethods = map[string]lua.LGFunction {
 	"getNumber": LuaGetFieldNumber,
 	"getClass": LuaFieldGetClass,
 	"hasKeyword": LuaHasKeyword,
+	"getDefaultValue": LuaGetDefaultValue,
 }
 
 func LuaFieldToString(L *lua.LState) int {
@@ -374,5 +387,120 @@ func LuaHasKeyword(L *lua.LState) int {
 	keyword := L.CheckString(2)
 
 	L.Push(lua.LBool(dcField.Has_keyword(keyword)))
+	return 1
+}
+
+func LuaGetDefaultValue(L *lua.LState) int {
+	dcField := CheckDCField(L, 1)
+	dg := NewDatagram()
+	dg.AddVector(dcField.Get_default_value())
+	L.Push(lua.LString(string(dg.Bytes())))
+	return 1
+}
+
+func NewLuaDCPacker(L *lua.LState) int {
+	packer := dc.NewDCPacker()
+	ud := L.NewUserData()
+	ud.Value = packer
+	L.SetMetatable(ud, L.GetTypeMetatable(luaDCPackerType))
+	L.Push(ud)
+	return 1
+}
+
+func CheckDCPacker(L *lua.LState, n int) dc.DCPacker {
+	ud := L.CheckUserData(n)
+	if packer, ok := ud.Value.(dc.DCPacker); ok {
+		return packer
+	}
+	L.ArgError(n, "DCPacker expected")
+	return nil
+}
+
+var DCPackerMethods = map[string]lua.LGFunction {
+	"delete": DeleteLuaDCPacker,
+	"packField": LuaDCPackerPackField,
+	"unpackField": LuaDCPackerUnpackField,
+	"skipField": LuaDCPackerSkipField,
+}
+
+func DeleteLuaDCPacker(L *lua.LState) int {
+	packer := CheckDCPacker(L, 1)
+	dc.DeleteDCPacker(packer)
+	return 1
+}
+
+func LuaDCPackerPackField(L *lua.LState) int {
+	packer := CheckDCPacker(L, 1)
+	field := CheckDCField(L, 2)
+	dg := CheckDatagram(L, 3)
+	value := L.Get(4)
+
+	DCLock.Lock()
+
+	packer.Begin_pack(field)
+
+	PackLuaValue(packer, value)
+	success := packer.End_pack()
+
+	if success {
+		packedData := packer.Get_bytes()
+		dg.AddVector(packedData)
+		dc.DeleteVector_uchar(packedData)
+	}
+
+	DCLock.Unlock()
+	L.Push(lua.LBool(success))
+	return 1
+}
+
+func LuaDCPackerUnpackField(L *lua.LState) int {
+	unpacker := CheckDCPacker(L, 1)
+	field := CheckDCField(L, 2)
+	dgi := CheckDatagramIterator(L, 3)
+
+	DCLock.Lock()
+	offset := dgi.Tell()
+
+	vectorData := dgi.ReadRemainderAsVector()
+	defer dc.DeleteVector_uchar(vectorData)
+
+	dgi.Seek(offset)
+
+	unpacker.Set_unpack_data(vectorData)
+	unpacker.Begin_unpack(field)
+
+	value := UnpackDataToLuaValue(unpacker, L)
+	unpacker.End_unpack()
+
+	DCLock.Unlock()
+	dgi.Seek(offset + Dgsize_t(unpacker.Get_num_unpacked_bytes()))
+	L.Push(value)
+	return 1
+}
+
+func LuaDCPackerSkipField(L *lua.LState) int {
+	unpacker := CheckDCPacker(L, 1)
+	field := CheckDCField(L, 2)
+	dgi := CheckDatagramIterator(L, 3)
+
+	DCLock.Lock()
+	offset := dgi.Tell()
+
+	vectorData := dgi.ReadRemainderAsVector()
+	defer dc.DeleteVector_uchar(vectorData)
+
+	dgi.Seek(offset)
+
+	unpacker.Set_unpack_data(vectorData)
+	unpacker.Begin_unpack(field)
+	unpacker.Unpack_skip()
+
+	success := unpacker.End_unpack()
+
+	if success {
+		dgi.Seek(offset + Dgsize_t(unpacker.Get_num_unpacked_bytes()))
+	}
+	DCLock.Unlock()
+	L.Push(lua.LBool(success))
 	return 1
 }

@@ -154,6 +154,7 @@ var DatagramMethods = map[string]lua.LGFunction{
 	"addBool": LuaAddBool,
 	"addString": LuaAddString,
 	"addData": LuaAddData,
+	"addDatagram": LuaAddDatagram,
 }
 
 func LuaDatagramToString(L *lua.LState) int {
@@ -280,10 +281,17 @@ func LuaAddString(L *lua.LState) int {
 	return 1
 }
 
-func LuaAddData(L * lua.LState) int {
+func LuaAddData(L *lua.LState) int {
 	dg := CheckDatagram(L, 1)
 	v := L.CheckString(2)
 	dg.AddData([]byte(v))
+	return 1
+}
+
+func LuaAddDatagram(L *lua.LState) int {
+	dg := CheckDatagram(L, 1)
+	v := CheckDatagram(L, 2)
+	dg.AddDatagram(v)
 	return 1
 }
 
