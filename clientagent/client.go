@@ -110,6 +110,7 @@ type Client struct {
 	allowedInterests InterestPermission
 	heartbeat        *time.Ticker
 	stopHeartbeat    chan bool
+	terminationBegun atomic.Bool
 }
 
 func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
@@ -959,6 +960,11 @@ func (c *Client) startHeartbeat() {
 }
 
 func (c *Client) Terminate(err error) {
+	termSwapped := c.terminationBegun.CompareAndSwap(false, true)
+	if !termSwapped {
+		// If we didn't swap the boolean, another goroutine has already begun to terminate this client. Bail now.
+		return
+	}
 	if !c.cleanDisconnect && err != nil {
 		event := eventlogger.NewLoggedEvent("client-lost", "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10),
 			fmt.Sprintf("%s|%s|%s", c.conn.RemoteAddr().String(), c.conn.LocalAddr().String(), err.Error()),
