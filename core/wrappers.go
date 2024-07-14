@@ -104,6 +104,7 @@ func RegisterDCClassType(L *lua.LState) {
 	// Methods
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), DCClassMethods))
 	L.SetField(mt, "__tostring", L.NewFunction(LuaClassToString))
+	L.SetField(mt, "__eq", L.NewFunction(LuaClassEqual))
 }
 
 const luaDCFieldType = "dcfield"
@@ -114,6 +115,7 @@ func RegisterDCFieldType(L *lua.LState) {
 	// Methods
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), DCFieldMethods))
 	L.SetField(mt, "__tostring", L.NewFunction(LuaFieldToString))
+	L.SetField(mt, "__eq", L.NewFunction(LuaFieldEqual))
 }
 
 const luaDCPackerType = "dcpacker"
@@ -262,6 +264,18 @@ func LuaClassToString(L *lua.LState) int {
 	return 1
 }
 
+func LuaClassEqual(L *lua.LState) int {
+	dclass := CheckDCClass(L, 1)
+	other := CheckDCClass(L, 2)
+
+	if dclass.Get_number() == other.Get_number() {
+		L.Push(lua.LBool(true))
+	} else {
+		L.Push(lua.LBool(false))
+	}
+	return 1
+}
+
 func LuaGetClassName(L *lua.LState) int {
 	dclass := CheckDCClass(L, 1)
 
@@ -361,6 +375,18 @@ func LuaFieldToString(L *lua.LState) int {
 	return 1
 }
 
+func LuaFieldEqual(L *lua.LState) int {
+	dcField := CheckDCField(L, 1)
+	other := CheckDCField(L, 2)
+
+	if dcField.Get_number() == other.Get_number() {
+		L.Push(lua.LBool(true))
+	} else {
+		L.Push(lua.LBool(false))
+	}
+	return 1
+}
+
 func LuaGetFieldName(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 
@@ -447,6 +473,7 @@ func LuaDCPackerPackField(L *lua.LState) int {
 		dg.AddVector(packedData)
 		dc.DeleteVector_uchar(packedData)
 	}
+	packer.Clear_data()
 
 	DCLock.Unlock()
 	L.Push(lua.LBool(success))
