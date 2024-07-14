@@ -1375,11 +1375,13 @@ func (c *Client) handleInterestDone(interestId uint16, context uint32) {
 		c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(interestId), lua.LNumber(context))
 		return
 	}
-	resp := NewDatagram()
-	resp.AddUint16(CLIENT_DONE_INTEREST_RESP)
-	resp.AddUint16(interestId)
-	resp.AddUint32(context)
-	c.client.SendDatagram(resp)
+	if context > 0 {
+		resp := NewDatagram()
+		resp.AddUint16(CLIENT_DONE_INTEREST_RESP)
+		resp.AddUint16(interestId)
+		resp.AddUint32(context)
+		c.client.SendDatagram(resp)
+	}
 }
 
 func (c *Client) SetChannel(channel Channel_t) {
