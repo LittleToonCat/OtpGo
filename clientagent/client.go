@@ -802,7 +802,6 @@ type InterestOperation struct {
 	// generateQueue []Datagram
 	generateQueue map[uint16][]Datagram
 	pendingQueue  []Datagram
-	
 }
 
 func NewInterestOperation(client *Client, timeout int, interestId uint16,
@@ -972,15 +971,18 @@ func (c *Client) Terminate(err error) {
 		event.Send()
 	}
 
-
-	c.heartbeat.Stop()
+	if c.config.Client.Heartbeat_Timeout != 0 {
+		c.heartbeat.Stop()
+	}
 	// (Sending to these channels from ReceiveDatagram or startHeartbeat
 	// will deadlock, starting a separate goroutine fixes this.)
 	go func() {
 		// Stop the queue goroutine
 		c.stopChan <- true
-		// Stop the heartbeat goroutine
-		c.stopHeartbeat <- true
+		if c.config.Client.Heartbeat_Timeout != 0 {
+			// Stop the heartbeat goroutine
+			c.stopHeartbeat <- true
+		}
 	}()
 	go c.annihilate()
 
@@ -1052,8 +1054,10 @@ func (c *Client) queueLoop() {
 }
 
 func (c *Client) handleHeartbeat() {
-	c.heartbeat.Stop()
-	c.heartbeat = time.NewTicker(time.Duration(c.config.Client.Heartbeat_Timeout) * time.Second)
+	if c.config.Client.Heartbeat_Timeout != 0 {
+		c.heartbeat.Stop()
+		c.heartbeat = time.NewTicker(time.Duration(c.config.Client.Heartbeat_Timeout) * time.Second)
+	}
 }
 
 func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string]dc.Vector_uchar, callback func(doId Doid_t)) {
