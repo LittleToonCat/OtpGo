@@ -186,6 +186,8 @@ func (c *Client) Close(needsLock bool) {
 	}
 }
 
+// disconnect disconnects the client. 
+// needsLock indicates whether the transport closing should try and acquire the client mutex; if the caller already has the mutex, set this to false. 
 func (c *Client) disconnect(err error, needsLock bool) {
 	c.Close(needsLock)
 	c.handler.Terminate(err)
