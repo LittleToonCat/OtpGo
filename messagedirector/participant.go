@@ -212,5 +212,5 @@ func (m *MDNetworkParticipant) Terminate(err error) {
 	}
 	MDLog.Infof("Lost connection from %s: %s", m.conn.RemoteAddr(), err.Error())
 	m.Cleanup()
-	m.client.Close()
+	m.client.Close(true)
 }

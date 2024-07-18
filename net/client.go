@@ -135,7 +135,7 @@ func (c *Client) read() {
 			c.processInput(n, (*buff)[0:n])
 			c.readBufferPool.Put(buff)
 		} else {
-			c.disconnect(err)
+			c.disconnect(err, true)
 			return
 		}
 	}
@@ -153,7 +153,7 @@ func (c *Client) SendDatagram(datagram Datagram) {
 	dg.Write(datagram.Bytes())
 
 	if _, err := c.tr.WriteDatagram(dg); err != nil {
-		c.disconnect(err)
+		c.disconnect(err, false)
 	}
 
 	writeTimer := time.NewTimer(c.timeout)
@@ -164,29 +164,30 @@ func (c *Client) SendDatagram(datagram Datagram) {
 			<-writeTimer.C
 		}
 		if err != nil {
-			c.disconnect(err)
+			c.disconnect(err, false)
 		}
 	case <-writeTimer.C:
-		c.disconnect(errors.New("write timeout"))
+		c.disconnect(errors.New("write timeout"), false)
 	}
 
 	c.Unlock()
 }
 
-func (c *Client) Close() {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+// Close closes the client's transport if it isn't already closed. 
+// needsLock indicates whether this function should try and acquire the client mutex; if the caller already has the mutex, set this to false.
+func (c *Client) Close(needsLock bool) {
+	if needsLock {
+		c.Lock()
+		defer c.Unlock()
+	}
+
 	if c.Connected() {
 		c.tr.Close()
 	}
 }
 
-func (c *Client) disconnect(err error) {
-	c.Mutex.Lock()
-	if c.Connected() {
-		c.tr.Close()
-	}
-	c.Mutex.Unlock()
+func (c *Client) disconnect(err error, needsLock bool) {
+	c.Close(needsLock)
 	c.handler.Terminate(err)
 }
 
