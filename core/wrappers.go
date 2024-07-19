@@ -61,6 +61,12 @@ func PackLuaValue(packer dc.DCPacker, value lua.LValue) {
 		fallthrough
 	case dc.PT_uint64:
 		switch value.Type() {
+		case lua.LTBool:
+			if value.(lua.LBool) {
+				packer.Pack_int(1)
+			} else {
+				packer.Pack_int(0)
+			}
 		case lua.LTNumber:
 			packer.Pack_double(float64(value.(lua.LNumber)))
 		case lua.LTUserData:
