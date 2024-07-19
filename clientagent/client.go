@@ -986,7 +986,7 @@ func (c *Client) Terminate(err error) {
 	}()
 	go c.annihilate()
 
-	c.client.Close()
+	c.client.Close(true)
 }
 
 func (c *Client) ReceiveDatagram(dg Datagram) {

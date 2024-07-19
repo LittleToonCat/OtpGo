@@ -1,13 +1,13 @@
 package test
 
 import (
+	"encoding/hex"
+	"fmt"
+	gonet "net"
 	"otpgo/core"
 	"otpgo/eventlogger"
 	"otpgo/net"
 	. "otpgo/util"
-	"encoding/hex"
-	"fmt"
-	gonet "net"
 	"reflect"
 	"strings"
 	"testing"
@@ -510,5 +510,5 @@ func (c *TestChannelConnection) ClearChannels() {
 
 func (c *TestChannelConnection) Close() {
 	c.ClearChannels()
-	c.TestMDConnection.Close()
+	c.TestMDConnection.Close(true)
 }

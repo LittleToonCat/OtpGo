@@ -87,6 +87,6 @@ func (m *MDUpstream) ReceiveDatagram(datagram Datagram) {
 
 func (m *MDUpstream) Terminate(err error) {
 	MDLog.Fatalf("Lost connection to upstream MD: %s", err)
-	m.client.Close()
+	m.client.Close(true)
 	os.Exit(0)
 }
