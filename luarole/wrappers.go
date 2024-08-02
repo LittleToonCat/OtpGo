@@ -141,7 +141,7 @@ func LuaHandleUpdateField(L *lua.LState) int {
 
 func LuaGetSender(L *lua.LState) int {
 	participant := CheckParticipant(L, 1)
-	L.Push(lua.LNumber(participant.sender))
+	L.Push(NewLuaUint64(L, uint64(participant.sender)))
 	return 1
 }
 
@@ -457,7 +457,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 
 	participant.qMapLock.Lock()
 	defer participant.qMapLock.Unlock()
-	
+
 	context := participant.context.Add(1)
 	participant.queryContextMap[context] = callbackFunc
 
