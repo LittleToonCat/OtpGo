@@ -372,6 +372,9 @@ var DCFieldMethods = map[string]lua.LGFunction {
 	"getClass": LuaFieldGetClass,
 	"hasKeyword": LuaHasKeyword,
 	"getDefaultValue": LuaGetDefaultValue,
+	"isAtomic": LuaIsAtomic,
+	"isMolecular": LuaIsMolecular,
+	"isParameter": LuaIsParameter,
 }
 
 func LuaFieldToString(L *lua.LState) int {
@@ -427,6 +430,42 @@ func LuaGetDefaultValue(L *lua.LState) int {
 	dg := NewDatagram()
 	dg.AddVector(dcField.Get_default_value())
 	L.Push(lua.LString(string(dg.Bytes())))
+	return 1
+}
+
+func LuaIsAtomic(L *lua.LState) int {
+	dcField := CheckDCField(L, 1)
+	if atomic, ok := dcField.As_atomic_field().(dc.DCAtomicField); ok {
+		if atomic != dc.SwigcptrDCAtomicField(0) {
+			L.Push(lua.LBool(true))
+			return 1
+		}
+	}
+	L.Push(lua.LBool(false))
+	return 1
+}
+
+func LuaIsMolecular(L *lua.LState) int {
+	dcField := CheckDCField(L, 1)
+	if molecular, ok := dcField.As_molecular_field().(dc.DCMolecularField); ok {
+		if molecular != dc.SwigcptrDCMolecularField(0) {
+			L.Push(lua.LBool(true))
+			return 1
+		}
+	}
+	L.Push(lua.LBool(false))
+	return 1
+}
+
+func LuaIsParameter(L *lua.LState) int {
+	dcField := CheckDCField(L, 1)
+	if parameter, ok := dcField.As_parameter().(dc.DCParameter); ok {
+		if parameter != dc.SwigcptrDCParameter(0) {
+			L.Push(lua.LBool(true))
+			return 1
+		}
+	}
+	L.Push(lua.LBool(false))
 	return 1
 }
 
@@ -489,7 +528,16 @@ func LuaDCPackerPackField(L *lua.LState) int {
 func LuaDCPackerUnpackField(L *lua.LState) int {
 	unpacker := CheckDCPacker(L, 1)
 	field := CheckDCField(L, 2)
-	dgi := CheckDatagramIterator(L, 3)
+	packedValue := L.Get(3)
+
+	var dgi *DatagramIterator
+	if packedValue.Type() == lua.LTString {
+		dg := NewDatagram()
+		dg.AddData([]byte(packedValue.(lua.LString)))
+		dgi = NewDatagramIterator(&dg)
+	} else {
+		dgi = CheckDatagramIterator(L, 3)
+	}
 
 	DCLock.Lock()
 	offset := dgi.Tell()
