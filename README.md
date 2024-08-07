@@ -16,3 +16,5 @@ The entire documentation and unit tests is pretty much a TODO right now, but it'
 
 ## Projects using OtpGo ##
 [Mewtwo](https://gitlab.com/sunrisemmos/Mewtwo) ([Sunrise Games'](https://sunrise.games/) Toontown servers)
+
+[Dialga](https://github.com/WorldOfCarsRE/game-server) ([Sunrise Games'](https://sunrise.games/) World of Cars Online servers)
