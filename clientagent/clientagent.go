@@ -6,9 +6,11 @@ import (
 	"os"
 	"os/signal"
 	"otpgo/core"
+	"otpgo/eventlogger"
 	"otpgo/messagedirector"
 	"otpgo/net"
 	. "otpgo/util"
+	"strconv"
 	"sync"
 
 	"net/http"
@@ -184,12 +186,16 @@ func (c *ClientAgent) queueLoop() {
 					Protect: true,
 				}, entry.args...)
 				if err != nil {
+					var event eventlogger.LoggedEvent
 					if entry.client != nil {
 						entry.client.log.Errorf("Lua error:\n%s", err.Error())
+						event = eventlogger.NewLoggedEvent("lua-error", "Client", strconv.FormatUint(uint64(entry.client.allocatedChannel), 10), err.Error())
 						entry.client.sendDisconnect(CLIENT_DISCONNECT_GENERIC, "Lua error has occured.", true)
 					} else {
 						c.log.Errorf("Lua error:\n%s", err.Error())
+						event = eventlogger.NewLoggedEvent("lua-error", "ClientAgent", "", err.Error())
 					}
+					event.Send()
 				}
 			}
 		case <-signalCh:
