@@ -172,7 +172,7 @@ func (c *Client) sendDisconnect(reason uint16, message string, security bool) {
 	event := eventlogger.NewLoggedEvent(eventType, "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10), fmt.Sprintf("%d|%s", reason, message))
 	event.Send()
 
-	if c.client.Connected() {
+	if c.client.ConnectedAndIsNotDisconnecting() {
 		resp := NewDatagram()
 		resp.AddUint16(CLIENT_GO_GET_LOST)
 		resp.AddUint16(reason)

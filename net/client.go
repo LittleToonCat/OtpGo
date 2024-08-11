@@ -7,6 +7,7 @@ import (
 	gonet "net"
 	. "otpgo/util"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pires/go-proxyproto"
@@ -38,6 +39,7 @@ type Client struct {
 	// PROXY protocol TLVs
 	tlvs   []byte
 	readBufferPool sync.Pool
+	disconnecting atomic.Bool
 }
 
 func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Client {
@@ -105,6 +107,9 @@ func (c *Client) defragment() {
 }
 
 func (c *Client) processInput(len int, data []byte) {
+	if !c.ConnectedAndIsNotDisconnecting() {
+		return
+	}
 	c.Lock()
 
 	// Check if we have enough data for a single datagram
@@ -128,6 +133,10 @@ func (c *Client) processInput(len int, data []byte) {
 
 func (c *Client) read() {
 	for {
+		if !c.ConnectedAndIsNotDisconnecting() {
+			return
+		}
+
 		buff := c.readBufferPool.Get().(*[]byte)
 		// Make sure the buffer is zeroed.
 		clear(*buff)
@@ -142,18 +151,21 @@ func (c *Client) read() {
 }
 
 func (c *Client) SendDatagram(datagram Datagram) {
-	if !c.Connected() {
+	if !c.ConnectedAndIsNotDisconnecting() {
 		return
 	}
+
 	dg := NewDatagram()
 
 	c.Lock()
+	defer c.Unlock()
 
 	dg.AddUint16(uint16(datagram.Len()))
 	dg.Write(datagram.Bytes())
 
 	if _, err := c.tr.WriteDatagram(dg); err != nil {
 		c.disconnect(err, false)
+		return
 	}
 
 	writeTimer := time.NewTimer(c.timeout)
@@ -165,25 +177,27 @@ func (c *Client) SendDatagram(datagram Datagram) {
 		}
 		if err != nil {
 			c.disconnect(err, false)
+			return
 		}
 	case <-writeTimer.C:
 		c.disconnect(errors.New("write timeout"), false)
+		return
 	}
-
-	c.Unlock()
 }
 
 // Close closes the client's transport if it isn't already closed. 
 // needsLock indicates whether this function should try and acquire the client mutex; if the caller already has the mutex, set this to false.
 func (c *Client) Close(needsLock bool) {
+	if !c.disconnecting.CompareAndSwap(false, true) || !c.Connected() {
+		return
+	}
+
 	if needsLock {
 		c.Lock()
 		defer c.Unlock()
 	}
 
-	if c.Connected() {
-		c.tr.Close()
-	}
+	c.tr.Close()
 }
 
 // disconnect disconnects the client. 
@@ -199,6 +213,10 @@ func (c *Client) Local() bool {
 
 func (c *Client) Connected() bool {
 	return !c.tr.Closed()
+}
+
+func (c *Client) ConnectedAndIsNotDisconnecting() bool {
+	return c.Connected() && !c.disconnecting.Load()
 }
 
 func (c *Client) RemoteIP() string {
