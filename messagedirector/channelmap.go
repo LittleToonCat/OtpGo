@@ -348,6 +348,11 @@ type ChannelMap struct {
 	ranges *RangeMap
 }
 
+func (s *Subscriber) Init() {
+	s.channels = make([]Channel_t, 0)
+	s.ranges = make([]Range, 0)
+}
+
 func (s *Subscriber) Subscribed(ch Channel_t) bool {
 	for _, c := range s.channels {
 		if c == ch {

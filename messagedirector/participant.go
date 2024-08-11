@@ -42,7 +42,9 @@ type MDParticipantBase struct {
 
 func (m *MDParticipantBase) Init(handler MDParticipant) {
 	m.postRemoves = []Datagram{}
-	m.subscriber = &Subscriber{participant: handler, active: true}
+	sub := &Subscriber{participant: handler, active: true}
+	sub.Init()
+	m.subscriber = sub
 	MD.participants = append(MD.participants, m)
 }
 
