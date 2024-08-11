@@ -110,27 +110,28 @@ type Client struct {
 	allowedInterests InterestPermission
 	heartbeat        *time.Ticker
 	stopHeartbeat    chan bool
+	terminationBegun atomic.Bool
 }
 
 func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	c := &Client{
-		config:                config,
-		ca:                    ca,
-		conn:                  conn,
-		queue:                 []Datagram{},
-		shouldProcess:         make(chan bool),
-		stopChan:              make(chan bool),
-		createContextMap:      map[uint32]func(doId Doid_t){},
-		getContextMap:         map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
+		config: config,
+		ca: ca,
+		conn: conn,
+		queue: []Datagram{},
+		shouldProcess: make(chan bool),
+		stopChan: make(chan bool),
+		createContextMap: map[uint32]func(doId Doid_t){},
+		getContextMap: map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
 		queryFieldsContextMap: map[uint32]func(dgi *DatagramIterator){},
-		authenticated:         false,
-		visibleObjects:        map[Doid_t]VisibleObject{},
-		declaredObjects:       map[Doid_t]DeclaredObject{},
-		ownedObjects:          map[Doid_t]OwnedObject{},
-		pendingObjects:        map[Doid_t]uint32{},
-		interests:             map[uint16]Interest{},
-		pendingInterests:      map[uint32]*InterestOperation{},
-		sendableFields:        map[Doid_t][]uint16{},
+		authenticated: false,
+		visibleObjects: map[Doid_t]VisibleObject{},
+		declaredObjects: map[Doid_t]DeclaredObject{},
+		ownedObjects: map[Doid_t]OwnedObject{},
+		pendingObjects: map[Doid_t]uint32{},
+		interests: map[uint16]Interest{},
+		pendingInterests: map[uint32]*InterestOperation{},
+		sendableFields: map[Doid_t][]uint16{},
 	}
 	c.init(config, conn)
 	c.Init(c)
@@ -144,9 +145,9 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	c.SetName(fmt.Sprintf("Client (%d)", c.channel))
 
 	c.log = log.WithFields(log.Fields{
-		"name":    c.Name(),
+		"name": c.Name(),
 		"modName": "Client",
-		"id":      fmt.Sprintf("%d", c.channel),
+		"id": fmt.Sprintf("%d", c.channel),
 	})
 
 	c.SubscribeChannel(c.channel)
@@ -171,7 +172,7 @@ func (c *Client) sendDisconnect(reason uint16, message string, security bool) {
 	event := eventlogger.NewLoggedEvent(eventType, "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10), fmt.Sprintf("%d|%s", reason, message))
 	event.Send()
 
-	if c.client.Connected() {
+	if c.client.ConnectedAndIsNotDisconnecting() {
 		resp := NewDatagram()
 		resp.AddUint16(CLIENT_GO_GET_LOST)
 		resp.AddUint16(reason)
@@ -581,7 +582,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		if sender != c.channel {
 			field := dgi.ReadUint16()
-			dcField := dclass.Get_inherited_field(int(field))
+			dcField := dclass.Get_field_by_index(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
 				c.log.Warnf("Received server-side field update for object %s(%d) with unknown field %d", dclass.Get_name(), do, field)
 				return
@@ -769,10 +770,10 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	default:
 		if luaFunc, ok := c.ca.L.GetGlobal("handleDatagram").(*lua.LFunction); ok {
 			c.ca.CallLuaFunction(luaFunc, c,
-				// Arguments:
-				NewLuaClient(c.ca.L, c),
-				lua.LNumber(msgType),
-				NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
+			// Arguments:
+			NewLuaClient(c.ca.L, c),
+			lua.LNumber(msgType),
+			NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
 		} else {
 			c.log.Errorf("Received unknown server msgtype %d", msgType)
 		}
@@ -780,12 +781,13 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 }
 
 type InterestOperation struct {
-	hasTotal   bool
+	hasTotal bool
 	totalCount int
-	finished   bool
-	total      int
+	finished bool
+	total    int
 
 	timeout      *time.Ticker
+	timedOut     bool
 	finishedChan chan bool
 
 	client         *Client
@@ -824,6 +826,7 @@ func NewInterestOperation(client *Client, timeout int, interestId uint16,
 		case <-iop.timeout.C:
 			if !iop.finished {
 				client.log.Warnf("Interest operation timed out; Got %d generates and was expecting %d. Forcing finish.", len(iop.generateQueue), iop.total)
+				iop.timedOut = true
 				iop.finish()
 			}
 		case <-iop.finishedChan:
@@ -865,9 +868,11 @@ func (i *InterestOperation) finish() {
 
 	i.finished = true
 	i.timeout.Stop()
-	go func() {
-		i.finishedChan <- true
-	}()
+	if !i.timedOut {
+		go func() {
+			i.finishedChan <- true
+		}()
+	}
 
 	// Sort generates by class number
 	keys := make([]int, len(i.generateQueue))
@@ -954,6 +959,11 @@ func (c *Client) startHeartbeat() {
 }
 
 func (c *Client) Terminate(err error) {
+	termSwapped := c.terminationBegun.CompareAndSwap(false, true)
+	if !termSwapped {
+		// If we didn't swap the boolean, another goroutine has already begun to terminate this client. Bail now.
+		return
+	}
 	if !c.cleanDisconnect && err != nil {
 		event := eventlogger.NewLoggedEvent("client-lost", "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10),
 			fmt.Sprintf("%s|%s|%s", c.conn.RemoteAddr().String(), c.conn.LocalAddr().String(), err.Error()),
@@ -961,18 +971,22 @@ func (c *Client) Terminate(err error) {
 		event.Send()
 	}
 
-	c.heartbeat.Stop()
+	if c.config.Client.Heartbeat_Timeout != 0 {
+		c.heartbeat.Stop()
+	}
 	// (Sending to these channels from ReceiveDatagram or startHeartbeat
 	// will deadlock, starting a separate goroutine fixes this.)
 	go func() {
 		// Stop the queue goroutine
 		c.stopChan <- true
-		// Stop the heartbeat goroutine
-		c.stopHeartbeat <- true
+		if c.config.Client.Heartbeat_Timeout != 0 {
+			// Stop the heartbeat goroutine
+			c.stopHeartbeat <- true
+		}
 	}()
 	go c.annihilate()
 
-	c.client.Close()
+	c.client.Close(true)
 }
 
 func (c *Client) ReceiveDatagram(dg Datagram) {
@@ -1022,9 +1036,9 @@ func (c *Client) queueLoop() {
 
 					// Pass the datagram over to Lua to handle:
 					c.ca.CallLuaFunction(c.ca.receiveDatagramFunc, c,
-						// Arguments:
-						NewLuaClient(c.ca.L, c),
-						NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
+					// Arguments:
+					NewLuaClient(c.ca.L, c),
+					NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
 					finish <- true
 				}()
 
@@ -1040,8 +1054,10 @@ func (c *Client) queueLoop() {
 }
 
 func (c *Client) handleHeartbeat() {
-	c.heartbeat.Stop()
-	c.heartbeat = time.NewTicker(time.Duration(c.config.Client.Heartbeat_Timeout) * time.Second)
+	if c.config.Client.Heartbeat_Timeout != 0 {
+		c.heartbeat.Stop()
+		c.heartbeat = time.NewTicker(time.Duration(c.config.Client.Heartbeat_Timeout) * time.Second)
+	}
 }
 
 func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string]dc.Vector_uchar, callback func(doId Doid_t)) {
@@ -1174,6 +1190,7 @@ func (c *Client) handleAddOwnership(do Doid_t, parent Doid_t, zone Zone_t, dc ui
 
 	resp := NewDatagram()
 	resp.AddUint16(uint16(CLIENT_CREATE_OBJECT_REQUIRED_OTHER_OWNER))
+	resp.AddLocation(parent, zone)
 	resp.AddUint16(dc)
 	resp.AddDoid(do)
 	resp.AddData(dgi.ReadRemainder())
@@ -1215,7 +1232,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 		return
 	}
 
-	dcField := dclass.Get_inherited_field(int(field))
+	dcField := dclass.Get_field_by_index(int(field))
 	if dcField == dc.SwigcptrDCField(0) {
 		c.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_FIELD, fmt.Sprintf("Attempted to send field update to %s(%d) with unknown field: %d", dclass.Get_name(), do, field), true)
 		// Skip the data to prevent the excess data ejection.
@@ -1358,6 +1375,7 @@ func (c *Client) handleAddObject(do Doid_t, parent Doid_t, zone Zone_t, dc uint1
 
 	resp := NewDatagram()
 	resp.AddUint16(uint16(msgType))
+	resp.AddLocation(parent, zone)
 	resp.AddUint16(dc)
 	resp.AddDoid(do)
 	resp.AddData(dgi.ReadRemainder())
@@ -1372,18 +1390,20 @@ func (c *Client) handleInterestDone(interestId uint16, context uint32) {
 		c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(interestId), lua.LNumber(context))
 		return
 	}
-	resp := NewDatagram()
-	resp.AddUint16(CLIENT_DONE_INTEREST_RESP)
-	resp.AddUint16(interestId)
-	resp.AddUint32(context)
-	c.client.SendDatagram(resp)
+	if context > 0 {
+		resp := NewDatagram()
+		resp.AddUint16(CLIENT_DONE_INTEREST_RESP)
+		resp.AddUint16(interestId)
+		resp.AddUint32(context)
+		c.client.SendDatagram(resp)
+	}
 }
 
 func (c *Client) SetChannel(channel Channel_t) {
-	if c.channel == channel {
+	if (c.channel == channel) {
 		return
 	}
-	if c.channel != c.allocatedChannel {
+	if (c.channel != c.allocatedChannel) {
 		c.UnsubscribeChannel(c.channel)
 	}
 	c.channel = channel

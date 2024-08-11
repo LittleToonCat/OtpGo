@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"otpgo/core"
+	"otpgo/eventlogger"
 	"otpgo/messagedirector"
 	. "otpgo/util"
 	"sync"
@@ -149,6 +150,8 @@ func (l *LuaRole) queueLoop() {
 				}, entry.args...)
 				if err != nil {
 					l.log.Errorf("Lua error:\n%s", err.Error())
+					event := eventlogger.NewLoggedEvent("lua-error", l.Name(), "", err.Error())
+					event.Send()
 				}
 			}
 		case <-signalCh:
@@ -197,7 +200,7 @@ func (l *LuaRole) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, packedValues map[string]dc.Vector_uchar, from Channel_t, callback func(doId Doid_t)) {
 	c.cMapLock.Lock()
 	defer c.cMapLock.Unlock()
-	
+
 	context := c.context.Add(1)
 	c.createContextMap[context] = callback
 
@@ -241,7 +244,7 @@ func (c *LuaRole) handleCreateDatabaseResp(context uint32, code uint8, doId Doid
 func (l *LuaRole) getDatabaseValues(dbChannel Channel_t, doId Doid_t, fields []string, from Channel_t, callback func(doId Doid_t, dgi *DatagramIterator)) {
 	l.gMapLock.Lock()
 	defer l.gMapLock.Unlock()
-	
+
 	context := l.context.Add(1)
 	l.getContextMap[context] = callback
 

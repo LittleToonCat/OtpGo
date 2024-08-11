@@ -44,9 +44,9 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	// TEARDOWN
-	mainClient.Close()
-	client1.Close()
-	client2.Close()
+	mainClient.Close(true)
+	client1.Close(true)
+	client2.Close(true)
 	os.Exit(code)
 }
 
@@ -112,7 +112,7 @@ func TestMD_Subscribe(t *testing.T) {
 	client1.ExpectNone(t)            // Should not be echoed back
 
 	// CLose the second connection, auto-unsubscribing it
-	client2.Close()
+	client2.Close(true)
 	client2 = (&TestMDConnection{}).Connect(":57123", "client #2")
 	client1.ExpectNone(t)
 	// MD should unsubscribe from parent
@@ -210,7 +210,7 @@ func TestMD_PostRemove(t *testing.T) {
 	client2.ExpectNone(t)
 
 	// Reconnect and see if the PR gets sent
-	client1.Close()
+	client1.Close(true)
 	client1 = (&TestMDConnection{}).Connect(":57123", "client #1")
 
 	// Upstream should receive the PR and a clear_post_remove
@@ -218,7 +218,7 @@ func TestMD_PostRemove(t *testing.T) {
 	mainClient.ExpectMany(t, []Datagram{*prDg, *clearPrDg}, false, true)
 
 	// Reconnect; the PR shouldn't be sent again
-	client1.Close()
+	client1.Close(true)
 	client1 = (&TestMDConnection{}).Connect(":57123", "client #1")
 	mainClient.ExpectNone(t)
 
@@ -233,7 +233,7 @@ func TestMD_PostRemove(t *testing.T) {
 	mainClient.Expect(t, *clearPrDg, false)
 
 	// Did it work?
-	client2.Close()
+	client2.Close(true)
 	client2 = (&TestMDConnection{}).Connect(":57123", "client #2")
 	mainClient.ExpectNone(t)
 
@@ -258,7 +258,7 @@ func TestMD_PostRemove(t *testing.T) {
 	client2.ExpectNone(t)
 
 	// Reconnect and see if all of the datagrams get sent
-	client1.Close()
+	client1.Close(true)
 	client1 = (&TestMDConnection{}).Connect(":57123", "client #1")
 
 	expected := []Datagram{
@@ -385,7 +385,7 @@ func TestMD_Ranges(t *testing.T) {
 	})
 
 	// When client one dies, it's last remaining range should die
-	client1.Close()
+	client1.Close(true)
 	client1 = (&TestMDConnection{}).Connect(":57123", "client #1")
 	mainClient.Expect(t, *(&TestDatagram{}).CreateRemoveRange(2000, 2100), false)
 	mainClient.ExpectNone(t)
@@ -575,7 +575,7 @@ func TestMD_Ranges(t *testing.T) {
 		4763: false,
 	})
 
-	client2.Close()
+	client2.Close(true)
 	client2 = (&TestMDConnection{}).Connect(":57123", "client #2")
 	mainClient.Expect(t, *(&TestDatagram{}).CreateRemoveRange(3500, 3525), false)
 	mainClient.ExpectNone(t)
@@ -593,7 +593,7 @@ func TestMD_Ranges(t *testing.T) {
 	}, false, false)
 
 	// Now we have a fully functional MD!
-	client1.Close()
-	client2.Close()
-	mainClient.Close()
+	client1.Close(true)
+	client2.Close(true)
+	mainClient.Close(true)
 }

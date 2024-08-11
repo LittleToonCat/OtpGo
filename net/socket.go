@@ -3,10 +3,11 @@
 package net
 
 import (
-	"otpgo/util"
 	"bufio"
 	"io"
 	"net"
+	"otpgo/util"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,7 +17,7 @@ type socketTransport struct {
 	br        *bufio.Reader
 	bw        *bufio.Writer
 	keepAlive time.Duration
-	closed    bool
+	closed    atomic.Bool
 }
 
 // NewSocketTransport creates a socket class stream transport.
@@ -48,12 +49,16 @@ func (s *socketTransport) WriteDatagram(datagram util.Datagram) (n int, err erro
 }
 
 func (s *socketTransport) Close() error {
-	s.closed = true
+	if !s.closed.CompareAndSwap(false, true) {
+		// Don't try and close again if something already closed the socket.
+		return nil
+	}
+
 	return s.conn.Close()
 }
 
 func (s *socketTransport) Closed() bool {
-	return s.closed
+	return s.closed.Load()
 }
 
 func (s *socketTransport) Conn() net.Conn {

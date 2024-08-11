@@ -9,7 +9,7 @@ import (
 // Util wrappers for Lua.
 
 const luaDatagramTypeName = "datagram"
-const luaDgiTypeName = "dgi"
+const luaDgiTypeName = "datagramiterator"
 const luaInt64TypeName = "int64"
 const luaUint64TypeName = "uint64"
 
@@ -154,7 +154,8 @@ var DatagramMethods = map[string]lua.LGFunction{
 	"addBool": LuaAddBool,
 	"addString": LuaAddString,
 	"addData": LuaAddData,
-	"padBytes": LuaPadBytes,
+	"addDatagram": LuaAddDatagram,
+	"addBlob": LuaAddBlob,
 }
 
 func LuaDatagramToString(L *lua.LState) int {
@@ -171,17 +172,23 @@ func LuaAddServerHeader(L *lua.LState) int {
 
 	if to.Type() == lua.LTNumber {
 		dg.AddServerHeader(Channel_t(to.(lua.LNumber)), from, messageType)
+	} else if to.Type() == lua.LTUserData {
+		if channel, ok := to.(*lua.LUserData).Value.(uint64); ok {
+			dg.AddServerHeader(Channel_t(channel), from, messageType)
+		}
 	} else if to.Type() == lua.LTTable {
 		luaChannels := to.(*lua.LTable)
 		channels := []Channel_t{}
 		luaChannels.ForEach(func(l1, l2 lua.LValue) {
 			if channel, ok := l2.(lua.LNumber); ok {
 				channels = append(channels, Channel_t(channel))
+			} else if channel, ok := l2.(*lua.LUserData).Value.(uint64); ok {
+				channels = append(channels, Channel_t(channel))
 			}
 		})
 		dg.AddMultipleServerHeader(channels, from, messageType)
 	} else {
-		L.ArgError(2, fmt.Sprintf("Got type %s, expecting number or table", to.Type().String()))
+		L.ArgError(2, fmt.Sprintf("Got type %s, expecting Uint64, number or table{Uint64, number}", to.Type().String()))
 		return 0
 	}
 	return 1
@@ -281,17 +288,24 @@ func LuaAddString(L *lua.LState) int {
 	return 1
 }
 
-func LuaAddData(L * lua.LState) int {
+func LuaAddData(L *lua.LState) int {
 	dg := CheckDatagram(L, 1)
 	v := L.CheckString(2)
 	dg.AddData([]byte(v))
 	return 1
 }
 
-func LuaPadBytes(L * lua.LState) int {
+func LuaAddDatagram(L *lua.LState) int {
 	dg := CheckDatagram(L, 1)
-	v := L.CheckInt(2)
-	dg.PadBytes(v)
+	v := CheckDatagram(L, 2)
+	dg.AddDatagram(v)
+	return 1
+}
+
+func LuaAddBlob(L *lua.LState) int {
+	dg := CheckDatagram(L, 1)
+	v := CheckDatagram(L, 2)
+	dg.AddBlob(v)
 	return 1
 }
 
@@ -367,8 +381,6 @@ func LuaReadInt64(L *lua.LState) int {
 }
 
 func LuaReadUint64(L *lua.LState) int {
-	// NOTE: Lua has no native uint64 type support.
-	// Use at your own risk.
 	dgi := CheckDatagramIterator(L, 1)
 	v := dgi.ReadUint64()
 	L.Push(NewLuaUint64(L, v))

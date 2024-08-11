@@ -187,8 +187,8 @@ func (s *StateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		dg = NewDatagram()
 		dg.AddServerHeader(sender, Channel_t(s.control), STATESERVER_QUERY_OBJECT_ALL_RESP)
 		dg.AddUint32(context)
-		s.mainObj.appendRequiredDataDoidLast(dg, false, false)
-		s.mainObj.appendOtherData(dg, false, false)
+		s.mainObj.appendRequiredDataDoidLast(dg, false)
+		s.mainObj.appendOtherData(dg, false)
 		s.RouteDatagram(dg)
 	case STATESERVER_OBJECT_DELETE_RAM:
 		s.handleDelete(dgi, sender)
