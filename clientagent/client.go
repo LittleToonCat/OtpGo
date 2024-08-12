@@ -136,13 +136,13 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	}
 	// This is to prevent termination calls before the client can be fully initialized.
 	c.terminationLock.Lock()
-	defer c.terminationLock.Unlock()
 
 	c.init(config, conn)
 	c.Init(c)
 
 	c.allocatedChannel = ca.Allocate()
 	if c.allocatedChannel == 0 {
+		c.terminationLock.Unlock()
 		c.sendDisconnect(CLIENT_DISCONNECT_GENERIC, "Client capacity reached", false)
 		return nil
 	}
@@ -160,6 +160,7 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 
 	go c.queueLoop()
 
+	c.terminationLock.Unlock()
 	return c
 }
 
