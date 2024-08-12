@@ -111,6 +111,7 @@ type Client struct {
 	heartbeat        *time.Ticker
 	stopHeartbeat    chan bool
 	terminationBegun atomic.Bool
+	terminationLock  sync.Mutex
 }
 
 func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
@@ -133,6 +134,10 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 		pendingInterests: map[uint32]*InterestOperation{},
 		sendableFields: map[Doid_t][]uint16{},
 	}
+	// This is to prevent termination calls before the client can be fully initialized.
+	c.terminationLock.Lock()
+	defer c.terminationLock.Unlock()
+
 	c.init(config, conn)
 	c.Init(c)
 
@@ -964,6 +969,10 @@ func (c *Client) Terminate(err error) {
 		// If we didn't swap the boolean, another goroutine has already begun to terminate this client. Bail now.
 		return
 	}
+
+	// Lock if the client has not been fully initialized first.
+	c.terminationLock.Lock()
+
 	if !c.cleanDisconnect && err != nil {
 		event := eventlogger.NewLoggedEvent("client-lost", "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10),
 			fmt.Sprintf("%s|%s|%s", c.conn.RemoteAddr().String(), c.conn.LocalAddr().String(), err.Error()),
@@ -986,6 +995,7 @@ func (c *Client) Terminate(err error) {
 	}()
 	go c.annihilate()
 
+	c.terminationLock.Unlock()
 	c.client.Close(true)
 }
 
