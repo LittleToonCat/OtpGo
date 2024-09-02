@@ -1237,7 +1237,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 			dgi.Skip(dgi.RemainingSize())
 			return
 		}
-		c.sendDisconnect(CLIENT_DISCONNECT_MISSING_OBJECT, fmt.Sprintf("Attempted to send field update to unknown object: %d", do), true)
+		// c.sendDisconnect(CLIENT_DISCONNECT_MISSING_OBJECT, fmt.Sprintf("Attempted to send field update to unknown object: %d", do), true)
 		// Skip the data to prevent the excess data ejection.
 		dgi.Skip(dgi.RemainingSize())
 		return
