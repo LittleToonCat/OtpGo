@@ -474,22 +474,33 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		c.lock.Lock()
 		c.Terminate(fmt.Errorf("dropped by outside sender: %d", sender))
 		c.lock.Unlock()
-	case CLIENTAGENT_ADD_INTEREST:
+	case CLIENT_AGENT_SET_INTEREST:
 		// c.context++
-		// int := c.buildInterest(dgi, false)
-		// c.handleAddInterest(int, c.context)
-		// c.addInterest(int, c.context, sender)
-	case CLIENTAGENT_ADD_INTEREST_MULTIPLE:
-		// c.context++
-		// int := c.buildInterest(dgi, true)
-		// c.handleAddInterest(int, c.context)
-		// c.addInterest(int, c.context, sender)
-	case CLIENTAGENT_REMOVE_INTEREST:
-		// c.context++
-		// id := dgi.ReadUint16()
-		// int := c.interests[id]
-		// c.handleRemoveInterest(id, c.context)
-		// c.removeInterest(int, c.context, sender)
+		interestId, context, parentDoId := dgi.ReadUint16(), dgi.ReadUint32(), dgi.ReadDoid()
+		dgi.ReadUint32() // context is sent twice for some reason?
+
+		zones := []Zone_t{}
+
+		for dgi.RemainingSize() > 0 {
+			zone := dgi.ReadZone()
+			if !slices.Contains(zones, zone) {
+				zones = append(zones, zone)
+			}
+		}
+
+		i := c.buildInterest(interestId, parentDoId, zones)
+
+		c.handleAddInterest(i, context)
+		c.addInterest(i, context, sender)
+	case CLIENT_AGENT_REMOVE_INTEREST:
+		interestId, context := dgi.ReadUint16(), dgi.ReadUint32()
+
+		if i, ok := c.interests[interestId]; ok {
+			c.handleRemoveInterest(i.id, context)
+			c.removeInterest(i, context)
+		} else {
+			c.log.Debugf("Attempted to remove non-existant interest: %d", interestId)
+		}
 	case CLIENTAGENT_SET_CLIENT_ID:
 		c.SetChannel(dgi.ReadChannel())
 	case CLIENTAGENT_SEND_DATAGRAM:
@@ -1345,24 +1356,15 @@ func (c *Client) handleRemoveInterest(id uint16, context uint32) {
 }
 
 func (c *Client) handleAddInterest(i Interest, context uint32) {
-	c.log.Warn("TODO: handleAddInterest")
-	// msgType := uint16(CLIENT_ADD_INTEREST)
-	// if len(i.zones) > 0 {
-	// 	msgType = uint16(CLIENT_ADD_INTEREST_MULTIPLE)
-	// }
-
-	// resp := NewDatagram()
-	// resp.AddUint16(msgType)
-	// resp.AddUint32(context)
-	// resp.AddUint16(i.id)
-	// resp.AddDoid(i.parent)
-	// if len(i.zones) > 0 {
-	// 	resp.AddUint16(uint16(len(i.zones)))
-	// }
-	// for _, zone := range i.zones {
-	// 	resp.AddZone(zone)
-	// }
-	// c.client.SendDatagram(resp)
+	resp := NewDatagram()
+	resp.AddUint16(CLIENT_ADD_INTEREST)
+	resp.AddUint32(context)
+	resp.AddUint16(i.id)
+	resp.AddDoid(i.parent)
+	for _, zone := range i.zones {
+		resp.AddZone(zone)
+	}
+	c.client.SendDatagram(resp)
 }
 
 func (c *Client) handleRemoveObject(do Doid_t, deleted bool) {
