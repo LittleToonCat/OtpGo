@@ -1,11 +1,11 @@
 package util
 
 import (
-	dc "github.com/LittleToonCat/dcparser-go"
 	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"otpgo/dc"
 )
 
 type DatagramIteratorEOF struct {
@@ -25,9 +25,9 @@ func NewDatagramIterator(dg *Datagram) *DatagramIterator {
 
 func (dgi *DatagramIterator) String() string {
 	return fmt.Sprintf(
-		"DatagramIterator:\n" +
-		"offset: %d (of %d) / 0x%x (of 0x%x)\n" +
-		"%s",
+		"DatagramIterator:\n"+
+			"offset: %d (of %d) / 0x%x (of 0x%x)\n"+
+			"%s",
 		dgi.offset, dgi.Dg.Len(), dgi.offset, dgi.Dg.Len(),
 		dgi.Dg,
 	)
@@ -265,7 +265,7 @@ func (dgi *DatagramIterator) ReadDatagram() *Datagram {
 
 func (dgi *DatagramIterator) ReadData(length Dgsize_t) []uint8 {
 	buff := make([]uint8, int32(length))
-	if (length > 0) {
+	if length > 0 {
 		if n, err := dgi.Read.Read(buff); err != nil || n != int(length) {
 			dgi.panic(int8(length))
 		}

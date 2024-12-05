@@ -10,7 +10,8 @@ import (
 
 	"fmt"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -42,30 +43,30 @@ func CheckParticipant(L *lua.LState, n int) *LuaRole {
 }
 
 var ParticipantMethods = map[string]lua.LGFunction{
-	"info": LuaInfo,
-	"warn": LuaWarn,
-	"error": LuaError,
-	"debug": LuaDebug,
-	"subscribeChannel": LuaSubscribeChannel,
-	"unsubscribeChannel": LuaUnsubscribeChannel,
-	"subscribeRange": LuaSubscribeRange,
-	"unsubscribeRange": LuaUnsubscribeRange,
-	"handleUpdateField": LuaHandleUpdateField,
-	"addServerHeaderWithAvatarId": LuaAddServerHeaderWithAvatarId,
+	"info":                         LuaInfo,
+	"warn":                         LuaWarn,
+	"error":                        LuaError,
+	"debug":                        LuaDebug,
+	"subscribeChannel":             LuaSubscribeChannel,
+	"unsubscribeChannel":           LuaUnsubscribeChannel,
+	"subscribeRange":               LuaSubscribeRange,
+	"unsubscribeRange":             LuaUnsubscribeRange,
+	"handleUpdateField":            LuaHandleUpdateField,
+	"addServerHeaderWithAvatarId":  LuaAddServerHeaderWithAvatarId,
 	"addServerHeaderWithAccountId": LuaAddServerHeaderWithAccountId,
-	"getSender": LuaGetSender,
-	"getAccountIdFromSender": LuaGetAccountIdFromSender,
-	"getAvatarIdFromSender": LuaGetAvatarIdFromSender,
-	"sendUpdate": LuaSendUpdate,
-	"sendUpdateToAvatarId": LuaSendUpdateToAvatarId,
-	"sendUpdateToAccountId": LuaSendUpdateToAccountId,
-	"queryObjectFields": LuaQueryObjectFields,
-	"setDatabaseValues": LuaSetDatabaseValues,
-	"routeDatagram": LuaRouteDatagram,
-	"writeServerEvent": LuaWriteServerEvent,
-	"createDatabaseObject": LuaCreateDatabaseObject,
-	"getDatabaseValues": LuaGetDatabaseValues,
-	"packFieldToDatagram": LuaPackFieldToDatagram,
+	"getSender":                    LuaGetSender,
+	"getAccountIdFromSender":       LuaGetAccountIdFromSender,
+	"getAvatarIdFromSender":        LuaGetAvatarIdFromSender,
+	"sendUpdate":                   LuaSendUpdate,
+	"sendUpdateToAvatarId":         LuaSendUpdateToAvatarId,
+	"sendUpdateToAccountId":        LuaSendUpdateToAccountId,
+	"queryObjectFields":            LuaQueryObjectFields,
+	"setDatabaseValues":            LuaSetDatabaseValues,
+	"routeDatagram":                LuaRouteDatagram,
+	"writeServerEvent":             LuaWriteServerEvent,
+	"createDatabaseObject":         LuaCreateDatabaseObject,
+	"getDatabaseValues":            LuaGetDatabaseValues,
+	"packFieldToDatagram":          LuaPackFieldToDatagram,
 }
 
 func LuaInfo(L *lua.LState) int {
@@ -172,7 +173,7 @@ func LuaAddServerHeaderWithAvatarId(L *lua.LState) int {
 	sender := Channel_t(L.CheckInt(4))
 	msgType := uint16(L.CheckInt(5))
 
-	dg.AddServerHeader(Channel_t(avatarId + (1 << 32)), sender, msgType)
+	dg.AddServerHeader(Channel_t(avatarId+(1<<32)), sender, msgType)
 	return 1
 }
 
@@ -184,7 +185,7 @@ func LuaAddServerHeaderWithAccountId(L *lua.LState) int {
 	sender := Channel_t(L.CheckInt(4))
 	msgType := uint16(L.CheckInt(5))
 
-	dg.AddServerHeader(Channel_t(accountId + (3 << 32)), sender, msgType)
+	dg.AddServerHeader(Channel_t(accountId+(3<<32)), sender, msgType)
 	return 1
 }
 
@@ -208,7 +209,7 @@ func LuaSendUpdateToAvatarId(L *lua.LState) int {
 	fieldName := L.CheckString(5)
 	v := L.Get(6)
 
-	participant.sendUpdateToChannel(Channel_t(avatarId + (1 << 32)), Doid_t(from), className, fieldName, v)
+	participant.sendUpdateToChannel(Channel_t(avatarId+(1<<32)), Doid_t(from), className, fieldName, v)
 	return 1
 }
 
@@ -220,7 +221,7 @@ func LuaSendUpdateToAccountId(L *lua.LState) int {
 	fieldName := L.CheckString(5)
 	v := L.Get(6)
 
-	participant.sendUpdateToChannel(Channel_t(accountId + (3 << 32)), Doid_t(from), className, fieldName, v)
+	participant.sendUpdateToChannel(Channel_t(accountId+(3<<32)), Doid_t(from), className, fieldName, v)
 	return 1
 }
 
@@ -535,7 +536,7 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 	value := L.Get(5)
 	includeFieldId := L.CheckBool(6)
 	includeLength := false
-	if (L.GetTop() == 7) {
+	if L.GetTop() == 7 {
 		includeLength = L.CheckBool(7)
 	}
 

@@ -1,7 +1,7 @@
 package util
 
 import (
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
 	"sync"
 )
 

@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"otpgo/util"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	"github.com/spf13/viper"
 )
 
@@ -13,8 +14,8 @@ var Hash uint32
 var StopChan chan bool // For test purposes
 
 type Uberdog struct {
-	Id        util.Doid_t
-	Class     dc.DCClass
+	Id    util.Doid_t
+	Class dc.DCClass
 }
 
 var Uberdogs []Uberdog
@@ -31,8 +32,8 @@ type Role struct {
 	Tuning  struct {
 		Interest_Timeout int
 	}
-	Lua_File          string
-	Client struct {
+	Lua_File string
+	Client   struct {
 		Add_Interest      string
 		Write_Buffer_Size int
 		Heartbeat_Timeout int
@@ -47,8 +48,8 @@ type Role struct {
 	// STATESERVER
 	Control int
 	Objects []struct {
-		ID        int
-		Class     string
+		ID    int
+		Class string
 	}
 	DO_Preallocation_Amount int
 
@@ -65,11 +66,11 @@ type Role struct {
 		Max int
 	}
 	Backend struct {
-		Type      string
+		Type string
 
 		// MONGO BACKEND
-		Server    string
-		Database  string
+		Server   string
+		Database string
 
 		// YAML BACKEND
 		Directory string
@@ -89,8 +90,8 @@ type ServerConfig struct {
 		DC_Files    []string
 	}
 	Uberdogs []struct {
-		ID        int
-		Class     string
+		ID    int
+		Class string
 	}
 	MessageDirector struct {
 		Bind    string

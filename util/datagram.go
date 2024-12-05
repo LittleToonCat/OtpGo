@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
 )
 
 type Datagram struct {
@@ -20,15 +20,15 @@ func NewDatagram() Datagram {
 
 func (dg *Datagram) String() string {
 	return fmt.Sprintf(
-		"Datagram:\n" +
-		"%s",
+		"Datagram:\n"+
+			"%s",
 		hex.Dump(dg.Bytes()),
 	)
 }
 
-//  Bufio will automatically take care of type sizes for us. In these cases, we're not
-//  going to handle a panic created by binary. Write as an unsuccessful write to a buffer would
-//  indicate a fatal error, anyways.
+// Bufio will automatically take care of type sizes for us. In these cases, we're not
+// going to handle a panic created by binary. Write as an unsuccessful write to a buffer would
+// indicate a fatal error, anyways.
 func (d *Datagram) AddInt8(v int8)          { binary.Write(d, binary.LittleEndian, v) }
 func (d *Datagram) AddUint8(v uint8)        { binary.Write(d, binary.LittleEndian, v) }
 func (d *Datagram) AddInt16(v int16)        { binary.Write(d, binary.LittleEndian, v) }

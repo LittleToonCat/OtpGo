@@ -5,7 +5,8 @@ import (
 
 	"fmt"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -191,9 +192,9 @@ func CheckDCField(L *lua.LState, n int) dc.DCField {
 }
 
 var DCFileMethods = map[string]lua.LGFunction{
-	"getNumClasses": LuaGetNumClasses,
-	"getClass": LuaGetClass,
-	"getClassByName": LuaGetClassByName,
+	"getNumClasses":   LuaGetNumClasses,
+	"getClass":        LuaGetClass,
+	"getClassByName":  LuaGetClassByName,
 	"getFieldByIndex": LuaFileGetFieldByIndex,
 }
 
@@ -209,7 +210,7 @@ func LuaGetClass(L *lua.LState) int {
 
 	dclass := dcFile.Get_class(cls)
 
-	if (dclass == dc.SwigcptrDCClass(0)) {
+	if dclass == dc.SwigcptrDCClass(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find class with index %d", cls))
 		return 0
 	}
@@ -247,15 +248,15 @@ func LuaFileGetFieldByIndex(L *lua.LState) int {
 	return 1
 }
 
-var DCClassMethods = map[string]lua.LGFunction {
-	"getName": LuaGetClassName,
-	"getNumber": LuaGetClassNumber,
-	"getNumParents": LuaGetNumParents,
-	"getParent": LuaGetParent,
-	"getNumFields": LuaGetNumFields,
-	"getField": LuaGetField,
+var DCClassMethods = map[string]lua.LGFunction{
+	"getName":         LuaGetClassName,
+	"getNumber":       LuaGetClassNumber,
+	"getNumParents":   LuaGetNumParents,
+	"getParent":       LuaGetParent,
+	"getNumFields":    LuaGetNumFields,
+	"getField":        LuaGetField,
 	"getFieldByIndex": LuaClassGetFieldByIndex,
-	"getFieldByName": LuaGetFieldByName,
+	"getFieldByName":  LuaGetFieldByName,
 }
 
 func LuaClassToString(L *lua.LState) int {
@@ -308,7 +309,7 @@ func LuaGetParent(L *lua.LState) int {
 	n := L.CheckInt(2)
 
 	parentClass := dclass.Get_parent(n)
-	if (parentClass == dc.SwigcptrDCClass(0)) {
+	if parentClass == dc.SwigcptrDCClass(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find parent class with index %d", n))
 		return 0
 	}
@@ -366,15 +367,15 @@ func LuaGetFieldByName(L *lua.LState) int {
 	return 1
 }
 
-var DCFieldMethods = map[string]lua.LGFunction {
-	"getName": LuaGetFieldName,
-	"getNumber": LuaGetFieldNumber,
-	"getClass": LuaFieldGetClass,
-	"hasKeyword": LuaHasKeyword,
+var DCFieldMethods = map[string]lua.LGFunction{
+	"getName":         LuaGetFieldName,
+	"getNumber":       LuaGetFieldNumber,
+	"getClass":        LuaFieldGetClass,
+	"hasKeyword":      LuaHasKeyword,
 	"getDefaultValue": LuaGetDefaultValue,
-	"isAtomic": LuaIsAtomic,
-	"isMolecular": LuaIsMolecular,
-	"isParameter": LuaIsParameter,
+	"isAtomic":        LuaIsAtomic,
+	"isMolecular":     LuaIsMolecular,
+	"isParameter":     LuaIsParameter,
 }
 
 func LuaFieldToString(L *lua.LState) int {
@@ -487,11 +488,11 @@ func CheckDCPacker(L *lua.LState, n int) dc.DCPacker {
 	return nil
 }
 
-var DCPackerMethods = map[string]lua.LGFunction {
-	"delete": DeleteLuaDCPacker,
-	"packField": LuaDCPackerPackField,
+var DCPackerMethods = map[string]lua.LGFunction{
+	"delete":      DeleteLuaDCPacker,
+	"packField":   LuaDCPackerPackField,
 	"unpackField": LuaDCPackerUnpackField,
-	"skipField": LuaDCPackerSkipField,
+	"skipField":   LuaDCPackerSkipField,
 }
 
 func DeleteLuaDCPacker(L *lua.LState) int {

@@ -9,7 +9,8 @@ import (
 	"slices"
 	"strconv"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	lua "github.com/yuin/gopher-lua"
 )
 

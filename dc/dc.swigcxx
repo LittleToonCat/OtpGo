@@ -1,0 +1,60 @@
+%module dc
+%{
+    #include "dcbase.h"
+
+    #include "dcDeclaration.h"
+    #include "dcClass.h"
+    #include "dcKeyword.h"
+    #include "dcKeywordList.h"
+    #include "dcPackData.h"
+    #include "dcPacker.h"
+    #include "dcPackerCatalog.h"
+    #include "dcPackerInterface.h"
+    #include "dcindent.h"
+
+    #include "dcField.h"
+    #include "dcFile.h"
+    #include "dcParameter.h"
+    #include "dcClassParameter.h"
+    #include "dcArrayParameter.h"
+    #include "dcSimpleParameter.h"
+    #include "dcSwitchParameter.h"
+    #include "dcAtomicField.h"
+    #include "dcMolecularField.h"
+    #include "dcSubatomicType.h"
+    #include "dcSwitch.h"
+    #include "dcTypedef.h"
+%}
+
+%include <std_string.i>
+%include "std_vector.i"
+%include "stdint.i"
+
+namespace std {
+    %template(vector_uchar) vector<unsigned char>;
+};
+
+%include "dcbase.h"
+
+%include "dcDeclaration.h"
+%include "dcClass.h"
+%include "dcKeyword.h"
+%include "dcKeywordList.h"
+%include "dcPackData.h"
+%include "dcPacker.h"
+%include "dcPackerCatalog.h"
+%include "dcPackerInterface.h"
+%include "dcindent.h"
+
+%include "dcField.h"
+%include "dcFile.h"
+%include "dcParameter.h"
+%include "dcClassParameter.h"
+%include "dcArrayParameter.h"
+%include "dcSimpleParameter.h"
+%include "dcSwitchParameter.h"
+%include "dcAtomicField.h"
+%include "dcMolecularField.h"
+%include "dcSubatomicType.h"
+%include "dcSwitch.h"
+%include "dcTypedef.h"

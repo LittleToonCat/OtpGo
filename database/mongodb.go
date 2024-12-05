@@ -7,7 +7,8 @@ import (
 	. "otpgo/util"
 	"time"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	"github.com/apex/log"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -17,24 +18,24 @@ import (
 )
 
 type Globals struct {
-	ID   string `bson:"_id"`
+	ID   string       `bson:"_id"`
 	DoId *GlobalsDoId `bson:"doid"`
 }
 
 type GlobalsDoId struct {
-	Monotonic Doid_t `bson:"monotonic"`
+	Monotonic Doid_t   `bson:"monotonic"`
 	Free      []Doid_t `bson:"free"`
 }
 
 type StoredObject struct {
-	ID     Doid_t `bson:"_id"`
-	Class  string `bson:"dclass"`
+	ID     Doid_t      `bson:"_id"`
+	Class  string      `bson:"dclass"`
 	Fields primitive.D `bson:"fields"`
 }
 
 type MongoBackend struct {
-	db *DatabaseServer
-	client *mongo.Client
+	db      *DatabaseServer
+	client  *mongo.Client
 	globals *mongo.Collection
 	objects *mongo.Collection
 }
@@ -195,8 +196,8 @@ func NewMongoBackend(db *DatabaseServer, config Config) (bool, *MongoBackend, er
 	}
 
 	backend := &MongoBackend{
-		db: db,
-		client: client,
+		db:      db,
+		client:  client,
 		globals: client.Database(config.Database).Collection("globals"),
 		objects: client.Database(config.Database).Collection("objects"),
 	}
@@ -210,7 +211,7 @@ func NewMongoBackend(db *DatabaseServer, config Config) (bool, *MongoBackend, er
 				ID: "GLOBALS",
 				DoId: &GlobalsDoId{
 					Monotonic: db.min,
-					Free: make([]Doid_t, 0),
+					Free:      make([]Doid_t, 0),
 				},
 			}
 
@@ -227,7 +228,7 @@ func NewMongoBackend(db *DatabaseServer, config Config) (bool, *MongoBackend, er
 	return true, backend, nil
 }
 
-func (b * MongoBackend) AssignDoId() Doid_t {
+func (b *MongoBackend) AssignDoId() Doid_t {
 	monotonicDoId := b.AssignDoIdMonotonic()
 	if monotonicDoId != INVALID_DOID {
 		return monotonicDoId
@@ -239,8 +240,8 @@ func (b * MongoBackend) AssignDoId() Doid_t {
 
 func (b *MongoBackend) AssignDoIdMonotonic() Doid_t {
 	filter := bson.D{{"_id", "GLOBALS"},
-					{"doid.monotonic", bson.D{{"$gte", b.db.min}}},
-					{"doid.monotonic", bson.D{{"$lte", b.db.max}}}}
+		{"doid.monotonic", bson.D{{"$gte", b.db.min}}},
+		{"doid.monotonic", bson.D{{"$lte", b.db.max}}}}
 
 	update := bson.M{"$inc": bson.M{"doid.monotonic": 1}}
 
@@ -254,7 +255,7 @@ func (b *MongoBackend) AssignDoIdMonotonic() Doid_t {
 }
 
 func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector_uchar,
-										  ctx uint32, sender Channel_t) {
+	ctx uint32, sender Channel_t) {
 
 	var doc bson.D
 
@@ -343,8 +344,8 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 	}
 
 	obj := StoredObject{
-		ID: doId,
-		Class: dclass.Get_name(),
+		ID:     doId,
+		Class:  dclass.Get_name(),
 		Fields: doc,
 	}
 	res, err := b.objects.InsertOne(context.Background(), obj)
@@ -424,7 +425,6 @@ func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 		b.db.RouteDatagram(dg)
 		return
 	}
-
 
 	// Marshal the document and unmarshal it back to a Map.
 	doc, _ := bson.Marshal(object.Fields)
@@ -532,7 +532,7 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 		unpacker.Set_unpack_data(value)
 		unpacker.Begin_unpack(dcField)
 		b.db.log.Debugf("Beginning unpack field \"%s\"\n%s", field, DumpUnpacker(unpacker))
-		UnpackDataToBsonDocument(unpacker, "fields." + field, &setDoc, *b.db.log)
+		UnpackDataToBsonDocument(unpacker, "fields."+field, &setDoc, *b.db.log)
 		if !unpacker.End_unpack() {
 			b.db.log.Errorf("Failed to unpack field \"%s\"!  Update aborted.\n%s", field, DumpUnpacker(unpacker))
 

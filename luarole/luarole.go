@@ -12,7 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	"github.com/apex/log"
 	gluahttp "github.com/cjoudrey/gluahttp"
 	gluacrypto "github.com/tengattack/gluacrypto"
@@ -29,9 +30,9 @@ type LuaQueueEntry struct {
 type LuaRole struct {
 	messagedirector.MDParticipantBase
 	queueLock sync.Mutex
-	cMapLock sync.RWMutex
-	gMapLock sync.RWMutex
-	qMapLock sync.RWMutex
+	cMapLock  sync.RWMutex
+	gMapLock  sync.RWMutex
+	qMapLock  sync.RWMutex
 
 	config core.Role
 	log    *log.Entry

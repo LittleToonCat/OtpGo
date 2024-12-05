@@ -6,7 +6,7 @@ import (
 	"otpgo/core"
 	. "otpgo/util"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
 
 	"os"
 
@@ -18,7 +18,7 @@ type YAMLInfo struct {
 }
 
 type YAMLObject struct {
-	ID Doid_t
+	ID    Doid_t
 	Class string
 	// We're using the MapSlice to preserve
 	// insertion order.
@@ -26,16 +26,16 @@ type YAMLObject struct {
 }
 
 type YAMLBackend struct {
-	db *DatabaseServer
+	db        *DatabaseServer
 	directory string
-	next Doid_t
+	next      Doid_t
 }
 
 func NewYAMLBackend(db *DatabaseServer, config Config) (bool, *YAMLBackend, error) {
 	backend := &YAMLBackend{
-		db: db,
+		db:        db,
 		directory: config.Directory,
-		next: 0,
+		next:      0,
 	}
 
 	// Make configured directory if it does not exist yet
@@ -127,11 +127,11 @@ func (b *YAMLBackend) AssignDoId() (Doid_t, error) {
 }
 
 func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector_uchar,
-										 ctx uint32, sender Channel_t) {
+	ctx uint32, sender Channel_t) {
 
 	obj := &YAMLObject{
-		ID: 0,
-		Class: dclass.Get_name(),
+		ID:     0,
+		Class:  dclass.Get_name(),
 		Fields: yaml.MapSlice{},
 	}
 
@@ -230,7 +230,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		return
 	}
 
-	if _, err := os.Stat(fmt.Sprintf(b.directory + "/%d.yaml", doId)); err == nil {
+	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); err == nil {
 		// File already exists.
 		b.db.log.Errorf("%d.yaml already exists!", doId)
 		// Reply with an error code.
@@ -249,7 +249,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		return
 	}
 
-	f, err := os.Create(fmt.Sprintf(b.directory + "/%d.yaml", doId))
+	f, err := os.Create(fmt.Sprintf(b.directory+"/%d.yaml", doId))
 	if err != nil {
 		b.db.log.Errorf("Error when creating %d.yaml: %s", doId, err.Error())
 		// Reply with an error code.
@@ -323,13 +323,13 @@ func (b *YAMLBackend) SendGetStoredValuesError(doId Doid_t, fields []string, ctx
 }
 
 func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
-	if _, err := os.Stat(fmt.Sprintf(b.directory + "/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
 		b.db.log.Errorf("GetStoredValues: File %d.yaml does not exist!")
 		b.SendGetStoredValuesError(doId, fields, ctx, sender)
 		return
 	}
 
-	f, err := os.Open(fmt.Sprintf(b.directory + "/%d.yaml", doId))
+	f, err := os.Open(fmt.Sprintf(b.directory+"/%d.yaml", doId))
 	if err != nil {
 		b.db.log.Error(err.Error())
 		b.SendGetStoredValuesError(doId, fields, ctx, sender)
@@ -444,12 +444,12 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 }
 
 func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector_uchar) {
-	if _, err := os.Stat(fmt.Sprintf(b.directory + "/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
 		b.db.log.Errorf("SetStoredValues: File %d.yaml does not exist!")
 		return
 	}
 
-	f, err := os.Open(fmt.Sprintf(b.directory + "/%d.yaml", doId))
+	f, err := os.Open(fmt.Sprintf(b.directory+"/%d.yaml", doId))
 	if err != nil {
 		b.db.log.Error(err.Error())
 		return
@@ -535,7 +535,7 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 		return
 	}
 
-	f, err = os.Create(fmt.Sprintf(b.directory + "/%d.yaml", doId))
+	f, err = os.Create(fmt.Sprintf(b.directory+"/%d.yaml", doId))
 	if err != nil {
 		b.db.log.Errorf("Error when creating %d.yaml: %s", doId, err.Error())
 		return

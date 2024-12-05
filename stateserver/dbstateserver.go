@@ -5,7 +5,7 @@ import (
 	"otpgo/core"
 	. "otpgo/util"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
 )
 
 type LoadingObject struct {

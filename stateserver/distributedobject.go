@@ -8,7 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	"github.com/apex/log"
 )
 
@@ -370,12 +371,14 @@ func (d *DistributedObject) handleAiChange(ai Channel_t, sender Channel_t, expli
 	d.aiChannel = ai
 	d.explicitAi = explicit
 
-	dg := NewDatagram()
-	dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
-	dg.AddDoid(d.do)
-	dg.AddChannel(ai)
-	dg.AddChannel(oldAi)
-	d.RouteDatagram(dg)
+	if len(targets) > 0 {
+		dg := NewDatagram()
+		dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
+		dg.AddDoid(d.do)
+		dg.AddChannel(ai)
+		dg.AddChannel(oldAi)
+		d.RouteDatagram(dg)
+	}
 
 	if ai != INVALID_CHANNEL {
 		d.sendAiEntry(ai, sender)

@@ -9,7 +9,8 @@ import (
 	. "otpgo/util"
 	"sync"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	"github.com/apex/log"
 )
 
@@ -21,11 +22,11 @@ const (
 
 type OperationQueueEntry struct {
 	operation uint8
-	data interface{}
-	doId Doid_t
-	dclass dc.DCClass
-	context uint32
-	sender Channel_t
+	data      interface{}
+	doId      Doid_t
+	dclass    dc.DCClass
+	context   uint32
+	sender    Channel_t
 }
 
 type DatabaseBackend interface {
@@ -35,11 +36,10 @@ type DatabaseBackend interface {
 }
 
 type Config struct {
-
-	Type      string
+	Type string
 	// MONGO BACKEND
-	Server    string
-	Database  string
+	Server   string
+	Database string
 
 	// YAML BACKEND
 	Directory string
@@ -63,13 +63,13 @@ type DatabaseServer struct {
 
 func NewDatabaseServer(config core.Role) *DatabaseServer {
 	db := &DatabaseServer{
-		config: config,
-		control: Channel_t(config.Control),
-		queue: []OperationQueueEntry{},
+		config:       config,
+		control:      Channel_t(config.Control),
+		queue:        []OperationQueueEntry{},
 		processQueue: make(chan bool),
-		min: Doid_t(config.Generate.Min),
-		max: Doid_t(config.Generate.Max),
-		objectTypes: make(map[uint16]dc.DCClass),
+		min:          Doid_t(config.Generate.Min),
+		max:          Doid_t(config.Generate.Max),
+		objectTypes:  make(map[uint16]dc.DCClass),
 		log: log.WithFields(log.Fields{
 			"name":    fmt.Sprintf("DatabaseServer (%d)", config.Control),
 			"modName": "DatabaseServer",

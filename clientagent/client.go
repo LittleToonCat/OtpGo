@@ -16,7 +16,8 @@ import (
 	"sync"
 	"time"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	"github.com/apex/log"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -77,10 +78,10 @@ type Client struct {
 	state            ClientState
 	authenticated    bool
 
-	context          atomic.Uint32
-	createContextMap map[uint32]func(doId Doid_t)
-	getContextMap    map[uint32]func(doId Doid_t, dgi *DatagramIterator)
-	queryFieldsContextMap    map[uint32]func(dgi *DatagramIterator)
+	context               atomic.Uint32
+	createContextMap      map[uint32]func(doId Doid_t)
+	getContextMap         map[uint32]func(doId Doid_t, dgi *DatagramIterator)
+	queryFieldsContextMap map[uint32]func(dgi *DatagramIterator)
 
 	queue         []Datagram
 	queueLock     sync.Mutex
@@ -116,23 +117,23 @@ type Client struct {
 
 func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	c := &Client{
-		config: config,
-		ca: ca,
-		conn: conn,
-		queue: []Datagram{},
-		shouldProcess: make(chan bool),
-		stopChan: make(chan bool),
-		createContextMap: map[uint32]func(doId Doid_t){},
-		getContextMap: map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
+		config:                config,
+		ca:                    ca,
+		conn:                  conn,
+		queue:                 []Datagram{},
+		shouldProcess:         make(chan bool),
+		stopChan:              make(chan bool),
+		createContextMap:      map[uint32]func(doId Doid_t){},
+		getContextMap:         map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
 		queryFieldsContextMap: map[uint32]func(dgi *DatagramIterator){},
-		authenticated: false,
-		visibleObjects: map[Doid_t]VisibleObject{},
-		declaredObjects: map[Doid_t]DeclaredObject{},
-		ownedObjects: map[Doid_t]OwnedObject{},
-		pendingObjects: map[Doid_t]uint32{},
-		interests: map[uint16]Interest{},
-		pendingInterests: map[uint32]*InterestOperation{},
-		sendableFields: map[Doid_t][]uint16{},
+		authenticated:         false,
+		visibleObjects:        map[Doid_t]VisibleObject{},
+		declaredObjects:       map[Doid_t]DeclaredObject{},
+		ownedObjects:          map[Doid_t]OwnedObject{},
+		pendingObjects:        map[Doid_t]uint32{},
+		interests:             map[uint16]Interest{},
+		pendingInterests:      map[uint32]*InterestOperation{},
+		sendableFields:        map[Doid_t][]uint16{},
 	}
 	// This is to prevent termination calls before the client can be fully initialized.
 	c.terminationLock.Lock()
@@ -150,9 +151,9 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 	c.SetName(fmt.Sprintf("Client (%d)", c.channel))
 
 	c.log = log.WithFields(log.Fields{
-		"name": c.Name(),
+		"name":    c.Name(),
 		"modName": "Client",
-		"id": fmt.Sprintf("%d", c.channel),
+		"id":      fmt.Sprintf("%d", c.channel),
 	})
 
 	c.SubscribeChannel(c.channel)
@@ -636,7 +637,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				tempSessionObjectSlice = append(tempSessionObjectSlice, so)
 			} else {
 				c.sendDisconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED,
-				fmt.Sprintf("The session object with id %d has been unexpectedly deleted", do), false)
+					fmt.Sprintf("The session object with id %d has been unexpectedly deleted", do), false)
 			}
 		}
 
@@ -787,10 +788,10 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	default:
 		if luaFunc, ok := c.ca.L.GetGlobal("handleDatagram").(*lua.LFunction); ok {
 			c.ca.CallLuaFunction(luaFunc, c,
-			// Arguments:
-			NewLuaClient(c.ca.L, c),
-			lua.LNumber(msgType),
-			NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
+				// Arguments:
+				NewLuaClient(c.ca.L, c),
+				lua.LNumber(msgType),
+				NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
 		} else {
 			c.log.Errorf("Received unknown server msgtype %d", msgType)
 		}
@@ -798,10 +799,10 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 }
 
 type InterestOperation struct {
-	hasTotal bool
+	hasTotal   bool
 	totalCount int
-	finished bool
-	total    int
+	finished   bool
+	total      int
 
 	timeout      *time.Ticker
 	timedOut     bool
@@ -1058,9 +1059,9 @@ func (c *Client) queueLoop() {
 
 					// Pass the datagram over to Lua to handle:
 					c.ca.CallLuaFunction(c.ca.receiveDatagramFunc, c,
-					// Arguments:
-					NewLuaClient(c.ca.L, c),
-					NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
+						// Arguments:
+						NewLuaClient(c.ca.L, c),
+						NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
 					finish <- true
 				}()
 
@@ -1414,10 +1415,10 @@ func (c *Client) handleInterestDone(interestId uint16, context uint32) {
 }
 
 func (c *Client) SetChannel(channel Channel_t) {
-	if (c.channel == channel) {
+	if c.channel == channel {
 		return
 	}
-	if (c.channel != c.allocatedChannel) {
+	if c.channel != c.allocatedChannel {
 		c.UnsubscribeChannel(c.channel)
 	}
 	c.channel = channel

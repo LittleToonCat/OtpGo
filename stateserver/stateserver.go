@@ -6,7 +6,8 @@ import (
 	"otpgo/messagedirector"
 	. "otpgo/util"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	"github.com/apex/log"
 )
 
@@ -38,31 +39,34 @@ func NewStateServer(config core.Role) *StateServer {
 	return ss
 }
 
-func (s *StateServer) InitStateServer(config core.Role, logName string, logModName string, logId string,) {
+func (s *StateServer) InitStateServer(config core.Role, logName string, logModName string, logId string) {
 	s.config = config
 	doPreallocAmount := s.config.DO_Preallocation_Amount
 	s.doStore = NewDOStorage(doPreallocAmount)
 	s.objects = map[Doid_t]*DistributedObject{}
 	s.log = log.WithFields(log.Fields{
-		"name": logName,
+		"name":    logName,
 		"modName": logModName,
-		"id": logId,
+		"id":      logId,
 	})
 	s.SetName(logName)
 }
 
-func (s *StateServer) registerObjects(objects []struct{ID int; Class string}) {
+func (s *StateServer) registerObjects(objects []struct {
+	ID    int
+	Class string
+}) {
 	// Create an ObjectServer or DistributedObject object to rep ourself.
 	dclass := core.DC.Get_class_by_name("ObjectServer")
 
-	if (dclass == dc.SwigcptrDCClass(0)) {
+	if dclass == dc.SwigcptrDCClass(0) {
 		// Older client support
 		dclass = core.DC.Get_class_by_name("DistributedObject")
 	}
 
-	if (dclass != dc.SwigcptrDCClass(0)) {
+	if dclass != dc.SwigcptrDCClass(0) {
 		dg := NewDatagram()
-		dg.AddString(dclass.Get_name()) // setName
+		dg.AddString(dclass.Get_name())          // setName
 		dg.AddUint32(uint32(core.DC.Get_hash())) // setDcHash
 
 		dgi := NewDatagramIterator(&dg)
@@ -91,14 +95,14 @@ func (s *StateServer) registerObjects(objects []struct{ID int; Class string}) {
 	}
 }
 
-func (s *StateServer) CreateDistributedObjectWithData( doid Doid_t, parent Doid_t,
+func (s *StateServer) CreateDistributedObjectWithData(doid Doid_t, parent Doid_t,
 	zone Zone_t, dclass dc.DCClass, requiredFields FieldValues,
 	ramFields FieldValues) *DistributedObject {
-		do := NewDistributedObjectWithData(s, doid, parent, zone, dclass, requiredFields, ramFields)
-		s.objects[doid] = do
+	do := NewDistributedObjectWithData(s, doid, parent, zone, dclass, requiredFields, ramFields)
+	s.objects[doid] = do
 
-		return do
-	}
+	return do
+}
 
 func (s *StateServer) handleGenerate(dgi *DatagramIterator, other bool) {
 	parent := dgi.ReadDoid()
