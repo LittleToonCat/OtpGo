@@ -1729,7 +1729,7 @@ func TestStateServer_GetZonesObjects(t *testing.T) {
 	instantiateObject(conn, 5, Doid_t(do5), Doid_t(do0), 950, 0)
 	instantiateObject(conn, 5, Doid_t(do6), Doid_t(do1), 860, 0)
 
-	checkObjects([]oz{oz{do1, 912}, oz{do2, 912}, oz{do3, 930}}, []Zone_t{912, 930})
+	checkObjects([]oz{{do1, 912}, {do2, 912}, {do3, 930}}, []Zone_t{912, 930})
 
 	// Verify GET_OBJECTS with updates
 	// Move DO #4
@@ -1737,17 +1737,17 @@ func TestStateServer_GetZonesObjects(t *testing.T) {
 	appendMeta(dg, 6969, Doid_t(do0), 930, 6969)
 	conn.SendDatagram(*dg)
 
-	checkObjects([]oz{oz{do1, 912}, oz{do2, 912}, oz{do3, 930}, oz{do4, 930}}, []Zone_t{912, 930})
+	checkObjects([]oz{{do1, 912}, {do2, 912}, {do3, 930}, {do4, 930}}, []Zone_t{912, 930})
 
 	// Delete DO #2
 	deleteObject(conn, 5, Doid_t(do2))
-	checkObjects([]oz{oz{do1, 912}, oz{do3, 930}, oz{do4, 930}}, []Zone_t{912, 930})
+	checkObjects([]oz{{do1, 912}, {do3, 930}, {do4, 930}}, []Zone_t{912, 930})
 
 	// Move DO #3 away
 	dg = (&TestDatagram{}).Create([]Channel_t{do3}, 5, STATESERVER_OBJECT_SET_ZONE)
 	appendMeta(dg, 6969, Doid_t(do1), 930, 6969)
 	conn.SendDatagram(*dg)
-	checkObjects([]oz{oz{do1, 912}, oz{do4, 930}}, []Zone_t{912, 930})
+	checkObjects([]oz{{do1, 912}, {do4, 930}}, []Zone_t{912, 930})
 
 	time.Sleep(100 * time.Millisecond)
 	// Test OBJECT_LOCATION_ACK behavior

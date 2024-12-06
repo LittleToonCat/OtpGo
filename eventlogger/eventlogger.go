@@ -163,12 +163,12 @@ func listen() {
 
 func init() {
 	EventLoggerLog = log.WithFields(log.Fields{
-		"name": "EventLogger",
+		"name":    "EventLogger",
 		"modName": "EventLogger",
 	})
 
 	senderLog = log.WithFields(log.Fields{
-		"name": "EventSender",
+		"name":    "EventSender",
 		"modName": "EventSender",
 	})
 }

@@ -13,7 +13,7 @@ const luaDgiTypeName = "datagramiterator"
 const luaInt64TypeName = "int64"
 const luaUint64TypeName = "uint64"
 
-func RegisterDatagramType(L *lua.LState)  {
+func RegisterDatagramType(L *lua.LState) {
 	mt := L.NewTypeMetatable(luaDatagramTypeName)
 	L.SetGlobal(luaDatagramTypeName, mt)
 	// Static attributes
@@ -41,7 +41,7 @@ func CheckDatagram(L *lua.LState, n int) *Datagram {
 	return nil
 }
 
-func RegisterDatagramIteratorType(L *lua.LState)  {
+func RegisterDatagramIteratorType(L *lua.LState) {
 	mt := L.NewTypeMetatable(luaDgiTypeName)
 	L.SetGlobal(luaDgiTypeName, mt)
 	// Static attributes
@@ -143,19 +143,19 @@ func RegisterLuaUtilTypes(L *lua.LState) {
 
 var DatagramMethods = map[string]lua.LGFunction{
 	"addServerHeader": LuaAddServerHeader,
-	"addInt8": LuaAddInt8,
-	"addUint8": LuaAddUint8,
-	"addInt16": LuaAddInt16,
-	"addUint16": LuaAddUint16,
-	"addInt32": LuaAddInt32,
-	"addUint32": LuaAddUint32,
-	"addInt64": LuaAddInt64,
-	"addUint64": LuaAddUint64,
-	"addBool": LuaAddBool,
-	"addString": LuaAddString,
-	"addData": LuaAddData,
-	"addDatagram": LuaAddDatagram,
-	"addBlob": LuaAddBlob,
+	"addInt8":         LuaAddInt8,
+	"addUint8":        LuaAddUint8,
+	"addInt16":        LuaAddInt16,
+	"addUint16":       LuaAddUint16,
+	"addInt32":        LuaAddInt32,
+	"addUint32":       LuaAddUint32,
+	"addInt64":        LuaAddInt64,
+	"addUint64":       LuaAddUint64,
+	"addBool":         LuaAddBool,
+	"addString":       LuaAddString,
+	"addData":         LuaAddData,
+	"addDatagram":     LuaAddDatagram,
+	"addBlob":         LuaAddBlob,
 }
 
 func LuaDatagramToString(L *lua.LState) int {
@@ -311,18 +311,18 @@ func LuaAddBlob(L *lua.LState) int {
 
 var DatagramIteratorMethods = map[string]lua.LGFunction{
 	"getRemainingSize": LuaGetRemainingSize,
-	"readInt8": LuaReadInt8,
-	"readUint8": LuaReadUint8,
-	"readInt16": LuaReadInt16,
-	"readUint16": LuaReadUint16,
-	"readInt32": LuaReadInt32,
-	"readUint32": LuaReadUint32,
-	"readInt64": LuaReadInt64,
-	"readUint64": LuaReadUint64,
-	"readBool": LuaReadBool,
-	"readString": LuaReadString,
-	"readRemainder": LuaReadRemainder,
-	"readFixedString": LuaReadFixedString,
+	"readInt8":         LuaReadInt8,
+	"readUint8":        LuaReadUint8,
+	"readInt16":        LuaReadInt16,
+	"readUint16":       LuaReadUint16,
+	"readInt32":        LuaReadInt32,
+	"readUint32":       LuaReadUint32,
+	"readInt64":        LuaReadInt64,
+	"readUint64":       LuaReadUint64,
+	"readBool":         LuaReadBool,
+	"readString":       LuaReadString,
+	"readRemainder":    LuaReadRemainder,
+	"readFixedString":  LuaReadFixedString,
 }
 
 func LuaDgiToString(L *lua.LState) int {
@@ -441,12 +441,12 @@ func Int64Add(L *lua.LState) int {
 	switch other.Type() {
 	case lua.LTUserData:
 		if otherInt64, ok := other.(*lua.LUserData).Value.(int64); ok {
-			L.Push(NewLuaInt64(L, i + otherInt64))
+			L.Push(NewLuaInt64(L, i+otherInt64))
 		} else {
 			L.Push(NewLuaInt64(L, i))
 		}
 	case lua.LTNumber:
-		L.Push(NewLuaInt64(L, i + int64(other.(lua.LNumber))))
+		L.Push(NewLuaInt64(L, i+int64(other.(lua.LNumber))))
 	default:
 		L.ArgError(2, "Int64 or number expected.")
 	}
@@ -460,12 +460,12 @@ func Int64Subtract(L *lua.LState) int {
 	switch other.Type() {
 	case lua.LTUserData:
 		if otherInt64, ok := other.(*lua.LUserData).Value.(int64); ok {
-			L.Push(NewLuaInt64(L, i - otherInt64))
+			L.Push(NewLuaInt64(L, i-otherInt64))
 		} else {
 			L.Push(NewLuaInt64(L, i))
 		}
 	case lua.LTNumber:
-		L.Push(NewLuaInt64(L, i - int64(other.(lua.LNumber))))
+		L.Push(NewLuaInt64(L, i-int64(other.(lua.LNumber))))
 	default:
 		L.ArgError(2, "Int64 or number expected.")
 	}
@@ -515,12 +515,12 @@ func Uint64Add(L *lua.LState) int {
 	switch other.Type() {
 	case lua.LTUserData:
 		if otherUint64, ok := other.(*lua.LUserData).Value.(uint64); ok {
-			L.Push(NewLuaUint64(L, i + otherUint64))
+			L.Push(NewLuaUint64(L, i+otherUint64))
 		} else {
 			L.Push(NewLuaUint64(L, i))
 		}
 	case lua.LTNumber:
-		L.Push(NewLuaUint64(L, i + uint64(other.(lua.LNumber))))
+		L.Push(NewLuaUint64(L, i+uint64(other.(lua.LNumber))))
 	default:
 		L.ArgError(2, "Uint64 or number expected.")
 	}
@@ -534,12 +534,12 @@ func Uint64Subtract(L *lua.LState) int {
 	switch other.Type() {
 	case lua.LTUserData:
 		if otherUint64, ok := other.(*lua.LUserData).Value.(uint64); ok {
-			L.Push(NewLuaUint64(L, i - otherUint64))
+			L.Push(NewLuaUint64(L, i-otherUint64))
 		} else {
 			L.Push(NewLuaUint64(L, i))
 		}
 	case lua.LTNumber:
-		L.Push(NewLuaUint64(L, i - uint64(other.(lua.LNumber))))
+		L.Push(NewLuaUint64(L, i-uint64(other.(lua.LNumber))))
 	default:
 		L.ArgError(2, "Uint64 or number expected.")
 	}

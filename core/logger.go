@@ -135,11 +135,11 @@ func (h *Handler) HandleLog(e *log.Entry) error {
 	defer h.mu.Unlock()
 
 	// if _, ok := h.Writer.(*colorable.Writer); ok {
-		grey.Fprintf(h.Writer, "[%s] ", t.Format("2006-01-02 01:02:03"))
-		color.Fprintf(h.Writer, bold.Sprintf("%*s: ", 1, level))
+	grey.Fprintf(h.Writer, "[%s] ", t.Format("2006-01-02 01:02:03"))
+	color.Fprintf(h.Writer, bold.Sprintf("%*s: ", 1, level))
 	// } else {
-		// fmt.Fprintf(h.Writer, "[%s] ", t.Format("2006-01-02 01:02:03"))
-		// fmt.Fprintf(h.Writer, fmt.Sprintf("%*s: ", 1, level))
+	// fmt.Fprintf(h.Writer, "[%s] ", t.Format("2006-01-02 01:02:03"))
+	// fmt.Fprintf(h.Writer, fmt.Sprintf("%*s: ", 1, level))
 	// }
 
 	fmt.Fprintf(h.Writer, "%s: %s", name, e.Message)

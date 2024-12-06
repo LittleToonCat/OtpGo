@@ -16,7 +16,8 @@ import (
 const BUFF_SIZE = 4096
 
 // DatagramHandler is an interface for which structures that can accept datagrams may
-//  implement to accept datagrams from a client, such as an MD participant.
+//
+//	implement to accept datagrams from a client, such as an MD participant.
 type DatagramHandler interface {
 	// Handles a message received from the client
 	ReceiveDatagram(Datagram)
@@ -37,9 +38,9 @@ type Client struct {
 	local  *gonet.TCPAddr
 
 	// PROXY protocol TLVs
-	tlvs   []byte
+	tlvs           []byte
 	readBufferPool sync.Pool
-	disconnecting atomic.Bool
+	disconnecting  atomic.Bool
 }
 
 func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Client {
@@ -185,7 +186,7 @@ func (c *Client) SendDatagram(datagram Datagram) {
 	}
 }
 
-// Close closes the client's transport if it isn't already closed. 
+// Close closes the client's transport if it isn't already closed.
 // needsLock indicates whether this function should try and acquire the client mutex; if the caller already has the mutex, set this to false.
 func (c *Client) Close(needsLock bool) {
 	if !c.disconnecting.CompareAndSwap(false, true) || !c.Connected() {
@@ -200,8 +201,8 @@ func (c *Client) Close(needsLock bool) {
 	c.tr.Close()
 }
 
-// disconnect disconnects the client. 
-// needsLock indicates whether the transport closing should try and acquire the client mutex; if the caller already has the mutex, set this to false. 
+// disconnect disconnects the client.
+// needsLock indicates whether the transport closing should try and acquire the client mutex; if the caller already has the mutex, set this to false.
 func (c *Client) disconnect(err error, needsLock bool) {
 	c.Close(needsLock)
 	c.handler.Terminate(err)

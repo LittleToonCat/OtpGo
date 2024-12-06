@@ -8,21 +8,20 @@ import (
 )
 
 var senderSocket *net.UDPConn
-var senderLog    *log.Entry
-
+var senderLog *log.Entry
 
 type LoggedEvent struct {
-	eventType string
-	roleName string
-	channel string
+	eventType   string
+	roleName    string
+	channel     string
 	description string
 }
 
 func NewLoggedEvent(eventType string, roleName string, channel string, description string) LoggedEvent {
 	le := &LoggedEvent{
-		eventType: eventType,
-		roleName: roleName,
-		channel: channel,
+		eventType:   eventType,
+		roleName:    roleName,
+		channel:     channel,
 		description: description,
 	}
 	return *le
@@ -55,14 +54,14 @@ func (l LoggedEvent) Send() {
 	}
 
 	eventDg := NewDatagram()
-	eventDg.AddUint16(1) // message type
+	eventDg.AddUint16(1)          // message type
 	eventDg.AddUint16(serverType) // serverType
-	eventDg.AddUint32(0) // fromChannel
+	eventDg.AddUint32(0)          // fromChannel
 	if serverType == 7 {
 		eventDg.AddString(l.roleName) // roleName
 	}
-	eventDg.AddString(l.eventType) // eventType
-	eventDg.AddString(l.channel) // who
+	eventDg.AddString(l.eventType)   // eventType
+	eventDg.AddString(l.channel)     // who
 	eventDg.AddString(l.description) // description
 
 	dg := NewDatagram()

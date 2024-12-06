@@ -1,10 +1,10 @@
 package messagedirector
 
 import (
-	"otpgo/net"
-	. "otpgo/util"
 	"errors"
 	gonet "net"
+	"otpgo/net"
+	. "otpgo/util"
 	"sync"
 	"time"
 )

@@ -502,7 +502,7 @@ func (c *TestChannelConnection) RemoveChannel(ch Channel_t) {
 }
 
 func (c *TestChannelConnection) ClearChannels() {
-	for ch, _ := range c.channels {
+	for ch := range c.channels {
 		delete(c.channels, ch)
 		c.SendDatagram(*(&TestDatagram{}).CreateRemoveChannel(ch))
 	}
