@@ -430,7 +430,7 @@ func (c *Client) handleObjectEntrance(dgi *DatagramIterator, other bool) {
 	}
 
 	if _, ok := c.visibleObjects[do]; !ok {
-		cls := core.DC.Get_class(int(dc))
+		cls := core.DC.GetClass(int(dc))
 		c.visibleObjects[do] = VisibleObject{
 			DeclaredObject: DeclaredObject{
 				do: do,
@@ -523,7 +523,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			return
 		}
 
-		cls := core.DC.Get_class(int(dc))
+		cls := core.DC.GetClass(int(dc))
 		c.declaredObjects[do] = DeclaredObject{
 			do: do,
 			dc: cls,
@@ -600,9 +600,9 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		if sender != c.channel {
 			field := dgi.ReadUint16()
-			dcField := dclass.Get_field_by_index(int(field))
+			dcField := dclass.GetFieldByIndex(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
-				c.log.Warnf("Received server-side field update for object %s(%d) with unknown field %d", dclass.Get_name(), do, field)
+				c.log.Warnf("Received server-side field update for object %s(%d) with unknown field %d", dclass.GetName(), do, field)
 				return
 			}
 			c.handleUpdateField(do, dclass, dcField, dgi)
@@ -664,7 +664,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		do, parent, zone, dc := dgi.ReadDoid(), dgi.ReadDoid(), dgi.ReadZone(), dgi.ReadUint16()
 
 		if _, ok := c.ownedObjects[do]; !ok {
-			cls := core.DC.Get_class(int(dc))
+			cls := core.DC.GetClass(int(dc))
 			c.ownedObjects[do] = OwnedObject{
 				DeclaredObject: DeclaredObject{
 					do: do,
@@ -1228,17 +1228,17 @@ func (c *Client) handleRemoveOwnership(do Doid_t) {
 }
 
 func (c *Client) isFieldSendable(do Doid_t, field dc.DCField) bool {
-	if _, ok := c.ownedObjects[do]; ok && field.Is_ownsend() {
+	if _, ok := c.ownedObjects[do]; ok && field.IsOwnsend() {
 		return true
 	} else if fields, ok := c.sendableFields[do]; ok {
 		for _, v := range fields {
-			if v == uint16(field.Get_number()) {
+			if v == uint16(field.GetNumber()) {
 				return true
 			}
 		}
 	}
 
-	return field.Is_clsend()
+	return field.IsClsend()
 }
 
 func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramIterator) {
@@ -1256,16 +1256,16 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 		return
 	}
 
-	dcField := dclass.Get_field_by_index(int(field))
+	dcField := dclass.GetFieldByIndex(int(field))
 	if dcField == dc.SwigcptrDCField(0) {
-		c.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_FIELD, fmt.Sprintf("Attempted to send field update to %s(%d) with unknown field: %d", dclass.Get_name(), do, field), true)
+		c.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_FIELD, fmt.Sprintf("Attempted to send field update to %s(%d) with unknown field: %d", dclass.GetName(), do, field), true)
 		// Skip the data to prevent the excess data ejection.
 		dgi.Skip(dgi.RemainingSize())
 		return
 	}
 
 	if !c.isFieldSendable(do, dcField) {
-		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Attempted to send unsendable field %s", dcField.Get_name()), true)
+		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Attempted to send unsendable field %s", dcField.GetName()), true)
 		// Skip the data to prevent the excess data ejection.
 		dgi.Skip(dgi.RemainingSize())
 		return
@@ -1277,25 +1277,25 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 	packedData := dgi.ReadRemainderAsVector()
 	defer dc.DeleteVector_uchar(packedData)
 
-	if !dcField.Validate_ranges(packedData) {
-		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Got truncated update for field %s\n%s\n%s", dcField.Get_name(), DumpVector(packedData), dgi), true)
+	if !dcField.ValidateRanges(packedData) {
+		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Got truncated update for field %s\n%s\n%s", dcField.GetName(), DumpVector(packedData), dgi), true)
 		return
 	}
 
-	c.log.Debugf("Got client \"%s\" update for object %s(%d): %s", dcField.Get_name(), dclass.Get_name(), do, dcField.Format_data(packedData))
+	c.log.Debugf("Got client \"%s\" update for object %s(%d): %s", dcField.GetName(), dclass.GetName(), do, dcField.FormatData(packedData))
 
-	lFunc := c.ca.L.GetGlobal(fmt.Sprintf("handleClient%s_%s", dclass.Get_name(), dcField.Get_name()))
+	lFunc := c.ca.L.GetGlobal(fmt.Sprintf("handleClient%s_%s", dclass.GetName(), dcField.GetName()))
 	if lFunc.Type() == lua.LTFunction {
 		// Call the Lua function instead of sending the
 		// built-in response.
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)
 
-		unpacker.Set_unpack_data(packedData)
-		unpacker.Begin_unpack(dcField)
+		unpacker.SetUnpackData(packedData)
+		unpacker.BeginUnpack(dcField)
 		lValue := core.UnpackDataToLuaValue(unpacker, c.ca.L)
-		if !unpacker.End_unpack() {
-			c.log.Warnf("End_unpack returned false on handleClientUpdateField somehow...\n%s", DumpUnpacker(unpacker))
+		if !unpacker.EndUnpack() {
+			c.log.Warnf("EndUnpack returned false on handleClientUpdateField somehow...\n%s", DumpUnpacker(unpacker))
 			return
 		}
 
@@ -1314,7 +1314,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 }
 
 func (c *Client) handleUpdateField(do Doid_t, dclass dc.DCClass, dcField dc.DCField, dgi *DatagramIterator) {
-	lFunc := c.ca.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.Get_name(), dcField.Get_name()))
+	lFunc := c.ca.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.GetName(), dcField.GetName()))
 	if lFunc.Type() == lua.LTFunction {
 		// Call the Lua function instead of sending the
 		// built-in response.
@@ -1328,22 +1328,22 @@ func (c *Client) handleUpdateField(do Doid_t, dclass dc.DCClass, dcField dc.DCFi
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)
 
-		unpacker.Set_unpack_data(packedData)
-		unpacker.Begin_unpack(dcField)
+		unpacker.SetUnpackData(packedData)
+		unpacker.BeginUnpack(dcField)
 		lValue := core.UnpackDataToLuaValue(unpacker, c.ca.L)
-		if !unpacker.End_unpack() {
-			c.log.Warnf("End_unpack returned false on handleUpdateField somehow...\n%s", DumpUnpacker(unpacker))
+		if !unpacker.EndUnpack() {
+			c.log.Warnf("EndUnpack returned false on handleUpdateField somehow...\n%s", DumpUnpacker(unpacker))
 			return
 		}
 
-		c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(dcField.Get_number()), lValue)
+		c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(dcField.GetNumber()), lValue)
 		return
 	}
 
 	resp := NewDatagram()
 	resp.AddUint16(CLIENT_OBJECT_UPDATE_FIELD)
 	resp.AddDoid(do)
-	resp.AddUint16(uint16(dcField.Get_number()))
+	resp.AddUint16(uint16(dcField.GetNumber()))
 	resp.AddData(dgi.ReadRemainder())
 	c.client.SendDatagram(resp)
 }

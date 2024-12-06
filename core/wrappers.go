@@ -14,23 +14,23 @@ import (
 
 func UnpackDataToLuaValue(unpacker dc.DCPacker, L *lua.LState) lua.LValue {
 	var value lua.LValue
-	switch unpacker.Get_pack_type() {
-	case dc.PT_invalid:
+	switch unpacker.GetPackType() {
+	case dc.PTInvalid:
 		value = lua.LNil
-	case dc.PT_double:
-		value = lua.LNumber(unpacker.Unpack_double().(float64))
-	case dc.PT_int:
-		value = lua.LNumber(unpacker.Unpack_int().(int))
-	case dc.PT_uint:
-		value = lua.LNumber(unpacker.Unpack_uint().(uint))
-	case dc.PT_int64:
-		value = NewLuaInt64(L, unpacker.Unpack_int64().(int64))
-	case dc.PT_uint64:
-		value = NewLuaUint64(L, unpacker.Unpack_uint64().(uint64))
-	case dc.PT_string:
+	case dc.PTDouble:
+		value = lua.LNumber(unpacker.UnpackDouble().(float64))
+	case dc.PTInt:
+		value = lua.LNumber(unpacker.UnpackInt().(int))
+	case dc.PTUint:
+		value = lua.LNumber(unpacker.UnpackUint().(uint))
+	case dc.PTInt64:
+		value = NewLuaInt64(L, unpacker.UnpackInt64().(int64))
+	case dc.PTUint64:
+		value = NewLuaUint64(L, unpacker.UnpackUint64().(uint64))
+	case dc.PTString:
 		fallthrough
-	case dc.PT_blob:
-		value = lua.LString(unpacker.Unpack_string().(string))
+	case dc.PTBlob:
+		value = lua.LString(unpacker.UnpackString().(string))
 	default:
 		// If we reached here, that means it is a list
 		// of nested fields (e.g. an array type, an atomic field, a
@@ -39,7 +39,7 @@ func UnpackDataToLuaValue(unpacker dc.DCPacker, L *lua.LState) lua.LValue {
 		// We'll have to create a table for these types.
 		table := L.NewTable()
 		unpacker.Push()
-		for unpacker.More_nested_fields() {
+		for unpacker.MoreNestedFields() {
 			table.Append(UnpackDataToLuaValue(unpacker, L))
 		}
 		unpacker.Pop()
@@ -50,38 +50,38 @@ func UnpackDataToLuaValue(unpacker dc.DCPacker, L *lua.LState) lua.LValue {
 }
 
 func PackLuaValue(packer dc.DCPacker, value lua.LValue) {
-	switch packer.Get_pack_type() {
-	case dc.PT_invalid:
-	case dc.PT_double:
+	switch packer.GetPackType() {
+	case dc.PTInvalid:
+	case dc.PTDouble:
 		fallthrough
-	case dc.PT_int:
+	case dc.PTInt:
 		fallthrough
-	case dc.PT_uint:
+	case dc.PTUint:
 		fallthrough
-	case dc.PT_int64:
+	case dc.PTInt64:
 		fallthrough
-	case dc.PT_uint64:
+	case dc.PTUint64:
 		switch value.Type() {
 		case lua.LTBool:
 			if value.(lua.LBool) {
-				packer.Pack_int(1)
+				packer.PackInt(1)
 			} else {
-				packer.Pack_int(0)
+				packer.PackInt(0)
 			}
 		case lua.LTNumber:
-			packer.Pack_double(float64(value.(lua.LNumber)))
+			packer.PackDouble(float64(value.(lua.LNumber)))
 		case lua.LTUserData:
 			if int64, ok := value.(*lua.LUserData).Value.(int64); ok {
-				packer.Pack_int64(int64)
+				packer.PackInt64(int64)
 			} else if uint64, ok := value.(*lua.LUserData).Value.(uint64); ok {
-				packer.Pack_uint64(uint64)
+				packer.PackUint64(uint64)
 			}
 		}
-	case dc.PT_string:
+	case dc.PTString:
 		fallthrough
-	case dc.PT_blob:
+	case dc.PTBlob:
 		if LString, ok := value.(lua.LString); ok {
-			packer.Pack_string(string(LString))
+			packer.PackString(string(LString))
 		}
 	default:
 		if table, ok := value.(*lua.LTable); ok {
@@ -200,7 +200,7 @@ var DCFileMethods = map[string]lua.LGFunction{
 
 func LuaGetNumClasses(L *lua.LState) int {
 	dcFile := CheckDCFile(L, 1)
-	L.Push(lua.LNumber(dcFile.Get_num_classes()))
+	L.Push(lua.LNumber(dcFile.GetNumClasses()))
 	return 1
 }
 
@@ -208,7 +208,7 @@ func LuaGetClass(L *lua.LState) int {
 	dcFile := CheckDCFile(L, 1)
 	cls := L.CheckInt(2)
 
-	dclass := dcFile.Get_class(cls)
+	dclass := dcFile.GetClass(cls)
 
 	if dclass == dc.SwigcptrDCClass(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find class with index %d", cls))
@@ -223,7 +223,7 @@ func LuaGetClassByName(L *lua.LState) int {
 	dcFile := CheckDCFile(L, 1)
 	cls := L.CheckString(2)
 
-	dclass := dcFile.Get_class_by_name(cls)
+	dclass := dcFile.GetClassByName(cls)
 
 	if dclass == dc.SwigcptrDCClass(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find class with name \"%s\"", cls))
@@ -238,7 +238,7 @@ func LuaFileGetFieldByIndex(L *lua.LState) int {
 	dcFile := CheckDCFile(L, 1)
 	index := L.CheckInt(2)
 
-	dcField := dcFile.Get_field_by_index(index)
+	dcField := dcFile.GetFieldByIndex(index)
 	if dcField == dc.SwigcptrDCField(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find field with index %d", index))
 		return 0
@@ -262,10 +262,10 @@ var DCClassMethods = map[string]lua.LGFunction{
 func LuaClassToString(L *lua.LState) int {
 	dclass := CheckDCClass(L, 1)
 
-	if dclass.Is_struct() {
-		L.Push(lua.LString(fmt.Sprintf("struct %s", dclass.Get_name())))
+	if dclass.IsStruct() {
+		L.Push(lua.LString(fmt.Sprintf("struct %s", dclass.GetName())))
 	} else {
-		L.Push(lua.LString(fmt.Sprintf("dclass %s", dclass.Get_name())))
+		L.Push(lua.LString(fmt.Sprintf("dclass %s", dclass.GetName())))
 	}
 
 	return 1
@@ -275,7 +275,7 @@ func LuaClassEqual(L *lua.LState) int {
 	dclass := CheckDCClass(L, 1)
 	other := CheckDCClass(L, 2)
 
-	if dclass.Get_number() == other.Get_number() {
+	if dclass.GetNumber() == other.GetNumber() {
 		L.Push(lua.LBool(true))
 	} else {
 		L.Push(lua.LBool(false))
@@ -286,21 +286,21 @@ func LuaClassEqual(L *lua.LState) int {
 func LuaGetClassName(L *lua.LState) int {
 	dclass := CheckDCClass(L, 1)
 
-	L.Push(lua.LString(dclass.Get_name()))
+	L.Push(lua.LString(dclass.GetName()))
 	return 1
 }
 
 func LuaGetClassNumber(L *lua.LState) int {
 	dclass := CheckDCClass(L, 1)
 
-	L.Push(lua.LNumber(dclass.Get_number()))
+	L.Push(lua.LNumber(dclass.GetNumber()))
 	return 1
 }
 
 func LuaGetNumParents(L *lua.LState) int {
 	dclass := CheckDCClass(L, 1)
 
-	L.Push(lua.LNumber(dclass.Get_num_parents()))
+	L.Push(lua.LNumber(dclass.GetNumParents()))
 	return 1
 }
 
@@ -308,7 +308,7 @@ func LuaGetParent(L *lua.LState) int {
 	dclass := CheckDCClass(L, 1)
 	n := L.CheckInt(2)
 
-	parentClass := dclass.Get_parent(n)
+	parentClass := dclass.GetParent(n)
 	if parentClass == dc.SwigcptrDCClass(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find parent class with index %d", n))
 		return 0
@@ -321,7 +321,7 @@ func LuaGetParent(L *lua.LState) int {
 func LuaGetNumFields(L *lua.LState) int {
 	dclass := CheckDCClass(L, 1)
 
-	L.Push(lua.LNumber(dclass.Get_num_inherited_fields()))
+	L.Push(lua.LNumber(dclass.GetNumInheritedFields()))
 	return 1
 }
 
@@ -329,7 +329,7 @@ func LuaGetField(L *lua.LState) int {
 	dcClass := CheckDCClass(L, 1)
 	n := L.CheckInt(2)
 
-	dcField := dcClass.Get_inherited_field(n)
+	dcField := dcClass.GetInheritedField(n)
 	if dcField == dc.SwigcptrDCField(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find field %d", n))
 		return 0
@@ -343,7 +343,7 @@ func LuaClassGetFieldByIndex(L *lua.LState) int {
 	dcClass := CheckDCClass(L, 1)
 	index := L.CheckInt(2)
 
-	dcField := dcClass.Get_field_by_index(index)
+	dcField := dcClass.GetFieldByIndex(index)
 	if dcField == dc.SwigcptrDCField(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find field with index %d", index))
 		return 0
@@ -357,7 +357,7 @@ func LuaGetFieldByName(L *lua.LState) int {
 	dcClass := CheckDCClass(L, 1)
 	name := L.CheckString(2)
 
-	dcField := dcClass.Get_field_by_name(name)
+	dcField := dcClass.GetFieldByName(name)
 	if dcField == dc.SwigcptrDCField(0) {
 		L.ArgError(2, fmt.Sprintf("Could not find field with name \"%s\"", name))
 		return 0
@@ -381,7 +381,7 @@ var DCFieldMethods = map[string]lua.LGFunction{
 func LuaFieldToString(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 
-	L.Push(lua.LString(fmt.Sprintf("DCField %s", dcField.Get_name())))
+	L.Push(lua.LString(fmt.Sprintf("DCField %s", dcField.GetName())))
 	return 1
 }
 
@@ -389,7 +389,7 @@ func LuaFieldEqual(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 	other := CheckDCField(L, 2)
 
-	if dcField.Get_number() == other.Get_number() {
+	if dcField.GetNumber() == other.GetNumber() {
 		L.Push(lua.LBool(true))
 	} else {
 		L.Push(lua.LBool(false))
@@ -400,21 +400,21 @@ func LuaFieldEqual(L *lua.LState) int {
 func LuaGetFieldName(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 
-	L.Push(lua.LString(dcField.Get_name()))
+	L.Push(lua.LString(dcField.GetName()))
 	return 1
 }
 
 func LuaGetFieldNumber(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 
-	L.Push(lua.LNumber(dcField.Get_number()))
+	L.Push(lua.LNumber(dcField.GetNumber()))
 	return 1
 }
 
 func LuaFieldGetClass(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 
-	L.Push(NewLuaDCClass(L, dcField.Get_class()))
+	L.Push(NewLuaDCClass(L, dcField.GetClass()))
 	return 1
 }
 
@@ -422,21 +422,21 @@ func LuaHasKeyword(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 	keyword := L.CheckString(2)
 
-	L.Push(lua.LBool(dcField.Has_keyword(keyword)))
+	L.Push(lua.LBool(dcField.HasKeyword(keyword)))
 	return 1
 }
 
 func LuaGetDefaultValue(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 	dg := NewDatagram()
-	dg.AddVector(dcField.Get_default_value())
+	dg.AddVector(dcField.GetDefaultValue())
 	L.Push(lua.LString(string(dg.Bytes())))
 	return 1
 }
 
 func LuaIsAtomic(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
-	if atomic, ok := dcField.As_atomic_field().(dc.DCAtomicField); ok {
+	if atomic, ok := dcField.AsAtomicField().(dc.DCAtomicField); ok {
 		if atomic != dc.SwigcptrDCAtomicField(0) {
 			L.Push(lua.LBool(true))
 			return 1
@@ -448,7 +448,7 @@ func LuaIsAtomic(L *lua.LState) int {
 
 func LuaIsMolecular(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
-	if molecular, ok := dcField.As_molecular_field().(dc.DCMolecularField); ok {
+	if molecular, ok := dcField.AsMolecularField().(dc.DCMolecularField); ok {
 		if molecular != dc.SwigcptrDCMolecularField(0) {
 			L.Push(lua.LBool(true))
 			return 1
@@ -460,7 +460,7 @@ func LuaIsMolecular(L *lua.LState) int {
 
 func LuaIsParameter(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
-	if parameter, ok := dcField.As_parameter().(dc.DCParameter); ok {
+	if parameter, ok := dcField.AsParameter().(dc.DCParameter); ok {
 		if parameter != dc.SwigcptrDCParameter(0) {
 			L.Push(lua.LBool(true))
 			return 1
@@ -509,17 +509,17 @@ func LuaDCPackerPackField(L *lua.LState) int {
 
 	DCLock.Lock()
 
-	packer.Begin_pack(field)
+	packer.BeginPack(field)
 
 	PackLuaValue(packer, value)
-	success := packer.End_pack()
+	success := packer.EndPack()
 
 	if success {
-		packedData := packer.Get_bytes()
+		packedData := packer.GetBytes()
 		dg.AddVector(packedData)
 		dc.DeleteVector_uchar(packedData)
 	}
-	packer.Clear_data()
+	packer.ClearData()
 
 	DCLock.Unlock()
 	L.Push(lua.LBool(success))
@@ -548,14 +548,14 @@ func LuaDCPackerUnpackField(L *lua.LState) int {
 
 	dgi.Seek(offset)
 
-	unpacker.Set_unpack_data(vectorData)
-	unpacker.Begin_unpack(field)
+	unpacker.SetUnpackData(vectorData)
+	unpacker.BeginUnpack(field)
 
 	value := UnpackDataToLuaValue(unpacker, L)
-	unpacker.End_unpack()
+	unpacker.EndUnpack()
 
 	DCLock.Unlock()
-	dgi.Seek(offset + Dgsize_t(unpacker.Get_num_unpacked_bytes()))
+	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
 	L.Push(value)
 	return 1
 }
@@ -573,14 +573,14 @@ func LuaDCPackerSkipField(L *lua.LState) int {
 
 	dgi.Seek(offset)
 
-	unpacker.Set_unpack_data(vectorData)
-	unpacker.Begin_unpack(field)
-	unpacker.Unpack_skip()
+	unpacker.SetUnpackData(vectorData)
+	unpacker.BeginUnpack(field)
+	unpacker.UnpackSkip()
 
-	success := unpacker.End_unpack()
+	success := unpacker.EndUnpack()
 
 	if success {
-		dgi.Seek(offset + Dgsize_t(unpacker.Get_num_unpacked_bytes()))
+		dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
 	}
 	DCLock.Unlock()
 	L.Push(lua.LBool(success))

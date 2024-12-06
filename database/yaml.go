@@ -131,7 +131,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 
 	obj := &YAMLObject{
 		ID:     0,
-		Class:  dclass.Get_name(),
+		Class:  dclass.GetName(),
 		Fields: yaml.MapSlice{},
 	}
 
@@ -140,10 +140,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 
 	defaults := map[dc.DCField]dc.Vector_uchar{}
 
-	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
-		field := dclass.Get_inherited_field(i)
-		if field.Is_db() {
-			if molecular, ok := field.As_molecular_field().(dc.DCMolecularField); ok {
+	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
+		field := dclass.GetInheritedField(i)
+		if field.IsDb() {
+			if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
 				if molecular != dc.SwigcptrDCMolecularField(0) {
 					continue
 				}
@@ -152,11 +152,11 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 			data, ok := datas[field]
 			if !ok {
 				// Use default value instead if there is any.
-				if field.Has_default_value() {
-					// HACK: Because Get_default_value returns a pointer which will
+				if field.HasDefaultValue() {
+					// HACK: Because GetDefaultValue returns a pointer which will
 					// become lost when accidentally deleted, we'd have to copy it.
 					// into a new blob instance.
-					value := field.Get_default_value()
+					value := field.GetDefaultValue()
 					data = dc.NewVector_uchar()
 					for i := int64(0); i < value.Size(); i++ {
 						data.Add(value.Get(int(i)))
@@ -169,9 +169,9 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 			}
 
 			// Format the data into a string and store it:
-			formattedString := field.Format_data(data, false)
+			formattedString := field.FormatData(data, false)
 			if formattedString == "" {
-				b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field.Get_name(), DumpVector(data))
+				b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field.GetName(), DumpVector(data))
 				// Reply with an error code.
 				dg := NewDatagram()
 				dg.AddServerHeader(sender, b.db.control, DBSERVER_CREATE_STORED_OBJECT_RESP)
@@ -187,7 +187,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 				}
 				return
 			}
-			obj.Fields = append(obj.Fields, yaml.MapItem{field.Get_name(), formattedString})
+			obj.Fields = append(obj.Fields, yaml.MapItem{field.GetName(), formattedString})
 		}
 	}
 
@@ -372,7 +372,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 		objFields[data.Key.(string)] = data.Value.(string)
 	}
 
-	dclass := core.DC.Get_class_by_name(obj.Class)
+	dclass := core.DC.GetClassByName(obj.Class)
 	if dclass == dc.SwigcptrDCClass(0) {
 		b.db.log.Errorf("Class %s for object %d does not exist!", obj.Class, doId)
 		b.SendGetStoredValuesError(doId, fields, ctx, sender)
@@ -387,7 +387,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 
 	packedData := map[string]dc.Vector_uchar{}
 	for _, field := range fields {
-		dcField := dclass.Get_field_by_name(field)
+		dcField := dclass.GetFieldByName(field)
 		if dcField == dc.SwigcptrDCField(0) {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, obj.Class)
 			continue
@@ -395,7 +395,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 
 		if field == "DcObjectType" {
 			// Return dclass type
-			packedData[field] = dcField.Parse_string("\"" + obj.Class + "\"")
+			packedData[field] = dcField.ParseString("\"" + obj.Class + "\"")
 			continue
 		}
 
@@ -405,7 +405,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 			continue
 		}
 
-		parsedData := dcField.Parse_string(value)
+		parsedData := dcField.ParseString(value)
 		if parsedData.Size() == 0 {
 			b.db.log.Errorf("Failed to parse data for field \"%s\": %s", field, value)
 			dc.DeleteVector_uchar(parsedData)
@@ -488,7 +488,7 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 		objFields[data.Key.(string)] = data.Value.(string)
 	}
 
-	dclass := core.DC.Get_class_by_name(obj.Class)
+	dclass := core.DC.GetClassByName(obj.Class)
 	if dclass == dc.SwigcptrDCClass(0) {
 		b.db.log.Errorf("Class %s for object %d does not exist!", obj.Class, doId)
 		return
@@ -498,13 +498,13 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 	defer DCLock.Unlock()
 
 	for field, value := range packedValues {
-		dcField := dclass.Get_field_by_name(field)
+		dcField := dclass.GetFieldByName(field)
 		if dcField == dc.SwigcptrDCField(0) {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, obj.Class)
 			continue
 		}
 
-		formattedString := dcField.Format_data(value, false)
+		formattedString := dcField.FormatData(value, false)
 		if formattedString == "" {
 			b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field, DumpVector(value))
 			continue
@@ -514,17 +514,17 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 
 	// Recreate MapSlice to preserve order:
 	obj.Fields = yaml.MapSlice{}
-	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
-		field := dclass.Get_inherited_field(i)
-		if field.Is_db() {
-			if molecular, ok := field.As_molecular_field().(dc.DCMolecularField); ok {
+	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
+		field := dclass.GetInheritedField(i)
+		if field.IsDb() {
+			if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
 				if molecular != dc.SwigcptrDCMolecularField(0) {
 					continue
 				}
 			}
 
-			if value, ok := objFields[field.Get_name()]; ok {
-				obj.Fields = append(obj.Fields, yaml.MapItem{field.Get_name(), value})
+			if value, ok := objFields[field.GetName()]; ok {
+				obj.Fields = append(obj.Fields, yaml.MapItem{field.GetName(), value})
 			}
 		}
 	}

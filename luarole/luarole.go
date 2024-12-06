@@ -318,13 +318,13 @@ func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValu
 }
 
 func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
-	dclass := core.DC.Get_class_by_name(className)
+	dclass := core.DC.GetClassByName(className)
 	if dclass == dc.SwigcptrDCClass(0) {
 		l.log.Errorf("handleUpdateField: Class \"%s\" does not exist!", className)
 		return
 	}
 	fieldId := dgi.ReadUint16()
-	dcField := dclass.Get_field_by_index(int(fieldId))
+	dcField := dclass.GetFieldByIndex(int(fieldId))
 	if dcField == dc.SwigcptrDCField(0) {
 		l.log.Errorf("handleUpdateField: Field number %d does not exist in class \"%s\"!", fieldId, className)
 		return
@@ -334,38 +334,38 @@ func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 	defer DCLock.Unlock()
 	packedData := dgi.ReadRemainderAsVector()
 	defer dc.DeleteVector_uchar(packedData)
-	if !dcField.Validate_ranges(packedData) {
-		l.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", dcField.Get_name(), DumpVector(packedData), dgi)
+	if !dcField.ValidateRanges(packedData) {
+		l.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", dcField.GetName(), DumpVector(packedData), dgi)
 		return
 	}
 
-	lFunc := l.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.Get_name(), dcField.Get_name()))
+	lFunc := l.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.GetName(), dcField.GetName()))
 	if lFunc.Type() != lua.LTFunction {
-		l.log.Warnf("Function \"handle%s_%s\" does not exist in Lua file!", className, dcField.Get_name())
+		l.log.Warnf("Function \"handle%s_%s\" does not exist in Lua file!", className, dcField.GetName())
 		return
 	}
 	// Call the Lua function
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)
 
-	unpacker.Set_unpack_data(packedData)
-	unpacker.Begin_unpack(dcField)
+	unpacker.SetUnpackData(packedData)
+	unpacker.BeginUnpack(dcField)
 	lValue := core.UnpackDataToLuaValue(unpacker, l.L)
-	if !unpacker.End_unpack() {
-		l.log.Warnf("End_unpack returned false on handleUpdateField somehow...\n%s", DumpUnpacker(unpacker))
+	if !unpacker.EndUnpack() {
+		l.log.Warnf("EndUnpack returned false on handleUpdateField somehow...\n%s", DumpUnpacker(unpacker))
 		return
 	}
 	l.CallLuaFunction(lFunc, l.sender, NewLuaParticipant(l.L, l), lua.LNumber(fieldId), lValue)
 }
 
 func (l *LuaRole) sendUpdateToChannel(channel Channel_t, fromDoId Doid_t, className string, fieldName string, value lua.LValue) {
-	cls := core.DC.Get_class_by_name(className)
+	cls := core.DC.GetClassByName(className)
 	if cls == dc.SwigcptrDCClass(0) {
 		l.log.Warnf("sendUpdateToChannel: Class name \"%s\" not found!", className)
 		return
 	}
 
-	field := cls.Get_field_by_name(fieldName)
+	field := cls.GetFieldByName(fieldName)
 	if field == dc.SwigcptrDCField(0) {
 		l.log.Warnf("sendUpdateToChannel: Class \"%s\" does not have field \"%s\"!", className, fieldName)
 		return
@@ -377,20 +377,20 @@ func (l *LuaRole) sendUpdateToChannel(channel Channel_t, fromDoId Doid_t, classN
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packer.Begin_pack(field)
+	packer.BeginPack(field)
 	core.PackLuaValue(packer, value)
-	if !packer.End_pack() {
+	if !packer.EndPack() {
 		l.log.Warnf("sendUpdateToChannel: Packing of \"%s\" failed!", fieldName)
 		return
 	}
 
-	packedData := packer.Get_bytes()
+	packedData := packer.GetBytes()
 	defer dc.DeleteVector_uchar(packedData)
 
 	dg := NewDatagram()
 	dg.AddServerHeader(channel, Channel_t(fromDoId), STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(fromDoId)
-	dg.AddUint16(uint16(field.Get_number()))
+	dg.AddUint16(uint16(field.GetNumber()))
 	dg.AddVector(packedData)
 	l.RouteDatagram(dg)
 }

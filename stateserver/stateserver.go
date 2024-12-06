@@ -57,17 +57,17 @@ func (s *StateServer) registerObjects(objects []struct {
 	Class string
 }) {
 	// Create an ObjectServer or DistributedObject object to rep ourself.
-	dclass := core.DC.Get_class_by_name("ObjectServer")
+	dclass := core.DC.GetClassByName("ObjectServer")
 
 	if dclass == dc.SwigcptrDCClass(0) {
 		// Older client support
-		dclass = core.DC.Get_class_by_name("DistributedObject")
+		dclass = core.DC.GetClassByName("DistributedObject")
 	}
 
 	if dclass != dc.SwigcptrDCClass(0) {
 		dg := NewDatagram()
-		dg.AddString(dclass.Get_name())          // setName
-		dg.AddUint32(uint32(core.DC.Get_hash())) // setDcHash
+		dg.AddString(dclass.GetName())          // setName
+		dg.AddUint32(uint32(core.DC.GetHash())) // setDcHash
 
 		dgi := NewDatagramIterator(&dg)
 		if ok, obj, err := NewDistributedObject(s, Doid_t(s.control), 0, 0, dclass, dgi, false, true); ok {
@@ -78,7 +78,7 @@ func (s *StateServer) registerObjects(objects []struct {
 	}
 
 	for _, obj := range objects {
-		dclass := core.DC.Get_class_by_name(obj.Class)
+		dclass := core.DC.GetClassByName(obj.Class)
 		// Check if the method returns a NULL pointer
 		if dclass == dc.SwigcptrDCClass(0) {
 			s.log.Fatalf("For Configured class %d, class %s does not exist!", obj.ID, obj.Class)
@@ -115,12 +115,12 @@ func (s *StateServer) handleGenerate(dgi *DatagramIterator, other bool) {
 		return
 	}
 
-	if core.DC.Get_num_classes() < int(dc) {
+	if core.DC.GetNumClasses() < int(dc) {
 		s.log.Errorf("Received create for unknown dclass id %d", dc)
 		return
 	}
 
-	dclass := core.DC.Get_class(int(dc))
+	dclass := core.DC.GetClass(int(dc))
 	if ok, obj, err := NewDistributedObject(s, do, parent, zone, dclass, dgi, other, false); ok {
 		s.objects[do] = obj
 	} else {

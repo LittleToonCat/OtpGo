@@ -79,7 +79,7 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 
 	// Populate object types
 	for _, obj := range config.Objects {
-		dclass := core.DC.Get_class_by_name(obj.Class)
+		dclass := core.DC.GetClassByName(obj.Class)
 		if dclass == dc.SwigcptrDCClass(0) {
 			db.log.Fatalf("For object type %d, \"%s\" does not exist!", obj.ID, obj.Class)
 		}
@@ -203,9 +203,9 @@ func (d *DatabaseServer) HandleCreateObject(dgi *DatagramIterator, sender Channe
 		name := dgi.ReadString()
 		blob := dgi.ReadVector()
 
-		field := dclass.Get_field_by_name(name)
+		field := dclass.GetFieldByName(name)
 		if field == dc.SwigcptrDCField(0) {
-			log.Errorf("Field \"%s\" does not exist for class \"%s\"!", name, dclass.Get_name())
+			log.Errorf("Field \"%s\" does not exist for class \"%s\"!", name, dclass.GetName())
 		}
 
 		datas[field] = blob

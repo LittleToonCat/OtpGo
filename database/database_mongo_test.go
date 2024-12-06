@@ -19,11 +19,11 @@ type Generate struct {
 	Max int
 }
 type Backend struct {
-	Type      string
+	Type string
 
 	// MONGO BACKEND
-	Server    string
-	Database  string
+	Server   string
+	Database string
 }
 
 func connect(ch Channel_t) *TestChannelConnection {
@@ -45,11 +45,11 @@ func TestMain(m *testing.M) {
 
 	// Start new Mongo instance.
 	mongoCmd := exec.Command("mongod",
-						  "--noauth", "--quiet",
-						  "--nojournal", "--noprealloc",
-						  "--bind_ip", "127.0.0.1",
-						  "--port", "57023",
-						  "--dbpath", dir)
+		"--noauth", "--quiet",
+		"--nojournal", "--noprealloc",
+		"--bind_ip", "127.0.0.1",
+		"--port", "57023",
+		"--dbpath", dir)
 	if err := mongoCmd.Start(); err != nil {
 		os.RemoveAll(dir)
 		panic(err)
@@ -71,13 +71,13 @@ func TestMain(m *testing.M) {
 	time.Sleep(100 * time.Millisecond)
 
 	db := NewDatabaseServer(core.Role{
-		Control: 75757,
+		Control:  75757,
 		Generate: Generate{1000000, 1000010},
-		Backend: Backend{Type: "mongodb", Server: "mongodb://127.0.0.1:57023", Database: "test"}})
+		Backend:  Backend{Type: "mongodb", Server: "mongodb://127.0.0.1:57023", Database: "test"}})
 
-	db.objectTypes[1] = core.DC.Get_class_by_name("DistributedTestObject3")
-	db.objectTypes[2] = core.DC.Get_class_by_name("DistributedTestObject5")
-	db.objectTypes[3] = core.DC.Get_class_by_name("DistributedDBTypeTestObject")
+	db.objectTypes[1] = core.DC.GetClassByName("DistributedTestObject3")
+	db.objectTypes[2] = core.DC.GetClassByName("DistributedTestObject5")
+	db.objectTypes[3] = core.DC.GetClassByName("DistributedDBTypeTestObject")
 
 	code := m.Run()
 
@@ -99,9 +99,9 @@ func TestMongo_CreateGetAll(t *testing.T) {
 
 	dg := NewDatagram()
 	dg.AddServerHeader(75757, 20, DBSERVER_CREATE_STORED_OBJECT)
-	dg.AddUint32(1) // Context
+	dg.AddUint32(1)  // Context
 	dg.AddString("") // unknown
-	dg.AddUint16(1) // Object type 1 = DistributedTestObject3
+	dg.AddUint16(1)  // Object type 1 = DistributedTestObject3
 
 	dg.AddUint16(1) // Count
 	dg.AddString("setRDB3")

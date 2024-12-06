@@ -34,6 +34,9 @@ namespace std {
     %template(vector_uchar) vector<unsigned char>;
 };
 
+// Rename all snake_case declarations into CamelCase (get_fields_by_index -> GetFieldsByIndex)
+%rename("%(camelcase)s") "";
+
 %include "dcbase.h"
 
 %include "dcDeclaration.h"

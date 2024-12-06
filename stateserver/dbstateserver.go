@@ -92,11 +92,11 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 	}
 
 	dcId := dgi.ReadUint16()
-	if core.DC.Get_num_classes() < int(dcId) {
+	if core.DC.GetNumClasses() < int(dcId) {
 		s.log.Errorf("Received activate for unknown dclass id %d", dcId)
 		return
 	}
-	dclass := core.DC.Get_class(int(dcId))
+	dclass := core.DC.GetClass(int(dcId))
 
 	obj := LoadingObject{
 		dbss:   s,
@@ -122,20 +122,20 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 
 		for i := uint16(0); i < count; i++ {
 			field := dgi.ReadUint16()
-			dcField := dclass.Get_field_by_index(int(field))
+			dcField := dclass.GetFieldByIndex(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
 				s.log.Errorf("Received invalid field index %d", field)
 				return
 			}
 
-			if !(dcField.Is_required() || dcField.Is_ram()) {
-				s.log.Errorf("Recieved NON-RAM field \"%s\" within an OTHER section", dcField.Get_name())
+			if !(dcField.IsRequired() || dcField.IsRam()) {
+				s.log.Errorf("Recieved NON-RAM field \"%s\" within an OTHER section", dcField.GetName())
 				dgi.SkipDCField(dcField, false)
 				continue
 			}
 			data, ok := dgi.ReadDCField(dcField, true, false)
 			if !ok {
-				s.log.Errorf("Received invalid update data for field \"%s\"!", dcField.Get_name())
+				s.log.Errorf("Received invalid update data for field \"%s\"!", dcField.GetName())
 				continue
 			}
 
@@ -148,16 +148,16 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 
 	// Populate names of required fields to fetch.
 	required := make([]string, 0)
-	count := dclass.Get_num_inherited_fields()
+	count := dclass.GetNumInheritedFields()
 	for i := 0; i < count; i++ {
-		field := dclass.Get_inherited_field(i)
-		molecular := field.As_molecular_field().(dc.DCMolecularField)
+		field := dclass.GetInheritedField(i)
+		molecular := field.AsMolecularField().(dc.DCMolecularField)
 		if molecular != dc.SwigcptrDCMolecularField(0) {
 			continue
 		}
-		if field.Is_required() && field.Is_db() {
+		if field.IsRequired() && field.IsDb() {
 			if _, ok := obj.fieldUpdates[field]; !ok {
-				required = append(required, field.Get_name())
+				required = append(required, field.GetName())
 			}
 		}
 	}
@@ -216,13 +216,13 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 		field := fields[i]
 		found := hasValue[field]
 
-		dcField := obj.dclass.Get_field_by_name(field)
+		dcField := obj.dclass.GetFieldByName(field)
 		if dcField == dc.SwigcptrDCField(0) {
-			s.log.Warnf("Field \"%s\" does not exist for class \"%s\"", field, obj.dclass.Get_name())
+			s.log.Warnf("Field \"%s\" does not exist for class \"%s\"", field, obj.dclass.GetName())
 			continue
 		}
 
-		if !(dcField.Is_required() || dcField.Is_ram()) {
+		if !(dcField.IsRequired() || dcField.IsRam()) {
 			s.log.Errorf("Recieved NON-RAM field \"%s\"", field)
 			continue
 		}
@@ -249,23 +249,23 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 	}
 
 	// Now let's get the object inited.
-	numFields := obj.dclass.Get_num_inherited_fields()
+	numFields := obj.dclass.GetNumInheritedFields()
 	for i := 0; i < numFields; i++ {
-		dcField := obj.dclass.Get_inherited_field(i)
-		molecular := dcField.As_molecular_field().(dc.DCMolecularField)
+		dcField := obj.dclass.GetInheritedField(i)
+		molecular := dcField.AsMolecularField().(dc.DCMolecularField)
 		if molecular != dc.SwigcptrDCMolecularField(0) {
 			continue
 		}
-		if dcField.Is_required() {
+		if dcField.IsRequired() {
 			if data, ok := obj.fieldUpdates[dcField]; ok {
 				obj.requiredFields[dcField] = data
 				delete(obj.fieldUpdates, dcField)
 			} else {
 				// Use the default value.
-				obj.requiredFields[dcField] = VectorToByte(dcField.Get_default_value())
-				s.log.Debugf("Using default value required for field \"%s\" %s", dcField.Get_name(), FormatFieldData(dcField, obj.requiredFields[dcField]))
+				obj.requiredFields[dcField] = VectorToByte(dcField.GetDefaultValue())
+				s.log.Debugf("Using default value required for field \"%s\" %s", dcField.GetName(), FormatFieldData(dcField, obj.requiredFields[dcField]))
 			}
-		} else if dcField.Is_ram() {
+		} else if dcField.IsRam() {
 			if data, ok := obj.fieldUpdates[dcField]; ok {
 				obj.ramFields[dcField] = data
 				delete(obj.fieldUpdates, dcField)
@@ -346,12 +346,12 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 	}
 
 	fieldId := dgi.ReadUint16()
-	field := core.DC.Get_field_by_index(int(fieldId))
+	field := core.DC.GetFieldByIndex(int(fieldId))
 	if field == dc.SwigcptrDCField(0) {
 		s.log.Warnf("Update received for unknown field ID=%d", fieldId)
 	}
 
-	if !field.Is_db() {
+	if !field.IsDb() {
 		// Ignore it.
 		return
 	}
@@ -359,17 +359,17 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 	data, ok := dgi.ReadDCField(field, true, true)
 
 	if !ok || dgi.RemainingSize() > 0 {
-		s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), dgi)
+		s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.GetName(), dgi)
 		return
 	}
 
-	s.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.\n%s", field.Get_name(), FormatFieldData(field, data), do, dgi)
+	s.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.\n%s", field.GetName(), FormatFieldData(field, data), do, dgi)
 
 	dg := NewDatagram()
 	dg.AddServerHeader(s.database, Channel_t(do), DBSERVER_SET_STORED_VALUES)
 	dg.AddDoid(do)
 	dg.AddUint16(1) // Field count
-	dg.AddString(field.Get_name())
+	dg.AddString(field.GetName())
 	dg.AddUint16(uint16(len(data)))
 	dg.AddData(data)
 
@@ -394,17 +394,17 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 
 	for i := 0; i < int(count); i++ {
 		fieldId := dgi.ReadUint16()
-		field := core.DC.Get_field_by_index(int(fieldId))
+		field := core.DC.GetFieldByIndex(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			s.log.Warnf("Update received for unknown field ID=%d", fieldId)
 			return
 		}
 
-		if !field.Is_db() {
+		if !field.IsDb() {
 			// Skip the data.
 			if !dgi.SkipDCField(field, false) {
 				// ..and even that could fail.
-				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), dgi)
+				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.GetName(), dgi)
 				return
 			}
 			continue
@@ -412,11 +412,11 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 
 		data, ok := dgi.ReadDCField(field, true, false)
 		if !ok {
-			s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.Get_name(), dgi)
+			s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.GetName(), dgi)
 			return
 		}
 
-		fieldUpdates[field.Get_name()] = data
+		fieldUpdates[field.GetName()] = data
 	}
 
 	dg := NewDatagram()
@@ -521,7 +521,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		fieldId := dgi.ReadUint16()
 		context = dgi.ReadUint32()
 
-		field := core.DC.Get_field_by_index(int(fieldId))
+		field := core.DC.GetFieldByIndex(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
 			return
@@ -532,7 +532,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		fields = []dc.DCField{}
 		for dgi.RemainingSize() >= Blobsize {
 			fieldId := dgi.ReadUint16()
-			field := core.DC.Get_field_by_index(int(fieldId))
+			field := core.DC.GetFieldByIndex(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
 				s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
 				return
@@ -543,7 +543,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 
 	name2FieldId := map[string]uint16{}
 	for _, field := range fields {
-		name2FieldId[field.Get_name()] = uint16(field.Get_number())
+		name2FieldId[field.GetName()] = uint16(field.GetNumber())
 	}
 	query := &FieldQuery{
 		do:      do,
@@ -555,7 +555,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 
 	query.name2FieldId = name2FieldId
 	if len(fields) == 1 {
-		query.singleFieldId = uint16(fields[0].Get_number())
+		query.singleFieldId = uint16(fields[0].GetNumber())
 	}
 
 	s.contextToFieldQuery[s.context] = query
@@ -566,7 +566,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 	dg.AddDoid(do)
 	dg.AddUint16(uint16(len(fields)))
 	for _, field := range fields {
-		dg.AddString(field.Get_name())
+		dg.AddString(field.GetName())
 	}
 	s.RouteDatagram(dg)
 	s.context++
@@ -738,7 +738,7 @@ func (s *DatabaseStateServer) handleDClassQuery(dgi *DatagramIterator, query *DC
 	}
 
 	s.log.Debugf("handleQueryAll: Found DClass name \"%s\" for object=%d", className, do)
-	dclass := core.DC.Get_class_by_name(className)
+	dclass := core.DC.GetClassByName(className)
 	if dclass == dc.SwigcptrDCClass(0) {
 		s.log.Errorf("handleQueryAll: Retreived unknown class of name \"%s\"!", className)
 		return
@@ -770,16 +770,16 @@ func (s *DatabaseStateServer) handleDClassQuery(dgi *DatagramIterator, query *DC
 
 	// Populate names of required fields to fetch.
 	required := make([]string, 0)
-	count := dclass.Get_num_inherited_fields()
+	count := dclass.GetNumInheritedFields()
 	for i := 0; i < count; i++ {
-		field := dclass.Get_inherited_field(i)
-		molecular := field.As_molecular_field().(dc.DCMolecularField)
+		field := dclass.GetInheritedField(i)
+		molecular := field.AsMolecularField().(dc.DCMolecularField)
 		if molecular != dc.SwigcptrDCMolecularField(0) {
 			continue
 		}
-		if field.Is_required() && field.Is_db() {
+		if field.IsRequired() && field.IsDb() {
 			if _, ok := obj.fieldUpdates[field]; !ok {
-				required = append(required, field.Get_name())
+				required = append(required, field.GetName())
 			}
 		}
 	}

@@ -59,8 +59,8 @@ func (doStore *DOStorage) createDO(ss *StateServer, doid Doid_t,
 	ramFields FieldValues) *DistributedObject {
 	do := doStore.DOPool.Get().(*DistributedObject)
 	do.log = log.WithFields(log.Fields{
-		"name":    fmt.Sprintf("%s (%d)", dclass.Get_name(), doid),
-		"modName": dclass.Get_name(),
+		"name":    fmt.Sprintf("%s (%d)", dclass.GetName(), doid),
+		"modName": dclass.GetName(),
 		"id":      fmt.Sprintf("%d", doid),
 	})
 	do.stateserver = ss

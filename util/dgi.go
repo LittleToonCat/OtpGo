@@ -307,21 +307,21 @@ func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, 
 
 	dgi.Seek(offset)
 
-	unpacker.Set_unpack_data(vectorData)
-	unpacker.Begin_unpack(field)
+	unpacker.SetUnpackData(vectorData)
+	unpacker.BeginUnpack(field)
 
-	packedData := unpacker.Unpack_literal_value().(dc.Vector_uchar)
+	packedData := unpacker.UnpackLiteralValue().(dc.Vector_uchar)
 	defer dc.DeleteVector_uchar(packedData)
 
-	if !unpacker.End_unpack() {
+	if !unpacker.EndUnpack() {
 		return nil, false
 	}
 
-	if validateRanges && !field.Validate_ranges(packedData) {
+	if validateRanges && !field.ValidateRanges(packedData) {
 		return nil, false
 	}
 
-	dgi.Seek(offset + Dgsize_t(unpacker.Get_num_unpacked_bytes()))
+	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
 	return VectorToByte(packedData), true
 }
 
@@ -342,14 +342,14 @@ func (dgi *DatagramIterator) SkipDCField(field dc.DCField, lock bool) bool {
 
 	dgi.Seek(offset)
 
-	unpacker.Set_unpack_data(vectorData)
-	unpacker.Begin_unpack(field)
-	unpacker.Unpack_skip()
-	if !unpacker.End_unpack() {
+	unpacker.SetUnpackData(vectorData)
+	unpacker.BeginUnpack(field)
+	unpacker.UnpackSkip()
+	if !unpacker.EndUnpack() {
 		return false
 	}
 
-	dgi.Seek(offset + Dgsize_t(unpacker.Get_num_unpacked_bytes()))
+	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
 	return true
 }
 

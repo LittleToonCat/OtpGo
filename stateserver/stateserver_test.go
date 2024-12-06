@@ -1188,7 +1188,7 @@ func TestStateServer_Get(t *testing.T) {
 	dg.AddUint32(1)
 	appendMetaDoidLast(dg, Doid_t(100100), 0, 0, ObjectServer)
 	dg.AddString("ObjectServer")
-	dg.AddUint32(uint32(core.DC.Get_hash()))
+	dg.AddUint32(uint32(core.DC.GetHash()))
 	dg.AddUint16(0)
 	conn.Expect(t, *dg, false)
 

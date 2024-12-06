@@ -139,7 +139,7 @@ Revision: %s
 
 	// Configure UberDOG list
 	for _, ud := range core.Config.Uberdogs {
-		class := core.DC.Get_class_by_name(ud.Class)
+		class := core.DC.GetClassByName(ud.Class)
 		// Check if the method returns a NULL pointer
 		if class == dc.SwigcptrDCClass(0) {
 			mainLog.Fatalf("For UberDOG %d, class %s does not exist!", ud.ID, ud.Class)

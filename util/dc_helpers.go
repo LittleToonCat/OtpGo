@@ -36,19 +36,19 @@ func ValidateDCRanges(field dc.DCField, data []byte) bool {
 	vector := ByteToVector(data)
 	defer dc.DeleteVector_uchar(vector)
 
-	return field.Validate_ranges(vector)
+	return field.ValidateRanges(vector)
 }
 
 func FormatFieldData(field dc.DCField, data []byte) string {
 	vector := ByteToVector(data)
 	defer dc.DeleteVector_uchar(vector)
 
-	return field.Format_data(vector)
+	return field.FormatData(vector)
 }
 
 func DumpUnpacker(unpacker dc.DCPacker) string {
-	data := []byte(unpacker.Get_unpack_string())
-	unpackedLength := unpacker.Get_num_unpacked_bytes()
+	data := []byte(unpacker.GetUnpackString())
+	unpackedLength := unpacker.GetNumUnpackedBytes()
 	dg := NewDatagram()
 	dg.AddData(data)
 
