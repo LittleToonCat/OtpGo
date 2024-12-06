@@ -1083,7 +1083,7 @@ func (c *Client) handleHeartbeat() {
 	}
 }
 
-func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string]dc.Vector_uchar, callback func(doId Doid_t)) {
+func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string]dc.Vector, callback func(doId Doid_t)) {
 	c.cMapLock.Lock()
 	defer c.cMapLock.Unlock()
 
@@ -1101,7 +1101,7 @@ func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string
 		dg.AddString(name)
 		dg.AddUint16(uint16(value.Size()))
 		dg.AddVector(value)
-		dc.DeleteVector_uchar(value)
+		dc.DeleteVector(value)
 	}
 	c.RouteDatagram(dg)
 }
@@ -1186,7 +1186,7 @@ func (c *Client) handleQueryFieldsResp(dgi *DatagramIterator) {
 	c.qMapLock.Unlock()
 }
 
-func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string]dc.Vector_uchar) {
+func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string]dc.Vector) {
 	dg := NewDatagram()
 	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_SET_STORED_VALUES)
 	dg.AddDoid(doId)
@@ -1196,7 +1196,7 @@ func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string]dc.Vecto
 		dg.AddString(name)
 		dg.AddUint16(uint16(value.Size()))
 		dg.AddVector(value)
-		dc.DeleteVector_uchar(value)
+		dc.DeleteVector(value)
 	}
 
 	c.RouteDatagram(dg)
@@ -1275,7 +1275,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 	defer DCLock.Unlock()
 
 	packedData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(packedData)
+	defer dc.DeleteVector(packedData)
 
 	if !dcField.ValidateRanges(packedData) {
 		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Got truncated update for field %s\n%s\n%s", dcField.GetName(), DumpVector(packedData), dgi), true)
@@ -1323,7 +1323,7 @@ func (c *Client) handleUpdateField(do Doid_t, dclass dc.DCClass, dcField dc.DCFi
 		defer DCLock.Unlock()
 
 		packedData := dgi.ReadRemainderAsVector()
-		defer dc.DeleteVector_uchar(packedData)
+		defer dc.DeleteVector(packedData)
 
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)

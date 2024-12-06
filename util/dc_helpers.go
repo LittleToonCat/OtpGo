@@ -7,13 +7,13 @@ import (
 
 var DCLock sync.Mutex = sync.Mutex{}
 
-func DumpVector(data dc.Vector_uchar) string {
+func DumpVector(data dc.Vector) string {
 	dg := NewDatagram()
 	dg.AddVector(data)
 	return dg.String()
 }
 
-func VectorToByte(v dc.Vector_uchar) []byte {
+func VectorToByte(v dc.Vector) []byte {
 	data := []byte{}
 	for i := int64(0); i < v.Size(); i++ {
 		data = append(data, v.Get(int(i)))
@@ -21,8 +21,8 @@ func VectorToByte(v dc.Vector_uchar) []byte {
 	return data
 }
 
-func ByteToVector(data []byte) dc.Vector_uchar {
-	v := dc.NewVector_uchar()
+func ByteToVector(data []byte) dc.Vector {
+	v := dc.NewVector()
 	for _, i := range data {
 		v.Add(i)
 	}
@@ -34,14 +34,14 @@ func ValidateDCRanges(field dc.DCField, data []byte) bool {
 	defer DCLock.Unlock()
 
 	vector := ByteToVector(data)
-	defer dc.DeleteVector_uchar(vector)
+	defer dc.DeleteVector(vector)
 
 	return field.ValidateRanges(vector)
 }
 
 func FormatFieldData(field dc.DCField, data []byte) string {
 	vector := ByteToVector(data)
-	defer dc.DeleteVector_uchar(vector)
+	defer dc.DeleteVector(vector)
 
 	return field.FormatData(vector)
 }

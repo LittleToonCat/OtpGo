@@ -198,7 +198,7 @@ func (l *LuaRole) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	}
 }
 
-func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, packedValues map[string]dc.Vector_uchar, from Channel_t, callback func(doId Doid_t)) {
+func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, packedValues map[string]dc.Vector, from Channel_t, callback func(doId Doid_t)) {
 	c.cMapLock.Lock()
 	defer c.cMapLock.Unlock()
 
@@ -216,7 +216,7 @@ func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, p
 		dg.AddString(name)
 		dg.AddUint16(uint16(value.Size()))
 		dg.AddVector(value)
-		dc.DeleteVector_uchar(value)
+		dc.DeleteVector(value)
 	}
 	c.RouteDatagram(dg)
 }
@@ -301,7 +301,7 @@ func (l *LuaRole) handleQueryFieldsResp(dgi *DatagramIterator) {
 	l.qMapLock.Unlock()
 }
 
-func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValues map[string]dc.Vector_uchar) {
+func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValues map[string]dc.Vector) {
 	dg := NewDatagram()
 	dg.AddServerHeader(dbChannel, 0, DBSERVER_SET_STORED_VALUES)
 	dg.AddDoid(doId)
@@ -311,7 +311,7 @@ func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValu
 		dg.AddString(name)
 		dg.AddUint16(uint16(value.Size()))
 		dg.AddVector(value)
-		dc.DeleteVector_uchar(value)
+		dc.DeleteVector(value)
 	}
 
 	l.RouteDatagram(dg)
@@ -333,7 +333,7 @@ func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 	DCLock.Lock()
 	defer DCLock.Unlock()
 	packedData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(packedData)
+	defer dc.DeleteVector(packedData)
 	if !dcField.ValidateRanges(packedData) {
 		l.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", dcField.GetName(), DumpVector(packedData), dgi)
 		return
@@ -385,7 +385,7 @@ func (l *LuaRole) sendUpdateToChannel(channel Channel_t, fromDoId Doid_t, classN
 	}
 
 	packedData := packer.GetBytes()
-	defer dc.DeleteVector_uchar(packedData)
+	defer dc.DeleteVector(packedData)
 
 	dg := NewDatagram()
 	dg.AddServerHeader(channel, Channel_t(fromDoId), STATESERVER_OBJECT_UPDATE_FIELD)

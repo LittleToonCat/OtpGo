@@ -247,7 +247,7 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packedFields := map[string]dc.Vector_uchar{}
+	packedFields := map[string]dc.Vector{}
 	// TODO: string dictionary sanity check
 	fields.ForEach(func(l1, data lua.LValue) {
 		name := string(l1.(lua.LString))
@@ -324,7 +324,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 
 		DCLock.Lock()
 
-		packedValues := make([]dc.Vector_uchar, count)
+		packedValues := make([]dc.Vector, count)
 		hasValue := map[string]bool{}
 		for i := uint16(0); i < count; i++ {
 			packedValues[i] = dgi.ReadVector()
@@ -346,7 +346,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 			if dcField == dc.SwigcptrDCField(0) {
 				participant.log.Warnf("GetStoredValues: Field \"%s\" does not exist for class \"%s\"", field, clsName)
 				if found {
-					dc.DeleteVector_uchar(packedValues[i])
+					dc.DeleteVector(packedValues[i])
 				}
 				continue
 			}
@@ -356,7 +356,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				// Validate that the data is correct
 				if !dcField.ValidateRanges(data) {
 					participant.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpVector(data))
-					dc.DeleteVector_uchar(data)
+					dc.DeleteVector(data)
 					continue
 				}
 
@@ -365,7 +365,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				fieldTable.RawSetString(fields[i], core.UnpackDataToLuaValue(unpacker, L))
 				unpacker.EndUnpack()
 
-				dc.DeleteVector_uchar(data)
+				dc.DeleteVector(data)
 			}
 		}
 		DCLock.Unlock()
@@ -431,7 +431,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		defer DCLock.Unlock()
 
 		packedData := dgi.ReadRemainderAsVector()
-		defer dc.DeleteVector_uchar(packedData)
+		defer dc.DeleteVector(packedData)
 
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)
@@ -491,7 +491,7 @@ func LuaSetDatabaseValues(L *lua.LState) int {
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packedFields := map[string]dc.Vector_uchar{}
+	packedFields := map[string]dc.Vector{}
 	// TODO: string dictionary sanity check
 	fields.ForEach(func(l1, data lua.LValue) {
 		name := string(l1.(lua.LString))
@@ -565,7 +565,7 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 	}
 
 	packedData := packer.GetBytes()
-	defer dc.DeleteVector_uchar(packedData)
+	defer dc.DeleteVector(packedData)
 
 	if includeFieldId {
 		dg.AddUint16(uint16(field.GetNumber()))

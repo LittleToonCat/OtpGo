@@ -30,9 +30,9 @@ type OperationQueueEntry struct {
 }
 
 type DatabaseBackend interface {
-	CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector_uchar, ctx uint32, sender Channel_t)
+	CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector, ctx uint32, sender Channel_t)
 	GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t)
-	SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector_uchar)
+	SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector)
 }
 
 type Config struct {
@@ -139,11 +139,11 @@ func (d *DatabaseServer) queueLoop() {
 				op := d.getOperationFromQueue()
 				switch op.operation {
 				case CreateObjectOperation:
-					d.backend.CreateStoredObject(op.dclass, op.data.(map[dc.DCField]dc.Vector_uchar), op.context, op.sender)
+					d.backend.CreateStoredObject(op.dclass, op.data.(map[dc.DCField]dc.Vector), op.context, op.sender)
 				case GetStoredValuesOperation:
 					d.backend.GetStoredValues(op.doId, op.data.([]string), op.context, op.sender)
 				case SetStoredValuesOperation:
-					d.backend.SetStoredValues(op.doId, op.data.(map[string]dc.Vector_uchar))
+					d.backend.SetStoredValues(op.doId, op.data.(map[string]dc.Vector))
 				}
 			}
 		case <-signalCh:
@@ -197,7 +197,7 @@ func (d *DatabaseServer) HandleCreateObject(dgi *DatagramIterator, sender Channe
 	}
 
 	count := dgi.ReadUint16()
-	datas := map[dc.DCField]dc.Vector_uchar{}
+	datas := map[dc.DCField]dc.Vector{}
 
 	for i := uint16(0); i < count; i++ {
 		name := dgi.ReadString()
@@ -249,7 +249,7 @@ func (d *DatabaseServer) handleSetStoredValues(dgi *DatagramIterator, sender Cha
 	doId := dgi.ReadDoid()
 	count := dgi.ReadUint16()
 
-	packedValues := map[string]dc.Vector_uchar{}
+	packedValues := map[string]dc.Vector{}
 
 	for i := uint16(0); i < count; i++ {
 		field := dgi.ReadString()

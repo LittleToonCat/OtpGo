@@ -126,7 +126,7 @@ func (b *YAMLBackend) AssignDoId() (Doid_t, error) {
 	return doId, nil
 }
 
-func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector_uchar,
+func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector,
 	ctx uint32, sender Channel_t) {
 
 	obj := &YAMLObject{
@@ -138,7 +138,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 	DCLock.Lock()
 	defer DCLock.Unlock()
 
-	defaults := map[dc.DCField]dc.Vector_uchar{}
+	defaults := map[dc.DCField]dc.Vector{}
 
 	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
 		field := dclass.GetInheritedField(i)
@@ -157,7 +157,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 					// become lost when accidentally deleted, we'd have to copy it.
 					// into a new blob instance.
 					value := field.GetDefaultValue()
-					data = dc.NewVector_uchar()
+					data = dc.NewVector()
 					for i := int64(0); i < value.Size(); i++ {
 						data.Add(value.Get(int(i)))
 					}
@@ -180,10 +180,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 				dg.AddDoid(INVALID_DOID)
 				b.db.RouteDatagram(dg)
 				for _, data := range datas {
-					dc.DeleteVector_uchar(data)
+					dc.DeleteVector(data)
 				}
 				for _, data := range defaults {
-					dc.DeleteVector_uchar(data)
+					dc.DeleteVector(data)
 				}
 				return
 			}
@@ -202,10 +202,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -222,10 +222,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -241,10 +241,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -260,10 +260,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -281,10 +281,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -301,10 +301,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 
 	// Cleanup
 	for _, data := range datas {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 	for _, data := range defaults {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 }
 
@@ -385,7 +385,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packedData := map[string]dc.Vector_uchar{}
+	packedData := map[string]dc.Vector{}
 	for _, field := range fields {
 		dcField := dclass.GetFieldByName(field)
 		if dcField == dc.SwigcptrDCField(0) {
@@ -408,7 +408,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 		parsedData := dcField.ParseString(value)
 		if parsedData.Size() == 0 {
 			b.db.log.Errorf("Failed to parse data for field \"%s\": %s", field, value)
-			dc.DeleteVector_uchar(parsedData)
+			dc.DeleteVector(parsedData)
 			continue
 		}
 
@@ -438,12 +438,12 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 
 	// Cleanup
 	for _, data := range packedData {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 
 }
 
-func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector_uchar) {
+func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector) {
 	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
 		b.db.log.Errorf("SetStoredValues: File %d.yaml does not exist!")
 		return

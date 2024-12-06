@@ -58,13 +58,13 @@ func UnpackDataToBsonArray(unpacker dc.DCPacker, array *bson.A, log log.Entry) {
 	case dc.PTString:
 		*array = append(*array, unpacker.UnpackString().(string))
 	case dc.PTBlob:
-		vector := unpacker.UnpackBlob().(dc.Vector_uchar)
+		vector := unpacker.UnpackBlob().(dc.Vector)
 		data := []byte{}
 		for i := int64(0); i < vector.Size(); i++ {
 			data = append(data, vector.Get(int(i)))
 		}
 		*array = append(*array, data)
-		dc.DeleteVector_uchar(vector)
+		dc.DeleteVector(vector)
 	default:
 		// More nested fields, nest call this exact function.
 		nestedArray := bson.A{}
@@ -96,13 +96,13 @@ func UnpackDataToBsonDocument(unpacker dc.DCPacker, name string, doc *bson.D, lo
 	case dc.PTString:
 		*doc = append(*doc, bson.E{name, unpacker.UnpackString().(string)})
 	case dc.PTBlob:
-		vector := unpacker.UnpackBlob().(dc.Vector_uchar)
+		vector := unpacker.UnpackBlob().(dc.Vector)
 		data := []byte{}
 		for i := int64(0); i < vector.Size(); i++ {
 			data = append(data, vector.Get(int(i)))
 		}
 		*doc = append(*doc, bson.E{name, data})
-		dc.DeleteVector_uchar(vector)
+		dc.DeleteVector(vector)
 	default:
 		// If we reached here, that means it is a list
 		// of nested fields (e.g. an array type, an atomic field, a
@@ -254,7 +254,7 @@ func (b *MongoBackend) AssignDoIdMonotonic() Doid_t {
 	return globals.DoId.Monotonic
 }
 
-func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector_uchar,
+func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector,
 	ctx uint32, sender Channel_t) {
 
 	var doc bson.D
@@ -262,7 +262,7 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 	DCLock.Lock()
 	defer DCLock.Unlock()
 
-	defaults := map[dc.DCField]dc.Vector_uchar{}
+	defaults := map[dc.DCField]dc.Vector{}
 
 	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
 		field := dclass.GetInheritedField(i)
@@ -281,7 +281,7 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 					// become lost when accidentally deleted, we'd have to copy it.
 					// into a new blob instance.
 					value := field.GetDefaultValue()
-					data = dc.NewVector_uchar()
+					data = dc.NewVector()
 					for i := int64(0); i < value.Size(); i++ {
 						data.Add(value.Get(int(i)))
 					}
@@ -310,10 +310,10 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 				dg.AddDoid(INVALID_DOID)
 				b.db.RouteDatagram(dg)
 				for _, data := range datas {
-					dc.DeleteVector_uchar(data)
+					dc.DeleteVector(data)
 				}
 				for _, data := range defaults {
-					dc.DeleteVector_uchar(data)
+					dc.DeleteVector(data)
 				}
 			}
 		}
@@ -335,10 +335,10 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -359,10 +359,10 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -379,10 +379,10 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 
 	// Cleanup
 	for _, data := range datas {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 	for _, data := range defaults {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 }
 
@@ -437,7 +437,7 @@ func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packedData := map[string]dc.Vector_uchar{}
+	packedData := map[string]dc.Vector{}
 	for _, field := range fields {
 		dcField := dclass.GetFieldByName(field)
 		if dcField == dc.SwigcptrDCField(0) {
@@ -490,11 +490,11 @@ func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 
 	// Cleanup
 	for _, data := range packedData {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 }
 
-func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector_uchar) {
+func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector) {
 	filter := bson.M{"_id": doId}
 
 	var object StoredObject
@@ -537,14 +537,14 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 			b.db.log.Errorf("Failed to unpack field \"%s\"!  Update aborted.\n%s", field, DumpUnpacker(unpacker))
 
 			for _, data := range packedValues {
-				dc.DeleteVector_uchar(data)
+				dc.DeleteVector(data)
 			}
 			return
 		}
 	}
 
 	for _, data := range packedValues {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 
 	if setDoc == nil && unsetDoc == nil {

@@ -517,7 +517,7 @@ func LuaDCPackerPackField(L *lua.LState) int {
 	if success {
 		packedData := packer.GetBytes()
 		dg.AddVector(packedData)
-		dc.DeleteVector_uchar(packedData)
+		dc.DeleteVector(packedData)
 	}
 	packer.ClearData()
 
@@ -544,7 +544,7 @@ func LuaDCPackerUnpackField(L *lua.LState) int {
 	offset := dgi.Tell()
 
 	vectorData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(vectorData)
+	defer dc.DeleteVector(vectorData)
 
 	dgi.Seek(offset)
 
@@ -569,7 +569,7 @@ func LuaDCPackerSkipField(L *lua.LState) int {
 	offset := dgi.Tell()
 
 	vectorData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(vectorData)
+	defer dc.DeleteVector(vectorData)
 
 	dgi.Seek(offset)
 
