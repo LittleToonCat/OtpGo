@@ -22,13 +22,13 @@ const INVALID_DOID = Doid_t(0)
 const INVALID_ZONE = Zone_t(0)
 
 const (
-	INVALID_CHANNEL    = Channel_t(0)
+	INVALID_CHANNEL          = Channel_t(0)
 	CHANNEL_CLIENT_BROADCAST = Channel_t(4014) // From AIMsgTypes.py
-	BCHAN_STATESERVERS = Channel_t(12)
-	BCHAN_DBSERVERS    = Channel_t(13)
-	PARENT_PREFIX      = Channel_t(1) << ZONE_BITS
-	DATABASE_PREFIX    = Channel_t(2) << ZONE_BITS
-	CONTROL_MESSAGE    = Channel_t(4001)
+	BCHAN_STATESERVERS       = Channel_t(12)
+	BCHAN_DBSERVERS          = Channel_t(13)
+	PARENT_PREFIX            = Channel_t(1) << ZONE_BITS
+	DATABASE_PREFIX          = Channel_t(2) << ZONE_BITS
+	CONTROL_MESSAGE          = Channel_t(4001)
 )
 
 func LocationAsChannel(parent Doid_t, zone Zone_t) Channel_t {

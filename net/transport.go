@@ -3,9 +3,9 @@
 package net
 
 import (
-	"otpgo/util"
 	"io"
 	"net"
+	"otpgo/util"
 )
 
 // Transport represents a stream transport mechanism.

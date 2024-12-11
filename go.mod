@@ -5,7 +5,6 @@ go 1.22
 toolchain go1.22.2
 
 require (
-	github.com/LittleToonCat/dcparser-go v0.0.0-20230730120720-1f6a06bb5633
 	github.com/apex/log v1.9.0
 	github.com/carlmjohnson/versioninfo v0.22.5
 	github.com/cjoudrey/gluahttp v0.0.0-20201111170219-25003d9adfa9

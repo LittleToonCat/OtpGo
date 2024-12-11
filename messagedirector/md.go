@@ -33,7 +33,7 @@ type MessageDirector struct {
 
 	// MD participants may directly queue datagarams to be routed by appending it into the
 	// queue slice, where they will be processed asynchronously
-	Queue []QueueEntry
+	Queue     []QueueEntry
 	queueLock sync.Mutex
 
 	// RouteDatagram will insert to this channel to let the queue loop know there are
@@ -48,7 +48,7 @@ type MessageDirector struct {
 
 func init() {
 	MDLog = log.WithFields(log.Fields{
-		"name": "MD",
+		"name":    "MD",
 		"modName": "MD",
 	})
 }

@@ -119,7 +119,7 @@ func (r *RangeMap) Add(rng Range, sub *Subscriber) {
 }
 
 func (r *RangeMap) add(rng Range, sub *Subscriber) {
-	for erng, _ := range r.intervals {
+	for erng := range r.intervals {
 		if rng == erng {
 			break
 		}
@@ -209,7 +209,7 @@ func (r *RangeMap) Remove(rng Range, sub *Subscriber) {
 }
 
 func (r *RangeMap) remove(rng Range, sub *Subscriber, nested bool) {
-	for erng, _ := range r.intervals {
+	for erng := range r.intervals {
 		// {xxxxxx[========]xxxxxxxx}
 		if erng.Min >= rng.Min && erng.Max <= rng.Max {
 			r.removeSubInterval(sub, erng)
@@ -331,7 +331,8 @@ func (r *RangeMap) Send(ch Channel_t, data *MDDatagram) {
 }
 
 // Each MD participant is represented as a subscriber within the MD; when a participant desires to listen to
-//  a DO (a "channel") the channel map will store it's ID in the participant's unique object.
+//
+//	a DO (a "channel") the channel map will store it's ID in the participant's unique object.
 type Subscriber struct {
 	participant MDParticipant
 
@@ -404,7 +405,7 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 
 	lock.Lock()
 
-	subs := c.subscriptions[ch];
+	subs := c.subscriptions[ch]
 	if len(subs) > 0 {
 		i := slices.Index(subs, p)
 		// Delete element. We have to recreate the slice, otherwise participants may get stuck in the backing array.
@@ -427,7 +428,7 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 	if len(subs) == 0 {
 		delete(c.subscriptions, ch)
 	} else {
-		c.subscriptions[ch] = subs;
+		c.subscriptions[ch] = subs
 	}
 	lock.Unlock()
 

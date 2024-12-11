@@ -1,10 +1,10 @@
 package net
 
 import (
-	. "otpgo/util"
 	"bufio"
 	"github.com/stretchr/testify/require"
 	"net"
+	. "otpgo/util"
 	"testing"
 	"time"
 )

@@ -1,8 +1,8 @@
 package core
 
 import (
-	dc "github.com/LittleToonCat/dcparser-go"
 	"fmt"
+	"otpgo/dc"
 )
 
 var DC dc.DCFile = dc.NewDCFile()

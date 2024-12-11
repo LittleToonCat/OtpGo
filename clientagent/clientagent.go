@@ -121,11 +121,10 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	if ca.config.DC_Hash != 0 {
 		ca.L.SetGlobal("DC_HASH", lua.LNumber(ca.config.DC_Hash))
 	} else {
-		ca.L.SetGlobal("DC_HASH", lua.LNumber(core.DC.Get_hash()))
+		ca.L.SetGlobal("DC_HASH", lua.LNumber(core.DC.GetHash()))
 	}
 
 	ca.L.SetGlobal("dcFile", core.NewLuaDCFile(ca.L, core.DC))
-
 
 	ca.log.Infof("Running Lua script: %s", ca.config.Lua_File)
 	if err := ca.L.DoFile(ca.config.Lua_File); err != nil {

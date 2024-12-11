@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
 )
 
 type Datagram struct {
@@ -20,15 +20,15 @@ func NewDatagram() Datagram {
 
 func (dg *Datagram) String() string {
 	return fmt.Sprintf(
-		"Datagram:\n" +
-		"%s",
+		"Datagram:\n"+
+			"%s",
 		hex.Dump(dg.Bytes()),
 	)
 }
 
-//  Bufio will automatically take care of type sizes for us. In these cases, we're not
-//  going to handle a panic created by binary. Write as an unsuccessful write to a buffer would
-//  indicate a fatal error, anyways.
+// Bufio will automatically take care of type sizes for us. In these cases, we're not
+// going to handle a panic created by binary. Write as an unsuccessful write to a buffer would
+// indicate a fatal error, anyways.
 func (d *Datagram) AddInt8(v int8)          { binary.Write(d, binary.LittleEndian, v) }
 func (d *Datagram) AddUint8(v uint8)        { binary.Write(d, binary.LittleEndian, v) }
 func (d *Datagram) AddInt16(v int16)        { binary.Write(d, binary.LittleEndian, v) }
@@ -46,7 +46,7 @@ func (d *Datagram) AddZone(v Zone_t)        { binary.Write(d, binary.LittleEndia
 func (d *Datagram) AddBool(v bool)          { binary.Write(d, binary.LittleEndian, v) }
 func (d *Datagram) AddData(v []byte)        { d.Write(v) }
 func (d *Datagram) AddDatagram(v *Datagram) { d.Write(v.Bytes()) }
-func (d *Datagram) AddVector(v dc.Vector_uchar) {
+func (d *Datagram) AddVector(v dc.Vector) {
 	data := []byte{}
 	for i := int64(0); i < v.Size(); i++ {
 		data = append(data, v.Get(int(i)))

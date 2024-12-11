@@ -9,7 +9,8 @@ import (
 	. "otpgo/util"
 	"sync"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	"github.com/apex/log"
 )
 
@@ -21,25 +22,24 @@ const (
 
 type OperationQueueEntry struct {
 	operation uint8
-	data interface{}
-	doId Doid_t
-	dclass dc.DCClass
-	context uint32
-	sender Channel_t
+	data      interface{}
+	doId      Doid_t
+	dclass    dc.DCClass
+	context   uint32
+	sender    Channel_t
 }
 
 type DatabaseBackend interface {
-	CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector_uchar, ctx uint32, sender Channel_t)
+	CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector, ctx uint32, sender Channel_t)
 	GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t)
-	SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector_uchar)
+	SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector)
 }
 
 type Config struct {
-
-	Type      string
+	Type string
 	// MONGO BACKEND
-	Server    string
-	Database  string
+	Server   string
+	Database string
 
 	// YAML BACKEND
 	Directory string
@@ -63,13 +63,13 @@ type DatabaseServer struct {
 
 func NewDatabaseServer(config core.Role) *DatabaseServer {
 	db := &DatabaseServer{
-		config: config,
-		control: Channel_t(config.Control),
-		queue: []OperationQueueEntry{},
+		config:       config,
+		control:      Channel_t(config.Control),
+		queue:        []OperationQueueEntry{},
 		processQueue: make(chan bool),
-		min: Doid_t(config.Generate.Min),
-		max: Doid_t(config.Generate.Max),
-		objectTypes: make(map[uint16]dc.DCClass),
+		min:          Doid_t(config.Generate.Min),
+		max:          Doid_t(config.Generate.Max),
+		objectTypes:  make(map[uint16]dc.DCClass),
 		log: log.WithFields(log.Fields{
 			"name":    fmt.Sprintf("DatabaseServer (%d)", config.Control),
 			"modName": "DatabaseServer",
@@ -79,7 +79,7 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 
 	// Populate object types
 	for _, obj := range config.Objects {
-		dclass := core.DC.Get_class_by_name(obj.Class)
+		dclass := core.DC.GetClassByName(obj.Class)
 		if dclass == dc.SwigcptrDCClass(0) {
 			db.log.Fatalf("For object type %d, \"%s\" does not exist!", obj.ID, obj.Class)
 		}
@@ -139,11 +139,11 @@ func (d *DatabaseServer) queueLoop() {
 				op := d.getOperationFromQueue()
 				switch op.operation {
 				case CreateObjectOperation:
-					d.backend.CreateStoredObject(op.dclass, op.data.(map[dc.DCField]dc.Vector_uchar), op.context, op.sender)
+					d.backend.CreateStoredObject(op.dclass, op.data.(map[dc.DCField]dc.Vector), op.context, op.sender)
 				case GetStoredValuesOperation:
 					d.backend.GetStoredValues(op.doId, op.data.([]string), op.context, op.sender)
 				case SetStoredValuesOperation:
-					d.backend.SetStoredValues(op.doId, op.data.(map[string]dc.Vector_uchar))
+					d.backend.SetStoredValues(op.doId, op.data.(map[string]dc.Vector))
 				}
 			}
 		case <-signalCh:
@@ -197,15 +197,15 @@ func (d *DatabaseServer) HandleCreateObject(dgi *DatagramIterator, sender Channe
 	}
 
 	count := dgi.ReadUint16()
-	datas := map[dc.DCField]dc.Vector_uchar{}
+	datas := map[dc.DCField]dc.Vector{}
 
 	for i := uint16(0); i < count; i++ {
 		name := dgi.ReadString()
 		blob := dgi.ReadVector()
 
-		field := dclass.Get_field_by_name(name)
+		field := dclass.GetFieldByName(name)
 		if field == dc.SwigcptrDCField(0) {
-			log.Errorf("Field \"%s\" does not exist for class \"%s\"!", name, dclass.Get_name())
+			log.Errorf("Field \"%s\" does not exist for class \"%s\"!", name, dclass.GetName())
 		}
 
 		datas[field] = blob
@@ -249,7 +249,7 @@ func (d *DatabaseServer) handleSetStoredValues(dgi *DatagramIterator, sender Cha
 	doId := dgi.ReadDoid()
 	count := dgi.ReadUint16()
 
-	packedValues := map[string]dc.Vector_uchar{}
+	packedValues := map[string]dc.Vector{}
 
 	for i := uint16(0); i < count; i++ {
 		field := dgi.ReadString()

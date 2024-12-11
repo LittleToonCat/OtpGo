@@ -6,7 +6,7 @@ import (
 	"otpgo/core"
 	. "otpgo/util"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
 
 	"os"
 
@@ -18,7 +18,7 @@ type YAMLInfo struct {
 }
 
 type YAMLObject struct {
-	ID Doid_t
+	ID    Doid_t
 	Class string
 	// We're using the MapSlice to preserve
 	// insertion order.
@@ -26,16 +26,16 @@ type YAMLObject struct {
 }
 
 type YAMLBackend struct {
-	db *DatabaseServer
+	db        *DatabaseServer
 	directory string
-	next Doid_t
+	next      Doid_t
 }
 
 func NewYAMLBackend(db *DatabaseServer, config Config) (bool, *YAMLBackend, error) {
 	backend := &YAMLBackend{
-		db: db,
+		db:        db,
 		directory: config.Directory,
-		next: 0,
+		next:      0,
 	}
 
 	// Make configured directory if it does not exist yet
@@ -126,24 +126,24 @@ func (b *YAMLBackend) AssignDoId() (Doid_t, error) {
 	return doId, nil
 }
 
-func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector_uchar,
-										 ctx uint32, sender Channel_t) {
+func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector,
+	ctx uint32, sender Channel_t) {
 
 	obj := &YAMLObject{
-		ID: 0,
-		Class: dclass.Get_name(),
+		ID:     0,
+		Class:  dclass.GetName(),
 		Fields: yaml.MapSlice{},
 	}
 
 	DCLock.Lock()
 	defer DCLock.Unlock()
 
-	defaults := map[dc.DCField]dc.Vector_uchar{}
+	defaults := map[dc.DCField]dc.Vector{}
 
-	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
-		field := dclass.Get_inherited_field(i)
-		if field.Is_db() {
-			if molecular, ok := field.As_molecular_field().(dc.DCMolecularField); ok {
+	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
+		field := dclass.GetInheritedField(i)
+		if field.IsDb() {
+			if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
 				if molecular != dc.SwigcptrDCMolecularField(0) {
 					continue
 				}
@@ -152,12 +152,12 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 			data, ok := datas[field]
 			if !ok {
 				// Use default value instead if there is any.
-				if field.Has_default_value() {
-					// HACK: Because Get_default_value returns a pointer which will
+				if field.HasDefaultValue() {
+					// HACK: Because GetDefaultValue returns a pointer which will
 					// become lost when accidentally deleted, we'd have to copy it.
 					// into a new blob instance.
-					value := field.Get_default_value()
-					data = dc.NewVector_uchar()
+					value := field.GetDefaultValue()
+					data = dc.NewVector()
 					for i := int64(0); i < value.Size(); i++ {
 						data.Add(value.Get(int(i)))
 					}
@@ -169,9 +169,9 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 			}
 
 			// Format the data into a string and store it:
-			formattedString := field.Format_data(data, false)
+			formattedString := field.FormatData(data, false)
 			if formattedString == "" {
-				b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field.Get_name(), DumpVector(data))
+				b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field.GetName(), DumpVector(data))
 				// Reply with an error code.
 				dg := NewDatagram()
 				dg.AddServerHeader(sender, b.db.control, DBSERVER_CREATE_STORED_OBJECT_RESP)
@@ -180,14 +180,14 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 				dg.AddDoid(INVALID_DOID)
 				b.db.RouteDatagram(dg)
 				for _, data := range datas {
-					dc.DeleteVector_uchar(data)
+					dc.DeleteVector(data)
 				}
 				for _, data := range defaults {
-					dc.DeleteVector_uchar(data)
+					dc.DeleteVector(data)
 				}
 				return
 			}
-			obj.Fields = append(obj.Fields, yaml.MapItem{field.Get_name(), formattedString})
+			obj.Fields = append(obj.Fields, yaml.MapItem{field.GetName(), formattedString})
 		}
 	}
 
@@ -202,10 +202,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -222,15 +222,15 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
 
-	if _, err := os.Stat(fmt.Sprintf(b.directory + "/%d.yaml", doId)); err == nil {
+	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); err == nil {
 		// File already exists.
 		b.db.log.Errorf("%d.yaml already exists!", doId)
 		// Reply with an error code.
@@ -241,15 +241,15 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
 
-	f, err := os.Create(fmt.Sprintf(b.directory + "/%d.yaml", doId))
+	f, err := os.Create(fmt.Sprintf(b.directory+"/%d.yaml", doId))
 	if err != nil {
 		b.db.log.Errorf("Error when creating %d.yaml: %s", doId, err.Error())
 		// Reply with an error code.
@@ -260,10 +260,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -281,10 +281,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
 		for _, data := range datas {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		for _, data := range defaults {
-			dc.DeleteVector_uchar(data)
+			dc.DeleteVector(data)
 		}
 		return
 	}
@@ -301,10 +301,10 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 
 	// Cleanup
 	for _, data := range datas {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 	for _, data := range defaults {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 }
 
@@ -323,13 +323,13 @@ func (b *YAMLBackend) SendGetStoredValuesError(doId Doid_t, fields []string, ctx
 }
 
 func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
-	if _, err := os.Stat(fmt.Sprintf(b.directory + "/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
 		b.db.log.Errorf("GetStoredValues: File %d.yaml does not exist!")
 		b.SendGetStoredValuesError(doId, fields, ctx, sender)
 		return
 	}
 
-	f, err := os.Open(fmt.Sprintf(b.directory + "/%d.yaml", doId))
+	f, err := os.Open(fmt.Sprintf(b.directory+"/%d.yaml", doId))
 	if err != nil {
 		b.db.log.Error(err.Error())
 		b.SendGetStoredValuesError(doId, fields, ctx, sender)
@@ -372,7 +372,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 		objFields[data.Key.(string)] = data.Value.(string)
 	}
 
-	dclass := core.DC.Get_class_by_name(obj.Class)
+	dclass := core.DC.GetClassByName(obj.Class)
 	if dclass == dc.SwigcptrDCClass(0) {
 		b.db.log.Errorf("Class %s for object %d does not exist!", obj.Class, doId)
 		b.SendGetStoredValuesError(doId, fields, ctx, sender)
@@ -385,9 +385,9 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packedData := map[string]dc.Vector_uchar{}
+	packedData := map[string]dc.Vector{}
 	for _, field := range fields {
-		dcField := dclass.Get_field_by_name(field)
+		dcField := dclass.GetFieldByName(field)
 		if dcField == dc.SwigcptrDCField(0) {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, obj.Class)
 			continue
@@ -395,7 +395,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 
 		if field == "DcObjectType" {
 			// Return dclass type
-			packedData[field] = dcField.Parse_string("\"" + obj.Class + "\"")
+			packedData[field] = dcField.ParseString("\"" + obj.Class + "\"")
 			continue
 		}
 
@@ -405,10 +405,10 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 			continue
 		}
 
-		parsedData := dcField.Parse_string(value)
+		parsedData := dcField.ParseString(value)
 		if parsedData.Size() == 0 {
 			b.db.log.Errorf("Failed to parse data for field \"%s\": %s", field, value)
-			dc.DeleteVector_uchar(parsedData)
+			dc.DeleteVector(parsedData)
 			continue
 		}
 
@@ -438,18 +438,18 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 
 	// Cleanup
 	for _, data := range packedData {
-		dc.DeleteVector_uchar(data)
+		dc.DeleteVector(data)
 	}
 
 }
 
-func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector_uchar) {
-	if _, err := os.Stat(fmt.Sprintf(b.directory + "/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
+func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector) {
+	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
 		b.db.log.Errorf("SetStoredValues: File %d.yaml does not exist!")
 		return
 	}
 
-	f, err := os.Open(fmt.Sprintf(b.directory + "/%d.yaml", doId))
+	f, err := os.Open(fmt.Sprintf(b.directory+"/%d.yaml", doId))
 	if err != nil {
 		b.db.log.Error(err.Error())
 		return
@@ -488,7 +488,7 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 		objFields[data.Key.(string)] = data.Value.(string)
 	}
 
-	dclass := core.DC.Get_class_by_name(obj.Class)
+	dclass := core.DC.GetClassByName(obj.Class)
 	if dclass == dc.SwigcptrDCClass(0) {
 		b.db.log.Errorf("Class %s for object %d does not exist!", obj.Class, doId)
 		return
@@ -498,13 +498,13 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 	defer DCLock.Unlock()
 
 	for field, value := range packedValues {
-		dcField := dclass.Get_field_by_name(field)
+		dcField := dclass.GetFieldByName(field)
 		if dcField == dc.SwigcptrDCField(0) {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, obj.Class)
 			continue
 		}
 
-		formattedString := dcField.Format_data(value, false)
+		formattedString := dcField.FormatData(value, false)
 		if formattedString == "" {
 			b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field, DumpVector(value))
 			continue
@@ -514,17 +514,17 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 
 	// Recreate MapSlice to preserve order:
 	obj.Fields = yaml.MapSlice{}
-	for i := 0; i < dclass.Get_num_inherited_fields(); i++ {
-		field := dclass.Get_inherited_field(i)
-		if field.Is_db() {
-			if molecular, ok := field.As_molecular_field().(dc.DCMolecularField); ok {
+	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
+		field := dclass.GetInheritedField(i)
+		if field.IsDb() {
+			if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
 				if molecular != dc.SwigcptrDCMolecularField(0) {
 					continue
 				}
 			}
 
-			if value, ok := objFields[field.Get_name()]; ok {
-				obj.Fields = append(obj.Fields, yaml.MapItem{field.Get_name(), value})
+			if value, ok := objFields[field.GetName()]; ok {
+				obj.Fields = append(obj.Fields, yaml.MapItem{field.GetName(), value})
 			}
 		}
 	}
@@ -535,7 +535,7 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 		return
 	}
 
-	f, err = os.Create(fmt.Sprintf(b.directory + "/%d.yaml", doId))
+	f, err = os.Create(fmt.Sprintf(b.directory+"/%d.yaml", doId))
 	if err != nil {
 		b.db.log.Errorf("Error when creating %d.yaml: %s", doId, err.Error())
 		return

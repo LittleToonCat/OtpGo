@@ -3,10 +3,10 @@
 package net
 
 import (
-	"otpgo/core"
 	"net"
 	"os"
 	"os/signal"
+	"otpgo/core"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -15,7 +15,8 @@ import (
 )
 
 // Server is an interface which allows a network listening mechanism to pass accepted connections to
-//  an actual server, like a CA or MD
+//
+//	an actual server, like a CA or MD
 type Server interface {
 	HandleConnect(net.Conn)
 }

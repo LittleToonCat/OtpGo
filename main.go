@@ -1,26 +1,27 @@
 package main
 
 import (
-	dc "github.com/LittleToonCat/dcparser-go"
+	"fmt"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
 	"otpgo/clientagent"
 	"otpgo/core"
 	"otpgo/database"
+	"otpgo/dc"
 	"otpgo/eventlogger"
 	"otpgo/luarole"
 	"otpgo/messagedirector"
-	"otpgo/util"
 	"otpgo/stateserver"
-	"fmt"
-	"github.com/apex/log"
-	"github.com/carlmjohnson/versioninfo"
-	"github.com/spf13/pflag"
-	_ "net/http/pprof"
-	"net/http"
-	"os"
-	"os/signal"
+	"otpgo/util"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/apex/log"
+	"github.com/carlmjohnson/versioninfo"
+	"github.com/spf13/pflag"
 )
 
 var mainLog *log.Entry
@@ -29,7 +30,7 @@ func init() {
 	log.SetHandler(core.Log)
 	log.SetLevel(log.DebugLevel)
 	mainLog = log.WithFields(log.Fields{
-		"name": "Main",
+		"name":    "Main",
 		"modName": "Main",
 	})
 }
@@ -138,7 +139,7 @@ Revision: %s
 
 	// Configure UberDOG list
 	for _, ud := range core.Config.Uberdogs {
-		class := core.DC.Get_class_by_name(ud.Class)
+		class := core.DC.GetClassByName(ud.Class)
 		// Check if the method returns a NULL pointer
 		if class == dc.SwigcptrDCClass(0) {
 			mainLog.Fatalf("For UberDOG %d, class %s does not exist!", ud.ID, ud.Class)
@@ -146,8 +147,8 @@ Revision: %s
 		}
 
 		core.Uberdogs = append(core.Uberdogs, core.Uberdog{
-			Id:        util.Doid_t(ud.ID),
-			Class:     class,
+			Id:    util.Doid_t(ud.ID),
+			Class: class,
 		})
 	}
 

@@ -12,7 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	dc "github.com/LittleToonCat/dcparser-go"
+	"otpgo/dc"
+
 	"github.com/apex/log"
 	gluahttp "github.com/cjoudrey/gluahttp"
 	gluacrypto "github.com/tengattack/gluacrypto"
@@ -29,9 +30,9 @@ type LuaQueueEntry struct {
 type LuaRole struct {
 	messagedirector.MDParticipantBase
 	queueLock sync.Mutex
-	cMapLock sync.RWMutex
-	gMapLock sync.RWMutex
-	qMapLock sync.RWMutex
+	cMapLock  sync.RWMutex
+	gMapLock  sync.RWMutex
+	qMapLock  sync.RWMutex
 
 	config core.Role
 	log    *log.Entry
@@ -197,7 +198,7 @@ func (l *LuaRole) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	}
 }
 
-func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, packedValues map[string]dc.Vector_uchar, from Channel_t, callback func(doId Doid_t)) {
+func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, packedValues map[string]dc.Vector, from Channel_t, callback func(doId Doid_t)) {
 	c.cMapLock.Lock()
 	defer c.cMapLock.Unlock()
 
@@ -215,7 +216,7 @@ func (c *LuaRole) createDatabaseObject(dbChannel Channel_t, objectType uint16, p
 		dg.AddString(name)
 		dg.AddUint16(uint16(value.Size()))
 		dg.AddVector(value)
-		dc.DeleteVector_uchar(value)
+		dc.DeleteVector(value)
 	}
 	c.RouteDatagram(dg)
 }
@@ -300,7 +301,7 @@ func (l *LuaRole) handleQueryFieldsResp(dgi *DatagramIterator) {
 	l.qMapLock.Unlock()
 }
 
-func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValues map[string]dc.Vector_uchar) {
+func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValues map[string]dc.Vector) {
 	dg := NewDatagram()
 	dg.AddServerHeader(dbChannel, 0, DBSERVER_SET_STORED_VALUES)
 	dg.AddDoid(doId)
@@ -310,20 +311,20 @@ func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValu
 		dg.AddString(name)
 		dg.AddUint16(uint16(value.Size()))
 		dg.AddVector(value)
-		dc.DeleteVector_uchar(value)
+		dc.DeleteVector(value)
 	}
 
 	l.RouteDatagram(dg)
 }
 
 func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
-	dclass := core.DC.Get_class_by_name(className)
+	dclass := core.DC.GetClassByName(className)
 	if dclass == dc.SwigcptrDCClass(0) {
 		l.log.Errorf("handleUpdateField: Class \"%s\" does not exist!", className)
 		return
 	}
 	fieldId := dgi.ReadUint16()
-	dcField := dclass.Get_inherited_field(int(fieldId))
+	dcField := dclass.GetFieldByIndex(int(fieldId))
 	if dcField == dc.SwigcptrDCField(0) {
 		l.log.Errorf("handleUpdateField: Field number %d does not exist in class \"%s\"!", fieldId, className)
 		return
@@ -332,39 +333,39 @@ func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 	DCLock.Lock()
 	defer DCLock.Unlock()
 	packedData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(packedData)
-	if !dcField.Validate_ranges(packedData) {
-		l.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", dcField.Get_name(), DumpVector(packedData), dgi)
+	defer dc.DeleteVector(packedData)
+	if !dcField.ValidateRanges(packedData) {
+		l.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%s", dcField.GetName(), DumpVector(packedData), dgi)
 		return
 	}
 
-	lFunc := l.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.Get_name(), dcField.Get_name()))
+	lFunc := l.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.GetName(), dcField.GetName()))
 	if lFunc.Type() != lua.LTFunction {
-		l.log.Warnf("Function \"handle%s_%s\" does not exist in Lua file!", className, dcField.Get_name())
+		l.log.Warnf("Function \"handle%s_%s\" does not exist in Lua file!", className, dcField.GetName())
 		return
 	}
 	// Call the Lua function
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)
 
-	unpacker.Set_unpack_data(packedData)
-	unpacker.Begin_unpack(dcField)
+	unpacker.SetUnpackData(packedData)
+	unpacker.BeginUnpack(dcField)
 	lValue := core.UnpackDataToLuaValue(unpacker, l.L)
-	if !unpacker.End_unpack() {
-		l.log.Warnf("End_unpack returned false on handleUpdateField somehow...\n%s", DumpUnpacker(unpacker))
+	if !unpacker.EndUnpack() {
+		l.log.Warnf("EndUnpack returned false on handleUpdateField somehow...\n%s", DumpUnpacker(unpacker))
 		return
 	}
 	l.CallLuaFunction(lFunc, l.sender, NewLuaParticipant(l.L, l), lua.LNumber(fieldId), lValue)
 }
 
 func (l *LuaRole) sendUpdateToChannel(channel Channel_t, fromDoId Doid_t, className string, fieldName string, value lua.LValue) {
-	cls := core.DC.Get_class_by_name(className)
+	cls := core.DC.GetClassByName(className)
 	if cls == dc.SwigcptrDCClass(0) {
 		l.log.Warnf("sendUpdateToChannel: Class name \"%s\" not found!", className)
 		return
 	}
 
-	field := cls.Get_field_by_name(fieldName)
+	field := cls.GetFieldByName(fieldName)
 	if field == dc.SwigcptrDCField(0) {
 		l.log.Warnf("sendUpdateToChannel: Class \"%s\" does not have field \"%s\"!", className, fieldName)
 		return
@@ -376,20 +377,20 @@ func (l *LuaRole) sendUpdateToChannel(channel Channel_t, fromDoId Doid_t, classN
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packer.Begin_pack(field)
+	packer.BeginPack(field)
 	core.PackLuaValue(packer, value)
-	if !packer.End_pack() {
+	if !packer.EndPack() {
 		l.log.Warnf("sendUpdateToChannel: Packing of \"%s\" failed!", fieldName)
 		return
 	}
 
-	packedData := packer.Get_bytes()
-	defer dc.DeleteVector_uchar(packedData)
+	packedData := packer.GetBytes()
+	defer dc.DeleteVector(packedData)
 
 	dg := NewDatagram()
 	dg.AddServerHeader(channel, Channel_t(fromDoId), STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(fromDoId)
-	dg.AddUint16(uint16(field.Get_number()))
+	dg.AddUint16(uint16(field.GetNumber()))
 	dg.AddVector(packedData)
 	l.RouteDatagram(dg)
 }

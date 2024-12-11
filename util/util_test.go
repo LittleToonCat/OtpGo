@@ -37,17 +37,17 @@ func AssertLuaDatagram(L *lua.LState) int {
 func MakeTestDatagramIterator(L *lua.LState) int {
 	dg := NewDatagram()
 	dg.AddInt8(-128)
-    dg.AddUint8(255)
-    dg.AddInt16(-32768)
-    dg.AddUint16(65535)
-    dg.AddInt32(-2147483648)
-    dg.AddUint32(4294967295)
-    dg.AddInt64(-9223372036854775808)
+	dg.AddUint8(255)
+	dg.AddInt16(-32768)
+	dg.AddUint16(65535)
+	dg.AddInt32(-2147483648)
+	dg.AddUint32(4294967295)
+	dg.AddInt64(-9223372036854775808)
 
-    dg.AddBool(true)
-    dg.AddString("Hello, world!")
+	dg.AddBool(true)
+	dg.AddString("Hello, world!")
 
-	ud :=NewLuaDatagramIteratorFromDatagram(L, &dg)
+	ud := NewLuaDatagramIteratorFromDatagram(L, &dg)
 	L.Push(ud)
 
 	return 1

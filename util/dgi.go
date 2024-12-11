@@ -1,11 +1,11 @@
 package util
 
 import (
-	dc "github.com/LittleToonCat/dcparser-go"
 	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"otpgo/dc"
 )
 
 type DatagramIteratorEOF struct {
@@ -25,9 +25,9 @@ func NewDatagramIterator(dg *Datagram) *DatagramIterator {
 
 func (dgi *DatagramIterator) String() string {
 	return fmt.Sprintf(
-		"DatagramIterator:\n" +
-		"offset: %d (of %d) / 0x%x (of 0x%x)\n" +
-		"%s",
+		"DatagramIterator:\n"+
+			"offset: %d (of %d) / 0x%x (of 0x%x)\n"+
+			"%s",
 		dgi.offset, dgi.Dg.Len(), dgi.offset, dgi.Dg.Len(),
 		dgi.Dg,
 	)
@@ -242,10 +242,10 @@ func (dgi *DatagramIterator) ReadBlob() []uint8 {
 	return dgi.ReadData(Dgsize_t(dgi.ReadUint16()))
 }
 
-func (dgi *DatagramIterator) ReadVector() dc.Vector_uchar {
+func (dgi *DatagramIterator) ReadVector() dc.Vector {
 	data := dgi.ReadBlob()
 
-	vector := dc.NewVector_uchar()
+	vector := dc.NewVector()
 	for _, b := range data {
 		vector.Add(b)
 	}
@@ -265,7 +265,7 @@ func (dgi *DatagramIterator) ReadDatagram() *Datagram {
 
 func (dgi *DatagramIterator) ReadData(length Dgsize_t) []uint8 {
 	buff := make([]uint8, int32(length))
-	if (length > 0) {
+	if length > 0 {
 		if n, err := dgi.Read.Read(buff); err != nil || n != int(length) {
 			dgi.panic(int8(length))
 		}
@@ -281,10 +281,10 @@ func (dgi *DatagramIterator) ReadRemainder() []uint8 {
 	return dgi.ReadData(sz)
 }
 
-func (dgi *DatagramIterator) ReadRemainderAsVector() dc.Vector_uchar {
+func (dgi *DatagramIterator) ReadRemainderAsVector() dc.Vector {
 	remainder := dgi.ReadRemainder()
 
-	vector := dc.NewVector_uchar()
+	vector := dc.NewVector()
 	for _, b := range remainder {
 		vector.Add(b)
 	}
@@ -303,25 +303,25 @@ func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, 
 	offset := dgi.Tell()
 
 	vectorData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(vectorData)
+	defer dc.DeleteVector(vectorData)
 
 	dgi.Seek(offset)
 
-	unpacker.Set_unpack_data(vectorData)
-	unpacker.Begin_unpack(field)
+	unpacker.SetUnpackData(vectorData)
+	unpacker.BeginUnpack(field)
 
-	packedData := unpacker.Unpack_literal_value().(dc.Vector_uchar)
-	defer dc.DeleteVector_uchar(packedData)
+	packedData := unpacker.UnpackLiteralValue().(dc.Vector)
+	defer dc.DeleteVector(packedData)
 
-	if !unpacker.End_unpack() {
+	if !unpacker.EndUnpack() {
 		return nil, false
 	}
 
-	if validateRanges && !field.Validate_ranges(packedData) {
+	if validateRanges && !field.ValidateRanges(packedData) {
 		return nil, false
 	}
 
-	dgi.Seek(offset + Dgsize_t(unpacker.Get_num_unpacked_bytes()))
+	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
 	return VectorToByte(packedData), true
 }
 
@@ -338,18 +338,18 @@ func (dgi *DatagramIterator) SkipDCField(field dc.DCField, lock bool) bool {
 
 	// We need data to skip, or else it'll assert an error.
 	vectorData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector_uchar(vectorData)
+	defer dc.DeleteVector(vectorData)
 
 	dgi.Seek(offset)
 
-	unpacker.Set_unpack_data(vectorData)
-	unpacker.Begin_unpack(field)
-	unpacker.Unpack_skip()
-	if !unpacker.End_unpack() {
+	unpacker.SetUnpackData(vectorData)
+	unpacker.BeginUnpack(field)
+	unpacker.UnpackSkip()
+	if !unpacker.EndUnpack() {
 		return false
 	}
 
-	dgi.Seek(offset + Dgsize_t(unpacker.Get_num_unpacked_bytes()))
+	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
 	return true
 }
 
