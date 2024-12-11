@@ -600,7 +600,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		if sender != c.channel {
 			field := dgi.ReadUint16()
-			dcField := dclass.GetFieldByIndex(int(field))
+			dcField := dclass.GetInheritedField(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
 				c.log.Warnf("Received server-side field update for object %s(%d) with unknown field %d", dclass.GetName(), do, field)
 				return
@@ -1213,7 +1213,6 @@ func (c *Client) handleAddOwnership(do Doid_t, parent Doid_t, zone Zone_t, dc ui
 
 	resp := NewDatagram()
 	resp.AddUint16(uint16(CLIENT_CREATE_OBJECT_REQUIRED_OTHER_OWNER))
-	resp.AddLocation(parent, zone)
 	resp.AddUint16(dc)
 	resp.AddDoid(do)
 	resp.AddData(dgi.ReadRemainder())
@@ -1256,7 +1255,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 		return
 	}
 
-	dcField := dclass.GetFieldByIndex(int(field))
+	dcField := dclass.GetInheritedField(int(field))
 	if dcField == dc.SwigcptrDCField(0) {
 		c.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_FIELD, fmt.Sprintf("Attempted to send field update to %s(%d) with unknown field: %d", dclass.GetName(), do, field), true)
 		// Skip the data to prevent the excess data ejection.
@@ -1390,7 +1389,6 @@ func (c *Client) handleAddObject(do Doid_t, parent Doid_t, zone Zone_t, dc uint1
 
 	resp := NewDatagram()
 	resp.AddUint16(uint16(msgType))
-	resp.AddLocation(parent, zone)
 	resp.AddUint16(dc)
 	resp.AddDoid(do)
 	resp.AddData(dgi.ReadRemainder())

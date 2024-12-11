@@ -122,7 +122,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 
 		for i := uint16(0); i < count; i++ {
 			field := dgi.ReadUint16()
-			dcField := dclass.GetFieldByIndex(int(field))
+			dcField := dclass.GetInheritedField(int(field))
 			if dcField == dc.SwigcptrDCField(0) {
 				s.log.Errorf("Received invalid field index %d", field)
 				return
@@ -345,8 +345,10 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 		return
 	}
 
+	obj, _ := s.objects[do]
+
 	fieldId := dgi.ReadUint16()
-	field := core.DC.GetFieldByIndex(int(fieldId))
+	field := obj.dclass.GetInheritedField(int(fieldId))
 	if field == dc.SwigcptrDCField(0) {
 		s.log.Warnf("Update received for unknown field ID=%d", fieldId)
 	}
@@ -385,6 +387,8 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 		return
 	}
 
+	obj, _ := s.objects[do]
+
 	count := dgi.ReadUint16()
 
 	DCLock.Lock()
@@ -394,7 +398,7 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 
 	for i := 0; i < int(count); i++ {
 		fieldId := dgi.ReadUint16()
-		field := core.DC.GetFieldByIndex(int(fieldId))
+		field := obj.dclass.GetInheritedField(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			s.log.Warnf("Update received for unknown field ID=%d", fieldId)
 			return
@@ -514,6 +518,8 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		return
 	}
 
+	obj, _ := s.objects[do]
+
 	var context uint32
 	var fields []dc.DCField
 
@@ -521,7 +527,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		fieldId := dgi.ReadUint16()
 		context = dgi.ReadUint32()
 
-		field := core.DC.GetFieldByIndex(int(fieldId))
+		field := obj.dclass.GetInheritedField(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
 			return
@@ -532,7 +538,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		fields = []dc.DCField{}
 		for dgi.RemainingSize() >= Blobsize {
 			fieldId := dgi.ReadUint16()
-			field := core.DC.GetFieldByIndex(int(fieldId))
+			field := obj.dclass.GetInheritedField(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
 				s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
 				return

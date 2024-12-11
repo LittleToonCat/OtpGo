@@ -439,7 +439,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		unpacker.SetUnpackData(packedData)
 		for i := uint16(0); i < found; i++ {
 			fieldId := unpacker.RawUnpackUint16().(uint)
-			field := cls.GetFieldByIndex(int(fieldId))
+			field := cls.GetInheritedField(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
 				participant.log.Warnf("queryObjectFields: Unknown field %d for class \"%s\"!", fieldId, clsName)
 				continue

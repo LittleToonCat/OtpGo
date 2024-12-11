@@ -95,7 +95,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 		count := dgi.ReadUint16()
 		for i := 0; i < int(count); i++ {
 			id := dgi.ReadUint16()
-			field := dclass.GetFieldByIndex(int(id))
+			field := dclass.GetInheritedField(int(id))
 			if field == dc.SwigcptrDCField(0) {
 				do.log.Errorf("Receieved unknown field with ID %d within an OTHER section!  Ignoring.", id)
 				break
@@ -458,7 +458,7 @@ func (d *DistributedObject) saveField(field dc.DCField, data []byte) bool {
 
 func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channel_t) bool {
 	fieldId := dgi.ReadUint16()
-	field := d.dclass.GetFieldByIndex(int(fieldId))
+	field := d.dclass.GetInheritedField(int(fieldId))
 	if field == dc.SwigcptrDCField(0) {
 		d.log.Warnf("Update received for unknown field ID=%d", fieldId)
 		return false
@@ -479,7 +479,7 @@ func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channe
 func (d *DistributedObject) handleMultipleUpdates(dgi *DatagramIterator, count uint16, sender Channel_t) bool {
 	for i := 0; i < int(count); i++ {
 		fieldId := dgi.ReadUint16()
-		field := d.dclass.GetFieldByIndex(int(fieldId))
+		field := d.dclass.GetInheritedField(int(fieldId))
 		if field == dc.SwigcptrDCField(0) {
 			d.log.Warnf("Update received for unknown field ID=%d", fieldId)
 			return false
@@ -550,7 +550,7 @@ func (d *DistributedObject) finishHandleUpdate(field dc.DCField, data []byte, se
 }
 
 func (d *DistributedObject) handleOneGet(out *Datagram, fieldId uint16, allowUnset bool, subfield bool) bool {
-	field := d.dclass.GetFieldByIndex(int(fieldId))
+	field := d.dclass.GetInheritedField(int(fieldId))
 	if field == dc.SwigcptrDCField(0) {
 		d.log.Warnf("Query received for unknown field ID=%d", fieldId)
 		return false
