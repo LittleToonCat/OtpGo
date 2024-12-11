@@ -1213,6 +1213,7 @@ func (c *Client) handleAddOwnership(do Doid_t, parent Doid_t, zone Zone_t, dc ui
 
 	resp := NewDatagram()
 	resp.AddUint16(uint16(CLIENT_CREATE_OBJECT_REQUIRED_OTHER_OWNER))
+	resp.AddLocation(parent, zone)
 	resp.AddUint16(dc)
 	resp.AddDoid(do)
 	resp.AddData(dgi.ReadRemainder())
