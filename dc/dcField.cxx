@@ -215,7 +215,7 @@ generate_hash(HashGenerator &hashgen) const {
 
   // Actually, we add _number anyway, since we need to ensure the hash code
   // comes out different in the dc_multiple_inheritance case.
-  if (dc_multiple_inheritance) {
+  if (_dclass != nullptr && _dclass->_dc_file->get_multiple_inheritance()) {
     hashgen.add_int(_number);
   }
 }

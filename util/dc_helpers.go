@@ -5,6 +5,11 @@ import (
 	"sync"
 )
 
+// Most DCPacker calls isn't thread safe, which would
+// lead to problems when multiple operations are happening at once
+// under different goroutines.  This mutex must be locked
+// when doing any DCPacker related operations and then unlocked
+// when done.
 var DCLock sync.Mutex = sync.Mutex{}
 
 func DumpVector(data dc.Vector) string {

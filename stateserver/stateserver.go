@@ -14,12 +14,13 @@ import (
 type StateServer struct {
 	messagedirector.MDParticipantBase
 
-	config  core.Role
-	log     *log.Entry
-	control Channel_t
-	objects map[Doid_t]*DistributedObject
-	mainObj *DistributedObject
-	doStore *DOStorage
+	config   core.Role
+	log      *log.Entry
+	control  Channel_t
+	database Channel_t
+	objects  map[Doid_t]*DistributedObject
+	mainObj  *DistributedObject
+	doStore  *DOStorage
 }
 
 func NewStateServer(config core.Role) *StateServer {
@@ -41,6 +42,7 @@ func NewStateServer(config core.Role) *StateServer {
 
 func (s *StateServer) InitStateServer(config core.Role, logName string, logModName string, logId string) {
 	s.config = config
+	s.database = config.Database
 	doPreallocAmount := s.config.DO_Preallocation_Amount
 	s.doStore = NewDOStorage(doPreallocAmount)
 	s.objects = map[Doid_t]*DistributedObject{}

@@ -286,14 +286,14 @@ func LuaHandleDisconnect(L *lua.LState) int {
 func LuaSendDatagram(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	dg := CheckDatagram(L, 2)
-	go client.client.SendDatagram(*dg)
+	client.client.SendDatagram(*dg)
 	return 1
 }
 
 func LuaRouteDatagram(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	dg := CheckDatagram(L, 2)
-	go client.RouteDatagram(*dg)
+	client.RouteDatagram(*dg)
 	return 1
 }
 
@@ -1044,11 +1044,24 @@ func LuaUndeclareAllObjects(L *lua.LState) int {
 
 func LuaSetLocation(L *lua.LState) int {
 	client := CheckClient(L, 1)
-	dgi := CheckDatagramIterator(L, 2)
 
-	do := dgi.ReadDoid()
-	parent := dgi.ReadDoid()
-	zone := dgi.ReadZone()
+	var do Doid_t
+	var parent Doid_t
+	var zone Zone_t
+
+	if L.GetTop() == 2 {
+		// client:setLocation(dgi)
+		dgi := CheckDatagramIterator(L, 2)
+
+		do = dgi.ReadDoid()
+		parent = dgi.ReadDoid()
+		zone = dgi.ReadZone()
+	} else {
+		// client:setLocation(do, parent, zone)
+		do = Doid_t(L.CheckInt(2))
+		parent = Doid_t(L.CheckInt(3))
+		zone = Zone_t(L.CheckInt(4))
+	}
 
 	if obj, ok := client.ownedObjects[do]; ok {
 		obj.parent = parent

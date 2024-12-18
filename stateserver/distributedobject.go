@@ -444,6 +444,20 @@ func (d *DistributedObject) wakeChildren() {
 }
 
 func (d *DistributedObject) saveField(field dc.DCField, data []byte) bool {
+	if field.IsDb() && d.stateserver.database != INVALID_CHANNEL {
+		d.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.", field.GetName(), FormatFieldData(field, data), d.do)
+
+		dg := NewDatagram()
+		dg.AddServerHeader(d.stateserver.database, Channel_t(d.do), DBSERVER_SET_STORED_VALUES)
+		dg.AddDoid(d.do)
+		dg.AddUint16(1) // Field count
+		dg.AddString(field.GetName())
+		dg.AddUint16(uint16(len(data)))
+		dg.AddData(data)
+
+		d.RouteDatagram(dg)
+	}
+
 	if field.IsRequired() {
 		d.log.Debugf("Storing REQUIRED field \"%s\": %s", field.GetName(), FormatFieldData(field, data))
 		d.requiredFields[field] = data

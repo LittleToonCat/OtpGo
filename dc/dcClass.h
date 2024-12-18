@@ -24,16 +24,6 @@
 #include "extension.h"
 #include "datagramIterator.h"
 
-extern ConfigVariableBool dc_multiple_inheritance;
-extern ConfigVariableBool dc_virtual_inheritance;
-extern ConfigVariableBool dc_sort_inheritance_by_file;
-
-#else  // WITHIN_PANDA
-
-static const bool dc_multiple_inheritance = true;
-static const bool dc_virtual_inheritance = true;
-static const bool dc_sort_inheritance_by_file = true;
-
 #endif  // WITHIN_PANDA
 
 class HashGenerator;

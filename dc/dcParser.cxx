@@ -1723,8 +1723,8 @@ yyreduce:
   case 36: /* dclass_base_list: dclass_base_list ',' dclass_name  */
 #line 346 "direct/src/dcparser/dcParser.yxx"
 {
-  if (!dc_multiple_inheritance) {
-    yyerror("Multiple inheritance is not supported without \"dc-multiple-inheritance 1\" in your Config.prc file.");
+  if (!dc_file->get_multiple_inheritance()) {
+    yyerror("Multiple inheritance is not supported with \"dc_disable_multiple_inheritance: true\" in your configuration file.");
 
   } else {
     if ((yyvsp[0].u.dclass) != nullptr) {

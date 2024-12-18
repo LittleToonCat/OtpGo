@@ -28,29 +28,6 @@ PStatCollector DCClass::_update_pcollector("App:Tasks:readerPollTask:Update");
 PStatCollector DCClass::_generate_pcollector("App:Tasks:readerPollTask:Generate");
 #endif  // CPPPARSER
 
-ConfigVariableBool dc_multiple_inheritance
-("dc-multiple-inheritance", true,
- PRC_DESC("Set this true to support multiple inheritance in the dc file.  "
-          "If this is false, the old way, multiple inheritance is not "
-          "supported, but field numbers will be numbered sequentially, "
-          "which may be required to support old code that assumed this."));
-
-ConfigVariableBool dc_virtual_inheritance
-("dc-virtual-inheritance", true,
- PRC_DESC("Set this true to support proper virtual inheritance in the "
-          "dc file, so that diamond-of-death type constructs can be used.  "
-          "This also enables shadowing (overloading) of inherited method "
-          "names from a base class."));
-
-ConfigVariableBool dc_sort_inheritance_by_file
-("dc-sort-inheritance-by-file", true,
- PRC_DESC("This is a temporary hack.  This should be true if you are using "
-          "version 1.42 of the otp_server.exe binary, which sorted inherited "
-          "fields based on the order of the classes within the DC file, "
-          "rather than based on the order in which the references are made "
-          "within the class."));
-
-
 #endif  // WITHIN_PANDA
 
 class SortFieldsByIndex {
@@ -236,8 +213,8 @@ get_field_by_index(int index_number) const {
  */
 int DCClass::
 get_num_inherited_fields() const {
-  if (dc_multiple_inheritance && dc_virtual_inheritance &&
-      _dc_file != nullptr) {
+  if (_dc_file != nullptr && _dc_file->get_multiple_inheritance() &&
+      _dc_file->get_virtual_inheritance()) {
     _dc_file->check_inherited_fields();
     if (_inherited_fields.empty()) {
       ((DCClass *)this)->rebuild_inherited_fields();
@@ -269,8 +246,8 @@ get_num_inherited_fields() const {
  */
 DCField *DCClass::
 get_inherited_field(int n) const {
-  if (dc_multiple_inheritance && dc_virtual_inheritance &&
-      _dc_file != nullptr) {
+  if (_dc_file != nullptr && _dc_file->get_multiple_inheritance() &&
+      _dc_file->get_virtual_inheritance()) {
     _dc_file->check_inherited_fields();
     if (_inherited_fields.empty()) {
       ((DCClass *)this)->rebuild_inherited_fields();
@@ -502,7 +479,7 @@ rebuild_inherited_fields() {
       DCField *field = parent->get_inherited_field(i);
       if (field->get_name().empty()) {
         // Unnamed fields are always inherited.  Except in the hack case.
-        if (!dc_sort_inheritance_by_file) {
+        if (!_dc_file->get_sort_inheritance_by_file()) {
           _inherited_fields.push_back(field);
         }
 
@@ -540,7 +517,7 @@ rebuild_inherited_fields() {
     }
   }
 
-  if (dc_sort_inheritance_by_file) {
+  if (_dc_file->get_sort_inheritance_by_file()) {
     // Temporary hack.
     sort(_inherited_fields.begin(), _inherited_fields.end(), SortFieldsByIndex());
   }
@@ -606,8 +583,8 @@ add_field(DCField *field) {
   }
 
   if (_dc_file != nullptr &&
-      ((dc_virtual_inheritance && dc_sort_inheritance_by_file) || !is_struct())) {
-    if (dc_multiple_inheritance) {
+      ((_dc_file->get_virtual_inheritance() && _dc_file->get_sort_inheritance_by_file()) || !is_struct())) {
+    if (_dc_file->get_multiple_inheritance()) {
       _dc_file->set_new_index_number(field);
     } else {
       field->set_number(get_num_inherited_fields());

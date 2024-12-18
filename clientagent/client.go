@@ -1383,6 +1383,14 @@ func (c *Client) handleRemoveObject(do Doid_t, deleted bool) {
 }
 
 func (c *Client) handleAddObject(do Doid_t, parent Doid_t, zone Zone_t, dc uint16, dgi *DatagramIterator, other bool) {
+	c.log.Debugf("handleAddObject: %s(%d)", core.DC.GetClass(int(dc)).GetName(), do)
+	lFunc := c.ca.L.GetGlobal("handleAddObject")
+	if lFunc.Type() == lua.LTFunction {
+		// Call the Lua function instead of sending the
+		// built-in response.
+		c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(parent), lua.LNumber(zone), lua.LNumber(dc), NewLuaDatagramIteratorFromExisting(c.ca.L, dgi), lua.LBool(other))
+		return
+	}
 	msgType := CLIENT_CREATE_OBJECT_REQUIRED
 	if other {
 		msgType = CLIENT_CREATE_OBJECT_REQUIRED_OTHER

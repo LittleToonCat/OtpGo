@@ -40,6 +40,10 @@ DCFile() {
   _all_objects_valid = true;
   _inherited_fields_stale = false;
 
+  _multiple_inheritance = true;
+  _virtual_inheritance = true;
+  _sort_inheritance_by_file = true;
+
   setup_default_keywords();
 }
 
@@ -49,6 +53,55 @@ DCFile() {
 DCFile::
 ~DCFile() {
   clear();
+}
+
+/**
+ * Set this true to support multiple inheritance in the dc file.
+ * If this is false, the old way, multiple inheritance is not
+ * supported, but field numbers will be numbered sequentially,
+ * which may be required to support old code that assumed this.
+ */
+void DCFile::
+set_multiple_inheritance(bool enable) {
+  _multiple_inheritance = enable;
+}
+
+/**
+ * Set this true to support proper virtual inheritance in the
+ * dc file, so that diamond-of-death type constructs can be used.
+ * This also enables shadowing (overloading) of inherited method
+ * names from a base class.
+ */
+void DCFile::
+set_virtual_inheritance(bool enable) {
+  _virtual_inheritance = true;
+}
+
+/**
+ * This is a temporary hack.  This should be true if you are using
+ * version 1.42 of the otp_server.exe binary, which sorted inherited
+ * fields based on the order of the classes within the DC file,
+ * rather than based on the order in which the references are made
+ * within the class.
+ */
+void DCFile::
+set_sort_inheritance_by_file(bool enable) {
+  _sort_inheritance_by_file = enable;
+}
+
+bool DCFile::
+get_multiple_inheritance() const {
+  return _multiple_inheritance;
+}
+
+bool DCFile::
+get_virtual_inheritance() const {
+  return _virtual_inheritance;
+}
+
+bool DCFile::
+get_sort_inheritance_by_file() const {
+  return _sort_inheritance_by_file;
 }
 
 /**
@@ -294,7 +347,7 @@ get_switch_by_name(const string &name) const {
  */
 DCField *DCFile::
 get_field_by_index(int index_number) const {
-  nassertr(dc_multiple_inheritance, nullptr);
+  nassertr(get_multiple_inheritance(), nullptr);
 
   if (index_number >= 0 && index_number < (int)_fields_by_index.size()) {
     return _fields_by_index[index_number];
@@ -427,9 +480,9 @@ get_hash() const {
  */
 void DCFile::
 generate_hash(HashGenerator &hashgen) const {
-  if (dc_virtual_inheritance) {
+  if (get_virtual_inheritance()) {
     // Just to make the hash number change in this case.
-    if (dc_sort_inheritance_by_file) {
+    if (get_sort_inheritance_by_file()) {
       hashgen.add_int(1);
     } else {
       hashgen.add_int(2);

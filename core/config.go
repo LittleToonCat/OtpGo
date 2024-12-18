@@ -86,8 +86,11 @@ type ServerConfig struct {
 		Name string
 	}
 	General struct {
-		Eventlogger string
-		DC_Files    []string
+		Eventlogger                         string
+		DC_Files                            []string
+		DC_Disable_Multiple_Inheritance     bool
+		DC_Disable_Virtual_Inheritance      bool
+		DC_Disable_Sort_Inheritance_By_File bool
 	}
 	Uberdogs []struct {
 		ID    int

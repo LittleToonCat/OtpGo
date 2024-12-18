@@ -34,6 +34,14 @@ PUBLISHED:
   DCFile();
   ~DCFile();
 
+  void set_multiple_inheritance(bool enable);
+  void set_virtual_inheritance(bool enable);
+  void set_sort_inheritance_by_file(bool enable);
+
+  bool get_multiple_inheritance() const;
+  bool get_virtual_inheritance() const;
+  bool get_sort_inheritance_by_file() const;
+
   void clear();
 
 #ifdef WITHIN_PANDA
@@ -122,6 +130,10 @@ private:
 
   bool _all_objects_valid;
   bool _inherited_fields_stale;
+
+  bool _multiple_inheritance;
+  bool _virtual_inheritance;
+  bool _sort_inheritance_by_file;
 };
 
 #include "dcFile.I"

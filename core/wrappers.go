@@ -489,10 +489,11 @@ func CheckDCPacker(L *lua.LState, n int) dc.DCPacker {
 }
 
 var DCPackerMethods = map[string]lua.LGFunction{
-	"delete":      DeleteLuaDCPacker,
-	"packField":   LuaDCPackerPackField,
-	"unpackField": LuaDCPackerUnpackField,
-	"skipField":   LuaDCPackerSkipField,
+	"delete":                DeleteLuaDCPacker,
+	"packField":             LuaDCPackerPackField,
+	"packFieldDefaultValue": LuaDCPackerPackFieldDefaultValue,
+	"unpackField":           LuaDCPackerUnpackField,
+	"skipField":             LuaDCPackerSkipField,
 }
 
 func DeleteLuaDCPacker(L *lua.LState) int {
@@ -512,6 +513,30 @@ func LuaDCPackerPackField(L *lua.LState) int {
 	packer.BeginPack(field)
 
 	PackLuaValue(packer, value)
+	success := packer.EndPack()
+
+	if success {
+		packedData := packer.GetBytes()
+		dg.AddVector(packedData)
+		dc.DeleteVector(packedData)
+	}
+	packer.ClearData()
+
+	DCLock.Unlock()
+	L.Push(lua.LBool(success))
+	return 1
+}
+
+func LuaDCPackerPackFieldDefaultValue(L *lua.LState) int {
+	packer := CheckDCPacker(L, 1)
+	field := CheckDCField(L, 2)
+	dg := CheckDatagram(L, 3)
+
+	DCLock.Lock()
+
+	packer.BeginPack(field)
+	packer.PackDefaultValue()
+
 	success := packer.EndPack()
 
 	if success {

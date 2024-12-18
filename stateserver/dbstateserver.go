@@ -47,7 +47,6 @@ type DClassQuery struct {
 type DatabaseStateServer struct {
 	StateServer
 
-	database             Channel_t
 	loading              map[Doid_t]*LoadingObject
 	context              uint32
 	contextToLoading     map[uint32]*LoadingObject
@@ -58,7 +57,6 @@ type DatabaseStateServer struct {
 
 func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
 	dbss := &DatabaseStateServer{
-		database:             config.Database,
 		loading:              map[Doid_t]*LoadingObject{},
 		context:              0,
 		contextToLoading:     map[uint32]*LoadingObject{},
@@ -338,6 +336,11 @@ func (s *DatabaseStateServer) handleGetStoredValues(dgi *DatagramIterator) {
 
 func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 	do := dgi.ReadDoid()
+	if _, ok := s.objects[do]; ok {
+		s.log.Debugf("Ignoring handleOneUpdate of already activated object=%d", do)
+		// Let the object instance handle it; even the db fields.
+		return
+	}
 	if obj, ok := s.loading[do]; ok {
 		// Add to the queue and leave it alone.  It'll be bounced back
 		// when finished.
@@ -378,6 +381,11 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 
 func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 	do := dgi.ReadDoid()
+	if _, ok := s.objects[do]; ok {
+		s.log.Debugf("Ignoring handleMultipleUpdates of already activated object=%d", do)
+		// Let the object instance handle it; even the db fields.
+		return
+	}
 	if obj, ok := s.loading[do]; ok {
 		// Add to the queue and leave it alone.  It'll be bounced back
 		// when finished.
