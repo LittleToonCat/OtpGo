@@ -749,12 +749,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				c.visibleObjects[do] = obj
 
 				// Tell the client to update.
-				dg := NewDatagram()
-				dg.AddUint16(CLIENT_OBJECT_LOCATION)
-				dg.AddDoid(do)
-				dg.AddDoid(parent)
-				dg.AddZone(zone)
-				c.client.SendDatagram(dg)
+				c.handleObjectLocation(do, parent, zone)
 			} else {
 				// Not interested, delete.
 				tempSeenObjectSlice := make([]Doid_t, 0)
@@ -1369,6 +1364,13 @@ func (c *Client) handleAddInterest(i Interest, context uint32) {
 }
 
 func (c *Client) handleRemoveObject(do Doid_t, deleted bool) {
+	lFunc := c.ca.L.GetGlobal("handleRemoveObject")
+	if lFunc.Type() == lua.LTFunction {
+		// Call the Lua function instead of sending the
+		// built-in response.
+		c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do))
+		return
+	}
 	resp := NewDatagram()
 
 	msgType := CLIENT_OBJECT_DISABLE
@@ -1380,6 +1382,22 @@ func (c *Client) handleRemoveObject(do Doid_t, deleted bool) {
 	resp.AddUint16(uint16(msgType))
 	resp.AddDoid(do)
 	c.client.SendDatagram(resp)
+}
+
+func (c *Client) handleObjectLocation(do Doid_t, parent Doid_t, zone Zone_t) {
+	lFunc := c.ca.L.GetGlobal("handleObjectLocation")
+	if lFunc.Type() == lua.LTFunction {
+		// Call the Lua function instead of sending the
+		// built-in response.
+		c.ca.CallLuaFunction(lFunc, c, NewLuaClient(c.ca.L, c), lua.LNumber(do), lua.LNumber(parent), lua.LNumber(zone))
+		return
+	}
+	dg := NewDatagram()
+	dg.AddUint16(CLIENT_OBJECT_LOCATION)
+	dg.AddDoid(do)
+	dg.AddDoid(parent)
+	dg.AddZone(zone)
+	c.client.SendDatagram(dg)
 }
 
 func (c *Client) handleAddObject(do Doid_t, parent Doid_t, zone Zone_t, dc uint16, dgi *DatagramIterator, other bool) {
