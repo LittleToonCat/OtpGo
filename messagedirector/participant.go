@@ -54,7 +54,11 @@ func (m *MDParticipantBase) Subscriber() *Subscriber {
 
 func (m *MDParticipantBase) RouteDatagram(datagram Datagram) {
 	MD.queueLock.Lock()
-	MD.Queue = append(MD.Queue, QueueEntry{datagram, m})
+	nextPos := MD.queuePreviousStoredPosition.Add(1)
+	queueEntry := QueueEntry{datagram, m}
+	queueSlice := make([]QueueEntry, 0)
+	queueSlice = append(queueSlice, queueEntry)
+	MD.Queue[nextPos] = queueSlice
 	MD.queueLock.Unlock()
 
 	select {
