@@ -76,7 +76,11 @@ func (m *MDUpstream) HandleDatagram(datagram Datagram, dgi *DatagramIterator) {
 
 func (m *MDUpstream) ReceiveDatagram(datagram Datagram) {
 	MD.queueLock.Lock()
-	MD.Queue = append(MD.Queue, QueueEntry{datagram, nil})
+	nextPos := MD.queuePreviousStoredPosition.Add(1)
+	queueEntry := QueueEntry{datagram, nil}
+	queueSlice := make([]QueueEntry, 0)
+	queueSlice = append(queueSlice, queueEntry)
+	MD.Queue[nextPos] = queueSlice
 	MD.queueLock.Unlock()
 
 	select {

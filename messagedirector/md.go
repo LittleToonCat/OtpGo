@@ -9,6 +9,7 @@ import (
 	"otpgo/net"
 	. "otpgo/util"
 	"sync"
+	"sync/atomic"
 
 	"github.com/apex/log"
 )
@@ -33,8 +34,10 @@ type MessageDirector struct {
 
 	// MD participants may directly queue datagarams to be routed by appending it into the
 	// queue slice, where they will be processed asynchronously
-	Queue     []QueueEntry
+	Queue     map[uint32][]QueueEntry
 	queueLock sync.Mutex
+	queueCurrentPosition atomic.Uint32
+	queuePreviousStoredPosition atomic.Uint32
 
 	// RouteDatagram will insert to this channel to let the queue loop know there are
 	// datagrams to be processed.
@@ -55,7 +58,9 @@ func init() {
 
 func Start() {
 	MD = &MessageDirector{}
-	MD.Queue = make([]QueueEntry, 0)
+	MD.Queue = make(map[uint32][]QueueEntry)
+	MD.queueCurrentPosition.Store(1)
+	MD.queuePreviousStoredPosition.Store(0)
 	MD.shouldProcess = make(chan bool)
 	MD.participants = make([]MDParticipant, 0)
 	MD.Handler = MD
@@ -86,17 +91,45 @@ func Start() {
 	}
 }
 
+func (m *MessageDirector) queueIsEmpty() bool {
+	m.queueLock.Lock()
+	defer m.queueLock.Unlock()
+	
+	// If we have no entries at all, return true.
+	if len(MD.Queue) == 0 {
+		return true
+	}
+
+	// Otherwise, check the rest of the entries for datagrams.
+	for _, entry := range MD.Queue {
+		if len(entry) > 0 {
+			return false
+		}
+	}
+
+	// If we got here, no entries have datagrams. 
+	return true
+}
+
 func (m *MessageDirector) getDatagramFromQueue() QueueEntry {
 	m.queueLock.Lock()
 	defer m.queueLock.Unlock()
+	curPos := MD.queueCurrentPosition.Load()
+	_, ok := MD.Queue[curPos]
+	hasDgs := ok && len(MD.Queue[curPos]) > 0
 
-	obj := MD.Queue[0]
-	MD.Queue[0] = QueueEntry{}
-	MD.Queue = MD.Queue[1:]
-	if len(MD.Queue) == 0 {
-		// Recreate the queue slice. This prevents the capacity from growing indefinitely and allows old entries to drop off as soon as possible from the backing array.
-		MD.Queue = make([]QueueEntry, 0)
+	for !ok || !hasDgs {
+		// At this point, the first entry has run out of datagrams, so we will delete the entry and move on.
+		delete(MD.Queue, curPos)
+		curPos = MD.queueCurrentPosition.Add(1)
+		_, ok = MD.Queue[curPos]
+		hasDgs = ok && len(MD.Queue[curPos]) > 0
 	}
+
+
+
+	obj := MD.Queue[curPos][0]
+	MD.Queue[curPos] = MD.Queue[curPos][1:]
 	return obj
 }
 
@@ -108,7 +141,7 @@ func (m *MessageDirector) queueLoop() {
 	for {
 		select {
 		case <-MD.shouldProcess:
-			for len(MD.Queue) > 0 {
+			for !m.queueIsEmpty() {
 				obj := m.getDatagramFromQueue()
 				go func() {
 					// We are running in a goroutine so that our main read loop will not crash if a datagram EOF is thrown.

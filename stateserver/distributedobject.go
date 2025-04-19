@@ -251,7 +251,7 @@ func (d *DistributedObject) sendLocationEntry(location Channel_t) {
 	if len(d.ramFields) != 0 {
 		d.appendOtherData(dg, true)
 	}
-	d.RouteDatagram(dg)
+	d.RouteDatagramEarly(dg)
 }
 
 func (d *DistributedObject) sendAiEntry(ai Channel_t, sender Channel_t) {
@@ -316,7 +316,7 @@ func (d *DistributedObject) handleLocationChange(parent Doid_t, zone Zone_t, sen
 				// dg.AddUint32(d.context)
 				// Send our sender as the context
 				dg.AddUint32(uint32(sender)) // prob a bad idea to convert this but...
-				d.RouteDatagram(dg)
+				d.RouteDatagramEarly(dg)
 				// d.context++
 			}
 			targets = append(targets, Channel_t(parent))
@@ -341,7 +341,7 @@ func (d *DistributedObject) handleLocationChange(parent Doid_t, zone Zone_t, sen
 	dg.AddDoid(d.do)
 	dg.AddLocation(parent, zone)
 	dg.AddLocation(oldParent, oldZone)
-	d.RouteDatagram(dg)
+	d.RouteDatagramEarly(dg)
 
 	d.parentSynchronized = false
 
@@ -455,7 +455,7 @@ func (d *DistributedObject) saveField(field dc.DCField, data []byte) bool {
 		dg.AddUint16(uint16(len(data)))
 		dg.AddData(data)
 
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	}
 
 	if field.IsRequired() {
@@ -559,7 +559,7 @@ func (d *DistributedObject) finishHandleUpdate(field dc.DCField, data []byte, se
 		dg.AddDoid(d.do)
 		dg.AddUint16(uint16(field.GetNumber()))
 		dg.AddData(data)
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	}
 }
 
@@ -740,7 +740,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			dg.AddServerHeader(Channel_t(child), Channel_t(d.do), STATESERVER_OBJECT_LOCATION_ACK)
 			dg.AddDoid(d.do)
 			dg.AddZone(newZone)
-			d.RouteDatagram(dg)
+			d.RouteDatagramEarly(dg)
 		} else if oldParent == d.do {
 			d.zoneObjects[oldZone] = eraseFromSlice(d.zoneObjects[oldZone], child)
 			if len(d.zoneObjects[oldZone]) == 0 {

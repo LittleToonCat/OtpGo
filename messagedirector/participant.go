@@ -14,6 +14,7 @@ type MDParticipant interface {
 
 	// RouteDatagram routes a datagram through the MD
 	RouteDatagram(Datagram)
+	RouteDatagramEarly(Datagram)
 
 	SubscribeChannel(Channel_t)
 	UnsubscribeChannel(Channel_t)
@@ -52,9 +53,38 @@ func (m *MDParticipantBase) Subscriber() *Subscriber {
 	return m.subscriber
 }
 
+// RouteDatagram appends a datagram to the end of the MD queue.
 func (m *MDParticipantBase) RouteDatagram(datagram Datagram) {
 	MD.queueLock.Lock()
-	MD.Queue = append(MD.Queue, QueueEntry{datagram, m})
+	nextPos := MD.queuePreviousStoredPosition.Add(1)
+	queueEntry := QueueEntry{datagram, m}
+	queueSlice := make([]QueueEntry, 0)
+	queueSlice = append(queueSlice, queueEntry)
+	MD.Queue[nextPos] = queueSlice
+	MD.queueLock.Unlock()
+
+	select {
+	case MD.shouldProcess <- true:
+	default:
+	}
+}
+
+// RouteDatagramEarly appends a datagram to the end of the current queue entry that will be processed.
+// This is used to keep datagrams in the same flow together, so they can be processed in the expected order.
+func (m *MDParticipantBase) RouteDatagramEarly(datagram Datagram) {
+	MD.queueLock.Lock()
+	curPos := MD.queueCurrentPosition.Load()
+	queueEntry := QueueEntry{datagram, m}
+	_, ok := MD.Queue[curPos] 
+	if !ok {
+		// This entry isn't in the queue yet. Make a new one.
+		queueSlice := make([]QueueEntry, 0)
+		queueSlice = append(queueSlice, queueEntry)
+		MD.Queue[curPos] = queueSlice
+	} else {
+		// Entry is in the map. Append this datagram to the end of this entry.
+		MD.Queue[curPos] = append(MD.Queue[curPos], queueEntry) 
+	}
 	MD.queueLock.Unlock()
 
 	select {
