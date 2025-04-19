@@ -91,6 +91,26 @@ func Start() {
 	}
 }
 
+func (m *MessageDirector) queueIsEmpty() bool {
+	m.queueLock.Lock()
+	defer m.queueLock.Unlock()
+	
+	// If we have no entries at all, return true.
+	if len(MD.Queue) == 0 {
+		return true
+	}
+
+	// Otherwise, check the rest of the entries for datagrams.
+	for _, entry := range MD.Queue {
+		if len(entry) > 0 {
+			return false
+		}
+	}
+
+	// If we got here, no entries have datagrams. 
+	return true
+}
+
 func (m *MessageDirector) getDatagramFromQueue() QueueEntry {
 	m.queueLock.Lock()
 	defer m.queueLock.Unlock()
@@ -121,7 +141,7 @@ func (m *MessageDirector) queueLoop() {
 	for {
 		select {
 		case <-MD.shouldProcess:
-			for len(MD.Queue) > 0 {
+			for !m.queueIsEmpty() {
 				obj := m.getDatagramFromQueue()
 				go func() {
 					// We are running in a goroutine so that our main read loop will not crash if a datagram EOF is thrown.
