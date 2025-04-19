@@ -376,7 +376,7 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 	dg.AddUint16(uint16(len(data)))
 	dg.AddData(data)
 
-	s.RouteDatagram(dg)
+	s.RouteDatagramEarly(dg)
 }
 
 func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
@@ -439,7 +439,7 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 		dg.AddData(data)
 	}
 
-	s.RouteDatagram(dg)
+	s.RouteDatagramEarly(dg)
 
 }
 
