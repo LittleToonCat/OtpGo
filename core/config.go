@@ -39,6 +39,7 @@ type Role struct {
 		Heartbeat_Timeout int
 		Keepalive         int
 		Relocate          bool
+		Legacy_Handle_Object bool
 	}
 	Channels struct {
 		Min int
