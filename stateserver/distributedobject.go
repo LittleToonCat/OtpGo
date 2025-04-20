@@ -237,7 +237,7 @@ func (d *DistributedObject) sendInterestEntry(location Channel_t, context uint32
 	if len(d.ramFields) != 0 {
 		d.appendOtherData(dg, true)
 	}
-	d.RouteDatagram(dg)
+	d.RouteDatagramEarly(dg)
 }
 
 func (d *DistributedObject) sendLocationEntry(location Channel_t) {
@@ -267,7 +267,7 @@ func (d *DistributedObject) sendAiEntry(ai Channel_t, sender Channel_t) {
 	dg.AddUint32(0) // Dummy context
 	d.appendRequiredDataDoidLast(dg, false)
 	d.appendOtherData(dg, false)
-	d.RouteDatagram(dg)
+	d.RouteDatagramEarly(dg)
 }
 
 func (d *DistributedObject) sendOwnerEntry(owner Channel_t, client bool) {
@@ -279,7 +279,7 @@ func (d *DistributedObject) sendOwnerEntry(owner Channel_t, client bool) {
 	// https://github.com/rocketprogrammer/panda3d/blob/otp-with-decompile/direct/src/dcparser/dcClass_ext.cxx#L162
 	d.appendRequiredData(dg, client)
 	d.appendOtherData(dg, client)
-	d.RouteDatagram(dg)
+	d.RouteDatagramEarly(dg)
 }
 
 func (d *DistributedObject) handleLocationChange(parent Doid_t, zone Zone_t, sender Channel_t) {
@@ -377,7 +377,7 @@ func (d *DistributedObject) handleAiChange(ai Channel_t, sender Channel_t, expli
 		dg.AddDoid(d.do)
 		dg.AddChannel(ai)
 		dg.AddChannel(oldAi)
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	}
 
 	if ai != INVALID_CHANNEL {
@@ -395,7 +395,7 @@ func (d *DistributedObject) annihilate(sender Channel_t, notifyParent bool) {
 			dg.AddDoid(d.do)
 			dg.AddLocation(INVALID_DOID, 0)
 			dg.AddLocation(d.parent, d.zone)
-			d.RouteDatagram(dg)
+			d.RouteDatagramEarly(dg)
 		}
 	}
 
@@ -407,13 +407,13 @@ func (d *DistributedObject) annihilate(sender Channel_t, notifyParent bool) {
 		dg := NewDatagram()
 		dg.AddServerHeader(d.aiChannel, sender, STATESERVER_OBJECT_LEAVING_AI_INTEREST)
 		dg.AddDoid(d.do)
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	}
 
 	dg := NewDatagram()
 	dg.AddMultipleServerHeader(targets, sender, STATESERVER_OBJECT_DELETE_RAM)
 	dg.AddDoid(d.do)
-	d.RouteDatagram(dg)
+	d.RouteDatagramEarly(dg)
 
 	d.deleteChildren(sender)
 	delete(d.stateserver.objects, d.do)
@@ -432,7 +432,7 @@ func (d *DistributedObject) deleteChildren(sender Channel_t) {
 		dg := NewDatagram()
 		dg.AddServerHeader(ParentToChildren(d.do), sender, STATESERVER_OBJECT_DELETE_CHILDREN)
 		dg.AddDoid(d.do)
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	}
 }
 
@@ -440,7 +440,7 @@ func (d *DistributedObject) wakeChildren() {
 	dg := NewDatagram()
 	dg.AddServerHeader(ParentToChildren(d.do), Channel_t(d.do), STATESERVER_OBJECT_LOCATE)
 	dg.AddUint32(STATESERVER_CONTEXT_WAKE_CHILDREN)
-	d.RouteDatagram(dg)
+	d.RouteDatagramEarly(dg)
 }
 
 func (d *DistributedObject) saveField(field dc.DCField, data []byte) bool {
@@ -606,7 +606,7 @@ func (d *DistributedObject) handleQueryAll(sender Channel_t, context uint32) {
 	dg.AddUint32(context)
 	d.appendRequiredDataDoidLast(dg, false)
 	d.appendOtherData(dg, false)
-	d.RouteDatagram(dg)
+	d.RouteDatagramEarly(dg)
 }
 
 func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
@@ -680,7 +680,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		dg.AddUint32(dgi.ReadUint32()) // Context
 		dg.AddDoid(d.do)
 		dg.AddChannel(d.aiChannel)
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	case STATESERVER_OBJECT_GET_AI_RESP:
 		context := dgi.ReadUint32()
 		parent := dgi.ReadDoid()
@@ -773,7 +773,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		dg.AddUint32(context)
 		dg.AddDoid(d.do)
 		dg.AddLocation(d.parent, d.zone)
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	case STATESERVER_OBJECT_LOCATE_RESP:
 		if dgi.ReadUint32() != STATESERVER_CONTEXT_WAKE_CHILDREN {
 			d.log.Warnf("Received unexpected GET_LOCATION_RESP from %d", dgi.ReadUint32())
@@ -818,7 +818,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		if success {
 			dg.AddDatagram(&field)
 		}
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	case STATESERVER_OBJECT_QUERY_FIELDS:
 		if dgi.ReadDoid() != d.do {
 			return
@@ -855,7 +855,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			dg.AddUint16(uint16(found))
 			dg.AddDatagram(&fields)
 		}
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	case STATESERVER_OBJECT_SET_OWNER_RECV:
 		fallthrough
 	case STATESERVER_OBJECT_SET_OWNER_RECV_WITH_ALL:
@@ -873,7 +873,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			dg.AddDoid(d.do)
 			dg.AddChannel(newOwner)
 			dg.AddChannel(d.ownerChannel)
-			d.RouteDatagram(dg)
+			d.RouteDatagramEarly(dg)
 		}
 
 		d.ownerChannel = newOwner
@@ -928,10 +928,10 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			countDg.AddServerHeader(sender, Channel_t(d.do), STATESERVER_OBJECT_GET_ZONES_COUNT_RESP)
 			countDg.AddUint32(context)
 			countDg.AddDoid(Doid_t(childCount))
-			d.RouteDatagram(countDg)
+			d.RouteDatagramEarly(countDg)
 
 			if childCount > 0 {
-				d.RouteDatagram(dg)
+				d.RouteDatagramEarly(dg)
 			}
 		}
 	case STATESERVER_GET_ACTIVE_ZONES:
@@ -954,7 +954,7 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			dg.AddZone(zone)
 		}
 
-		d.RouteDatagram(dg)
+		d.RouteDatagramEarly(dg)
 	default:
 		if msgType < STATESERVER_MSGTYPE_MIN || msgType > STATESERVER_MSGTYPE_MAX {
 			d.log.Warnf("Recieved unknown message of type %d.", msgType)
