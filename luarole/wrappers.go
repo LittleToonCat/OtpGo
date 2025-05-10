@@ -456,11 +456,8 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
-	participant.qMapLock.Lock()
-	defer participant.qMapLock.Unlock()
-
-	context := participant.context.Add(1)
-	participant.queryContextMap[context] = callbackFunc
+	context := participant.queryContextMap.Set(participant.context.Add(1), callbackFunc, true)
+	defer participant.queryContextMap.Unlock()
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), from, STATESERVER_OBJECT_QUERY_FIELDS)

@@ -79,15 +79,13 @@ type Client struct {
 	authenticated    bool
 
 	context               atomic.Uint32
-	createContextMap      map[uint32]func(doId Doid_t)
-	getContextMap         map[uint32]func(doId Doid_t, dgi *DatagramIterator)
-	queryFieldsContextMap map[uint32]func(dgi *DatagramIterator)
+	createContextMap      *MutexMap[uint32, func(doId Doid_t)]
+	getContextMap         *MutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)]
+	queryFieldsContextMap *MutexMap[uint32, func(dgi *DatagramIterator)]
 
 	queue         []Datagram
 	queueLock     sync.Mutex
-	cMapLock      sync.RWMutex
-	gMapLock      sync.RWMutex
-	qMapLock      sync.RWMutex
+
 	shouldProcess chan bool
 	stopChan      chan bool
 
@@ -123,9 +121,9 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 		queue:                 []Datagram{},
 		shouldProcess:         make(chan bool),
 		stopChan:              make(chan bool),
-		createContextMap:      map[uint32]func(doId Doid_t){},
-		getContextMap:         map[uint32]func(doId Doid_t, dgi *DatagramIterator){},
-		queryFieldsContextMap: map[uint32]func(dgi *DatagramIterator){},
+		createContextMap:      NewMutexMap[uint32, func(doId Doid_t)](),
+		getContextMap:         NewMutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)](),
+		queryFieldsContextMap: NewMutexMap[uint32, func(dgi *DatagramIterator)](),
 		authenticated:         false,
 		visibleObjects:        map[Doid_t]VisibleObject{},
 		declaredObjects:       map[Doid_t]DeclaredObject{},
@@ -1079,11 +1077,8 @@ func (c *Client) handleHeartbeat() {
 }
 
 func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string]dc.Vector, callback func(doId Doid_t)) {
-	c.cMapLock.Lock()
-	defer c.cMapLock.Unlock()
-
-	context := c.context.Add(1)
-	c.createContextMap[context] = callback
+	context := c.createContextMap.Set(c.context.Add(1), callback, true)
+	defer c.createContextMap.Unlock()
 
 	dg := NewDatagram()
 	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_CREATE_STORED_OBJECT)
@@ -1102,9 +1097,7 @@ func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string
 }
 
 func (c *Client) handleCreateDatabaseResp(context uint32, code uint8, doId Doid_t) {
-	c.cMapLock.RLock()
-	callback, ok := c.createContextMap[context]
-	c.cMapLock.RUnlock()
+	callback, ok := c.createContextMap.Get(context)
 
 	if !ok {
 		c.log.Warnf("Got CreateDatabaseRsp with missing context %d", context)
@@ -1117,17 +1110,12 @@ func (c *Client) handleCreateDatabaseResp(context uint32, code uint8, doId Doid_
 
 	callback(doId)
 
-	c.cMapLock.Lock()
-	delete(c.createContextMap, context)
-	c.cMapLock.Unlock()
+	c.createContextMap.Delete(context, false)
 }
 
 func (c *Client) getDatabaseValues(doId Doid_t, fields []string, callback func(doId Doid_t, dgi *DatagramIterator)) {
-	c.gMapLock.Lock()
-	defer c.gMapLock.Unlock()
-
-	context := c.context.Add(1)
-	c.getContextMap[context] = callback
+	context := c.getContextMap.Set(c.context.Add(1), callback, true)
+	defer c.getContextMap.Unlock()
 
 	dg := NewDatagram()
 	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_GET_STORED_VALUES)
@@ -1144,9 +1132,7 @@ func (c *Client) handleGetStoredValuesResp(dgi *DatagramIterator) {
 	context := dgi.ReadUint32()
 	doId := dgi.ReadDoid()
 
-	c.gMapLock.RLock()
-	callback, ok := c.getContextMap[context]
-	c.gMapLock.RUnlock()
+	callback, ok := c.getContextMap.Get(context)
 
 	if !ok {
 		c.log.Warnf("Got GetStoredResp with missing context %d", context)
@@ -1154,20 +1140,14 @@ func (c *Client) handleGetStoredValuesResp(dgi *DatagramIterator) {
 	}
 
 	callback(doId, dgi)
-
-	c.gMapLock.Lock()
-	delete(c.getContextMap, context)
-	c.gMapLock.Unlock()
+	c.getContextMap.Delete(context, false)
 }
 
 func (c *Client) handleQueryFieldsResp(dgi *DatagramIterator) {
 	dgi.ReadDoid() // doId, unused
 
 	context := dgi.ReadUint32()
-
-	c.qMapLock.RLock()
-	callback, ok := c.queryFieldsContextMap[context]
-	c.qMapLock.RUnlock()
+	callback, ok := c.queryFieldsContextMap.Get(context)
 
 	if !ok {
 		c.log.Warnf("Got QueryFieldsResp with missing context %d", context)
@@ -1175,10 +1155,7 @@ func (c *Client) handleQueryFieldsResp(dgi *DatagramIterator) {
 	}
 
 	callback(dgi)
-
-	c.qMapLock.Lock()
-	delete(c.queryFieldsContextMap, context)
-	c.qMapLock.Unlock()
+	c.queryFieldsContextMap.Delete(context, false)
 }
 
 func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string]dc.Vector) {

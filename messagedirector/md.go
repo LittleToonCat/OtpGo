@@ -118,15 +118,13 @@ func (m *MessageDirector) getDatagramFromQueue() QueueEntry {
 	_, ok := MD.Queue[curPos]
 	hasDgs := ok && len(MD.Queue[curPos]) > 0
 
-	for !ok || !hasDgs {
+	for !hasDgs {
 		// At this point, the first entry has run out of datagrams, so we will delete the entry and move on.
 		delete(MD.Queue, curPos)
 		curPos = MD.queueCurrentPosition.Add(1)
 		_, ok = MD.Queue[curPos]
 		hasDgs = ok && len(MD.Queue[curPos]) > 0
 	}
-
-
 
 	obj := MD.Queue[curPos][0]
 	MD.Queue[curPos] = MD.Queue[curPos][1:]

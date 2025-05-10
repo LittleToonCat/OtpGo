@@ -580,11 +580,8 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
-	client.qMapLock.Lock()
-	defer client.qMapLock.Unlock()
-
-	context := client.context.Add(1)
-	client.queryFieldsContextMap[context] = callbackFunc
+	context := client.queryFieldsContextMap.Set(client.context.Add(1), callbackFunc, true)
+	defer client.queryFieldsContextMap.Unlock()
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
@@ -668,12 +665,8 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, resultTable)
 	}
-
-	client.qMapLock.Lock()
-	defer client.qMapLock.Unlock()
-
-	context := client.context.Add(1)
-	client.queryFieldsContextMap[context] = callbackFunc
+	context := client.queryFieldsContextMap.Set(client.context.Add(1), callbackFunc, true)
+	defer client.queryFieldsContextMap.Unlock()
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
