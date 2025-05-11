@@ -93,13 +93,13 @@ type Client struct {
 	sessionObjects    []Doid_t
 	historicalObjects []Doid_t
 
-	visibleObjects   map[Doid_t]VisibleObject
-	declaredObjects  map[Doid_t]DeclaredObject
-	ownedObjects     map[Doid_t]OwnedObject
-	pendingObjects   map[Doid_t]uint32
-	interests        map[uint16]Interest
-	pendingInterests map[uint32]*InterestOperation
-	sendableFields   map[Doid_t][]uint16
+	visibleObjects   *MutexMap[Doid_t, VisibleObject]
+	declaredObjects  *MutexMap[Doid_t, DeclaredObject]
+	ownedObjects     *MutexMap[Doid_t, OwnedObject]
+	pendingObjects   *MutexMap[Doid_t, uint32]
+	interests        *MutexMap[uint16, Interest]
+	pendingInterests *MutexMap[uint32, *InterestOperation]
+	sendableFields   *MutexMap[Doid_t, []uint16]
 
 	conn   gonet.Conn
 	client *net.Client
@@ -125,13 +125,13 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 		getContextMap:         NewMutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)](),
 		queryFieldsContextMap: NewMutexMap[uint32, func(dgi *DatagramIterator)](),
 		authenticated:         false,
-		visibleObjects:        map[Doid_t]VisibleObject{},
-		declaredObjects:       map[Doid_t]DeclaredObject{},
-		ownedObjects:          map[Doid_t]OwnedObject{},
-		pendingObjects:        map[Doid_t]uint32{},
-		interests:             map[uint16]Interest{},
-		pendingInterests:      map[uint32]*InterestOperation{},
-		sendableFields:        map[Doid_t][]uint16{},
+		visibleObjects:        NewMutexMap[Doid_t, VisibleObject](),
+		declaredObjects:       NewMutexMap[Doid_t, DeclaredObject](),
+		ownedObjects:          NewMutexMap[Doid_t, OwnedObject](),
+		pendingObjects:        NewMutexMap[Doid_t, uint32](),
+		interests:             NewMutexMap[uint16, Interest](),
+		pendingInterests:      NewMutexMap[uint32, *InterestOperation](),
+		sendableFields:        NewMutexMap[Doid_t, []uint16](),
 	}
 	// This is to prevent termination calls before the client can be fully initialized.
 	c.terminationLock.Lock()
@@ -210,20 +210,27 @@ func (c *Client) annihilate() {
 		c.RouteDatagram(dg)
 	}
 
-	for _, int := range c.pendingInterests {
-		go int.finish()
+	iterator := c.pendingInterests.Iterator()
+	for iterator.Next() {
+		interestOperation := iterator.Value().Interface().(*InterestOperation)
+		go interestOperation.finish()
 	}
+	c.pendingInterests.RUnlock()
 
 	c.Cleanup()
 }
 
 func (c *Client) lookupInterests(parent Doid_t, zone Zone_t) []Interest {
 	var interests []Interest
-	for _, int := range c.interests {
-		if parent == int.parent && int.hasZone(zone) {
-			interests = append(interests, int)
+
+	iterator := c.interests.Iterator()
+	for iterator.Next() {
+		interest := iterator.Value().Interface().(Interest)
+		if parent == interest.parent && interest.hasZone(zone) {
+			interests = append(interests, interest)
 		}
 	}
+	c.interests.RUnlock()
 	return interests
 }
 
@@ -246,7 +253,7 @@ func (c *Client) addInterest(i Interest, context uint32, caller Channel_t) {
 		}
 	}
 
-	if prevInt, ok := c.interests[i.id]; ok {
+	if prevInt, ok := c.interests.Get(i.id); ok {
 		// This interest already exists, so it is being altered
 		var killedZones []Zone_t
 
@@ -266,7 +273,7 @@ func (c *Client) addInterest(i Interest, context uint32, caller Channel_t) {
 
 		c.closeZones(prevInt.parent, killedZones)
 	}
-	c.interests[i.id] = i
+	c.interests.Set(i.id, i, false)
 
 	if len(zones) == 0 {
 		// We aren't requesting any new zones, so let the client know we finished
@@ -279,7 +286,7 @@ func (c *Client) addInterest(i Interest, context uint32, caller Channel_t) {
 	iopContext := c.context.Add(1)
 	iop := NewInterestOperation(c, c.config.Tuning.Interest_Timeout, i.id,
 		context, iopContext, i.parent, zones, caller)
-	c.pendingInterests[iopContext] = iop
+	c.pendingInterests.Set(iopContext, iop, false)
 
 	resp := NewDatagram()
 	resp.AddServerHeader(Channel_t(i.parent), c.channel, STATESERVER_OBJECT_GET_ZONES_OBJECTS)
@@ -308,14 +315,16 @@ func (c *Client) removeInterest(i Interest, context uint32) {
 	// c.notifyInterestDone(i.id, []Channel_t{caller})
 	c.handleInterestDone(i.id, context)
 
-	delete(c.interests, i.id)
+	c.interests.Delete(i.id, false)
 }
 
 func (c *Client) closeZones(parent Doid_t, zones []Zone_t) {
 	c.log.Debugf("Closing zones: %t", zones)
 	var toRemove []Doid_t
 
-	for _, obj := range c.visibleObjects {
+	iterator := c.visibleObjects.Iterator()
+	for iterator.Next() {
+		obj := iterator.Value().Interface().(VisibleObject)
 		if obj.parent != parent {
 			// Object does not belong to the parent in question
 			continue
@@ -343,10 +352,11 @@ func (c *Client) closeZones(parent Doid_t, zones []Zone_t) {
 			}
 		}
 	}
+	c.visibleObjects.RUnlock()
 
 	for _, do := range toRemove {
 		c.addHistoricalObject(do)
-		delete(c.visibleObjects, do)
+		c.visibleObjects.Delete(do, false)
 	}
 
 	for _, zone := range zones {
@@ -379,18 +389,18 @@ func (c *Client) lookupObject(do Doid_t) dc.DCClass {
 	}
 
 	// Check the object cache
-	if obj, ok := c.ownedObjects[do]; ok {
+	if obj, ok := c.ownedObjects.Get(do); ok {
 		return obj.dc
 	}
 
 	if slices.Contains(c.seenObjects, do) {
-		if obj, ok := c.visibleObjects[do]; ok {
+		if obj, ok := c.visibleObjects.Get(do); ok {
 			return obj.dc
 		}
 	}
 
 	// Check declared objects
-	if obj, ok := c.declaredObjects[do]; ok {
+	if obj, ok := c.declaredObjects.Get(do); ok {
 		return obj.dc
 	}
 
@@ -399,8 +409,8 @@ func (c *Client) lookupObject(do Doid_t) dc.DCClass {
 }
 
 func (c *Client) tryQueuePending(do Doid_t, dg Datagram) bool {
-	if context, ok := c.pendingObjects[do]; ok {
-		if iop, ok := c.pendingInterests[context]; ok {
+	if context, ok := c.pendingObjects.Get(do); ok {
+		if iop, ok := c.pendingInterests.Get(context); ok {
 			iop.pendingQueue = append(iop.pendingQueue, dg)
 			return true
 		}
@@ -411,7 +421,7 @@ func (c *Client) tryQueuePending(do Doid_t, dg Datagram) bool {
 func (c *Client) handleObjectEntrance(dgi *DatagramIterator, other bool) {
 	do, parent, zone, dc := dgi.ReadDoid(), dgi.ReadDoid(), dgi.ReadZone(), dgi.ReadUint16()
 
-	delete(c.pendingObjects, do)
+	c.pendingObjects.Delete(do, false)
 
 	for i := range c.seenObjects {
 		if c.seenObjects[i] == do {
@@ -419,7 +429,7 @@ func (c *Client) handleObjectEntrance(dgi *DatagramIterator, other bool) {
 		}
 	}
 
-	if _, ok := c.ownedObjects[do]; ok {
+	if _, ok := c.ownedObjects.Get(do); ok {
 		for i := range c.sessionObjects {
 			if c.sessionObjects[i] == do {
 				return
@@ -427,16 +437,16 @@ func (c *Client) handleObjectEntrance(dgi *DatagramIterator, other bool) {
 		}
 	}
 
-	if _, ok := c.visibleObjects[do]; !ok {
+	if _, ok := c.visibleObjects.Get(do); !ok {
 		cls := core.DC.GetClass(int(dc))
-		c.visibleObjects[do] = VisibleObject{
+		c.visibleObjects.Set(do, VisibleObject{
 			DeclaredObject: DeclaredObject{
 				do: do,
 				dc: cls,
 			},
 			parent: parent,
 			zone:   zone,
-		}
+		}, false)
 	}
 	c.seenObjects = append(c.seenObjects, do)
 
@@ -494,7 +504,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case CLIENT_AGENT_REMOVE_INTEREST:
 		interestId, context := dgi.ReadUint16(), dgi.ReadUint32()
 
-		if i, ok := c.interests[interestId]; ok {
+		if i, ok := c.interests.Get(interestId); ok {
 			c.handleRemoveInterest(i.id, context)
 			c.removeInterest(i, context)
 		} else {
@@ -516,25 +526,25 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case CLIENTAGENT_DECLARE_OBJECT:
 		do, dc := dgi.ReadDoid(), dgi.ReadUint16()
 
-		if _, ok := c.declaredObjects[do]; ok {
+		if _, ok := c.declaredObjects.Get(do); ok {
 			c.log.Warnf("Received object declaration for previously declared object %d", do)
 			return
 		}
 
 		cls := core.DC.GetClass(int(dc))
-		c.declaredObjects[do] = DeclaredObject{
+		c.declaredObjects.Set(do, DeclaredObject{
 			do: do,
 			dc: cls,
-		}
+		}, false)
 	case CLIENTAGENT_UNDECLARE_OBJECT:
 		do := dgi.ReadDoid()
 
-		if _, ok := c.declaredObjects[do]; !ok {
+		if _, ok := c.declaredObjects.Get(do); !ok {
 			c.log.Warnf("Received object de-declaration for previously declared object %d", do)
 			return
 		}
 
-		delete(c.declaredObjects, do)
+		c.declaredObjects.Delete(do, false)
 	case CLIENT_SET_FIELD_SENDABLE:
 		do := dgi.ReadDoid()
 
@@ -542,7 +552,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		for dgi.RemainingSize() >= Blobsize {
 			fields = append(fields, dgi.ReadUint16())
 		}
-		c.sendableFields[do] = fields
+		c.sendableFields.Set(do, fields, false)
 	case CLIENTAGENT_ADD_SESSION_OBJECT:
 		do := dgi.ReadDoid()
 		for _, d := range c.sessionObjects {
@@ -651,26 +661,26 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		}
 		c.seenObjects = tempSeenObjectSlice
 
-		if _, ok := c.ownedObjects[do]; ok {
+		if _, ok := c.ownedObjects.Get(do); ok {
 			c.handleRemoveOwnership(do)
-			delete(c.ownedObjects, do)
+			c.ownedObjects.Delete(do, false)
 		}
 
 		c.addHistoricalObject(do)
-		delete(c.visibleObjects, do)
+		c.visibleObjects.Delete(do, false)
 	case STATESERVER_OBJECT_ENTER_OWNER_RECV:
 		do, parent, zone, dc := dgi.ReadDoid(), dgi.ReadDoid(), dgi.ReadZone(), dgi.ReadUint16()
 
-		if _, ok := c.ownedObjects[do]; !ok {
+		if _, ok := c.ownedObjects.Get(do); !ok {
 			cls := core.DC.GetClass(int(dc))
-			c.ownedObjects[do] = OwnedObject{
+			c.ownedObjects.Set(do, OwnedObject{
 				DeclaredObject: DeclaredObject{
 					do: do,
 					dc: cls,
 				},
 				parent: parent,
 				zone:   zone,
-			}
+			}, false)
 		}
 
 		c.handleAddOwnership(do, parent, zone, dc, dgi)
@@ -679,24 +689,33 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER:
 		offset := dgi.Tell()
 		do, parent, zone := dgi.ReadDoid(), dgi.ReadDoid(), dgi.ReadZone()
-		for id, iop := range c.pendingInterests {
+
+		pendingInterestIterator := c.pendingInterests.Iterator()
+		for pendingInterestIterator.Next() {
+			id := pendingInterestIterator.Key().Interface().(uint32)
+			iop := pendingInterestIterator.Value().Interface().(*InterestOperation)
 			if iop.parent == parent && iop.hasZone(zone) {
 				iop.pendingQueue = append(iop.pendingQueue, dg)
-				c.pendingObjects[do] = id
+				c.pendingObjects.Set(do, id, false)
 				return
 			}
 		}
-		for _, iop := range c.interests {
+		c.pendingInterests.RUnlock()
+
+		interestIterator := c.interests.Iterator()
+		for interestIterator.Next() {
+			iop := interestIterator.Value().Interface().(Interest)
 			if iop.parent == parent && iop.hasZone(zone) {
 				dgi.Seek(offset)
 				c.handleObjectEntrance(dgi, msgType == STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER)
 			}
 		}
+		c.interests.RUnlock()
 	case STATESERVER_OBJECT_GET_ZONE_COUNT_RESP:
 		fallthrough
 	case STATESERVER_OBJECT_GET_ZONES_COUNT_RESP:
 		context := dgi.ReadUint32()
-		if iop, ok := c.pendingInterests[context]; ok {
+		if iop, ok := c.pendingInterests.Get(context); ok {
 			total := dgi.ReadUint32()
 			iop.setExpected(int(total))
 		} else {
@@ -709,7 +728,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		// Skip do, parent and zone
 		dgi.Skip(Dgsize * 3)
 		dc := dgi.ReadUint16()
-		if iop, ok := c.pendingInterests[context]; ok {
+		if iop, ok := c.pendingInterests.Get(context); ok {
 			if !iop.finished {
 				iop.generateQueue[dc] = append(iop.generateQueue[dc], dg)
 				iop.totalCount++
@@ -738,13 +757,13 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		parent := dgi.ReadDoid()
 		zone := dgi.ReadZone()
 
-		if obj, ok := c.visibleObjects[do]; ok {
+		if obj, ok := c.visibleObjects.Get(do); ok {
 			if len(c.lookupInterests(parent, zone)) > 0 {
 				// We have interest in new location; update.
 				obj.parent = parent
 				obj.zone = zone
 
-				c.visibleObjects[do] = obj
+				c.visibleObjects.Set(do, obj, false)
 
 				// Tell the client to update.
 				c.handleObjectLocation(do, parent, zone)
@@ -760,13 +779,13 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				}
 				c.seenObjects = tempSeenObjectSlice
 
-				if _, ok := c.ownedObjects[do]; ok {
+				if _, ok := c.ownedObjects.Get(do); ok {
 					c.handleRemoveOwnership(do)
-					delete(c.ownedObjects, do)
+					c.ownedObjects.Delete(do, false)
 				}
 
 				c.addHistoricalObject(do)
-				delete(c.visibleObjects, do)
+				c.visibleObjects.Delete(do, false)
 			}
 		}
 	case STATESERVER_OBJECT_CHANGE_OWNER_RECV:
@@ -912,7 +931,7 @@ func (i *InterestOperation) finish() {
 	i.client.handleInterestDone(i.interestId, i.clientContext)
 
 	// Delete the IOP
-	delete(i.client.pendingInterests, i.requestContext)
+	i.client.pendingInterests.Delete(i.requestContext, false)
 	go func() {
 		for _, dg := range i.pendingQueue {
 			dgi := NewDatagramIterator(&dg)
@@ -1200,9 +1219,9 @@ func (c *Client) handleRemoveOwnership(do Doid_t) {
 }
 
 func (c *Client) isFieldSendable(do Doid_t, field dc.DCField) bool {
-	if _, ok := c.ownedObjects[do]; ok && field.IsOwnsend() {
+	if _, ok := c.ownedObjects.Get(do); ok && field.IsOwnsend() {
 		return true
-	} else if fields, ok := c.sendableFields[do]; ok {
+	} else if fields, ok := c.sendableFields.Get(do); ok {
 		for _, v := range fields {
 			if v == uint16(field.GetNumber()) {
 				return true
