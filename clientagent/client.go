@@ -336,6 +336,7 @@ func (c *Client) closeZones(parent Doid_t, zones []Zone_t) {
 					if c.sessionObjects[i] == obj.do {
 						c.sendDisconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED,
 							"A session object has unexpectedly left interest.", false)
+						c.visibleObjects.RUnlock()
 						return
 					}
 				}
@@ -697,6 +698,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			if iop.parent == parent && iop.hasZone(zone) {
 				iop.pendingQueue = append(iop.pendingQueue, dg)
 				c.pendingObjects.Set(do, id, false)
+				c.pendingInterests.RUnlock()
 				return
 			}
 		}
