@@ -343,7 +343,7 @@ type Subscriber struct {
 }
 
 type ChannelMap struct {
-	subscriptions map[Channel_t][]*Subscriber
+	subscriptions *MutexMap[Channel_t, []*Subscriber]
 
 	// Ranges points to a RangeMap singularity
 	ranges *RangeMap
@@ -371,7 +371,7 @@ func (s *Subscriber) Subscribed(ch Channel_t) bool {
 }
 
 func (c *ChannelMap) init() {
-	c.subscriptions = map[Channel_t][]*Subscriber{}
+	c.subscriptions = NewMutexMap[Channel_t, []*Subscriber]()
 	c.ranges = NewRangeMap()
 }
 
@@ -405,7 +405,7 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 
 	lock.Lock()
 
-	subs := c.subscriptions[ch]
+	subs, _ := c.subscriptions.Get(ch)
 	if len(subs) > 0 {
 		i := slices.Index(subs, p)
 		// Delete element. We have to recreate the slice, otherwise participants may get stuck in the backing array.
@@ -426,9 +426,9 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 	MDLog.Debugf("%s has unsubscribed from channel %d", p.participant.Name(), ch)
 
 	if len(subs) == 0 {
-		delete(c.subscriptions, ch)
+		c.subscriptions.Delete(ch, false)
 	} else {
-		c.subscriptions[ch] = subs
+		c.subscriptions.Set(ch, subs, false)
 	}
 	lock.Unlock()
 
@@ -459,21 +459,24 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 	}
 
 	lock.Lock()
-	c.subscriptions[ch] = append(c.subscriptions[ch], p)
+	subs, _ := c.subscriptions.Get(ch)
+	c.subscriptions.Set(ch, append(subs, p), false)
 	p.channels = append(p.channels, ch)
+	subsLength := len(subs)
 	lock.Unlock()
 
 	MDLog.Debugf("%s has subscribed to channel %d", p.participant.Name(), ch)
 
-	if len(c.subscriptions[ch]) == 1 {
+	if subsLength == 1 {
 		MD.AddChannel(ch)
 	}
 }
 
 func (c *ChannelMap) Send(ch Channel_t, data *MDDatagram) {
 	lock.Lock()
-	subs := make([]*Subscriber, len(c.subscriptions[ch]))
-	copy(subs, c.subscriptions[ch])
+	currentSubs, _ := c.subscriptions.Get(ch) 
+	subs := make([]*Subscriber, len(currentSubs))
+	copy(subs, currentSubs)
 	lock.Unlock()
 	if len(subs) > 0 {
 		data.sendLock.Lock()
@@ -491,7 +494,8 @@ func (c *ChannelMap) Send(ch Channel_t, data *MDDatagram) {
 }
 
 func (c *ChannelMap) IsAnySubscribed(ch Channel_t) bool {
-	if len(c.subscriptions[ch]) > 0 {
+	subs, _ := c.subscriptions.Get(ch)
+	if len(subs) > 0 {
 		return true
 	}
 

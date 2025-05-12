@@ -580,11 +580,8 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
-	client.qMapLock.Lock()
-	defer client.qMapLock.Unlock()
-
-	context := client.context.Add(1)
-	client.queryFieldsContextMap[context] = callbackFunc
+	context := client.queryFieldsContextMap.Set(client.context.Add(1), callbackFunc, true)
+	defer client.queryFieldsContextMap.Unlock()
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
@@ -668,12 +665,8 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, resultTable)
 	}
-
-	client.qMapLock.Lock()
-	defer client.qMapLock.Unlock()
-
-	context := client.context.Add(1)
-	client.queryFieldsContextMap[context] = callbackFunc
+	context := client.queryFieldsContextMap.Set(client.context.Add(1), callbackFunc, true)
+	defer client.queryFieldsContextMap.Unlock()
 
 	dg := NewDatagram()
 	dg.AddServerHeader(Channel_t(doId), client.channel, STATESERVER_OBJECT_QUERY_FIELDS)
@@ -808,7 +801,7 @@ func LuaHandleRemoveInterest(L *lua.LState) int {
 		context = uint32(L.CheckInt(3))
 	}
 
-	if i, ok := client.interests[handle]; ok {
+	if i, ok := client.interests.Get(handle); ok {
 		client.Lock()
 		defer client.Unlock()
 
@@ -1010,16 +1003,16 @@ func LuaDeclareObject(L *lua.LState) int {
 	do := Doid_t(L.CheckInt(2))
 	clsName := L.CheckString(3)
 
-	if _, ok := client.declaredObjects[do]; ok {
+	if _, ok := client.declaredObjects.Get(do); ok {
 		client.log.Warnf("Received object declaration for previously declared object %d", do)
 		return 1
 	}
 
 	cls := core.DC.GetClassByName(clsName)
-	client.declaredObjects[do] = DeclaredObject{
+	client.declaredObjects.Set(do, DeclaredObject{
 		do: do,
 		dc: cls,
-	}
+	}, false)
 	return 1
 }
 
@@ -1027,18 +1020,18 @@ func LuaUndeclareObject(L *lua.LState) int {
 	client := CheckClient(L, 1)
 	do := Doid_t(L.CheckInt(2))
 
-	if _, ok := client.declaredObjects[do]; !ok {
+	if _, ok := client.declaredObjects.Get(do); !ok {
 		client.log.Warnf("Received object de-declaration for previously declared object %d", do)
 		return 1
 	}
 
-	delete(client.declaredObjects, do)
+	client.declaredObjects.Delete(do, false)
 	return 1
 }
 
 func LuaUndeclareAllObjects(L *lua.LState) int {
 	client := CheckClient(L, 1)
-	clear(client.declaredObjects)
+	client.declaredObjects.Clear(false)
 	return 1
 }
 
@@ -1063,7 +1056,7 @@ func LuaSetLocation(L *lua.LState) int {
 		zone = Zone_t(L.CheckInt(4))
 	}
 
-	if obj, ok := client.ownedObjects[do]; ok {
+	if obj, ok := client.ownedObjects.Get(do); ok {
 		obj.parent = parent
 		obj.zone = zone
 
