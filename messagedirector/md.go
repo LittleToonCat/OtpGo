@@ -30,10 +30,16 @@ type MessageDirector struct {
 	// Connections within the context of the MessageDirector are represented as
 	// participants; however, clients and objects on the SS may function as participants
 	// as well. The MD will keep track of them and what channels they subscribe and route data to them.
-	participants []MDParticipant
+	// The IDs should not be assumed to be sequential, nor that a key will always hold the same participant.
+	participants *MutexMap[uint32, MDParticipant]
+	// freeParticipantIds contains IDs that were once allocated, but are now free to use. They take priority over assigning a new ID.
+	freeParticipantIds *MutexMap[uint32, bool]
+	// previousAllocatedParticipantId was the last ID assigned when a participant needed a fresh ID.
+	previousAllocatedParticipantId atomic.Uint32
 
-	// MD participants may directly queue datagarams to be routed by appending it into the
-	// queue slice, where they will be processed asynchronously
+
+	// MD participants may directly queue datagrams to be routed by adding it into the
+	// queue map, where they will be processed asynchronously
 	Queue     map[uint32][]QueueEntry
 	queueLock sync.Mutex
 	queueCurrentPosition atomic.Uint32
@@ -62,7 +68,9 @@ func Start() {
 	MD.queueCurrentPosition.Store(1)
 	MD.queuePreviousStoredPosition.Store(0)
 	MD.shouldProcess = make(chan bool)
-	MD.participants = make([]MDParticipant, 0)
+	MD.participants = NewMutexMap[uint32, MDParticipant]()
+	MD.freeParticipantIds = NewMutexMap[uint32, bool]()
+	MD.previousAllocatedParticipantId.Store(0)
 	MD.Handler = MD
 
 	channelMap := ChannelMap{}
@@ -237,12 +245,9 @@ func (m *MessageDirector) RecallPostRemoves() {
 
 func (m *MessageDirector) RemoveParticipant(p MDParticipant) {
 	m.Lock()
-	tempParticipantSlice := make([]MDParticipant, 0, cap(MD.participants))
-	for _, participant := range MD.participants {
-		if participant != p {
-			tempParticipantSlice = append(tempParticipantSlice, participant)
-		}
-	}
-	MD.participants = tempParticipantSlice
+	id := p.Id()
+	m.participants.Delete(id, false)
+	// Assign this ID for use later.
+	m.freeParticipantIds.Set(id, true, false)
 	m.Unlock()
 }

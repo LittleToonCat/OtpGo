@@ -65,6 +65,12 @@ func (mutexMap *MutexMap[keyType, valueType]) Delete(key keyType, holdLock bool)
 	delete(mutexMap.innerMap, key)
 }
 
+// DeleteNoLock deletes the key/value pair with the given key from the mutex map.
+// Should only be used if you've already acquired the write-lock, for example inside a WriteIterator.
+func (mutexMap *MutexMap[keyType, valueType]) DeleteNoLock(key keyType) {
+	delete(mutexMap.innerMap, key)
+}
+
 // Clear removes all key/value pairs from the mutex map.
 // If holdLock is true, then the mutex will not be unlocked automatically; call [MutexMap.Unlock] to unlock the mutex as needed.
 func (mutexMap *MutexMap[keyType, valueType]) Clear(holdLock bool) {

@@ -25,6 +25,8 @@ type MDParticipant interface {
 	SetName(string)
 	Name() string
 
+	Id() uint32
+
 	Subscriber() *Subscriber
 }
 
@@ -36,6 +38,7 @@ type MDParticipantBase struct {
 
 	name       string
 	url        string
+	id         uint32
 	terminated bool
 
 	mu sync.Mutex
@@ -46,7 +49,27 @@ func (m *MDParticipantBase) Init(handler MDParticipant) {
 	sub := &Subscriber{participant: handler, active: true}
 	sub.Init()
 	m.subscriber = sub
-	MD.participants = append(MD.participants, m)
+
+	var potentialId uint32
+	// If we have free IDs, we can use one of them. Grab the first one the iterator retrieves and then use that.
+	if MD.freeParticipantIds.Length() > 0 {
+		iterator := MD.freeParticipantIds.WriteIterator()
+		for iterator.Next() {
+			potentialId = iterator.Key().Interface().(uint32)
+			break
+		}
+		MD.freeParticipantIds.DeleteNoLock(potentialId)
+		MD.freeParticipantIds.Unlock()
+	} else {
+		searchingForUnusedId := true
+		// On the very rare chance that we've wrapped around and are now starting at 0, we might have IDs already assigned in the map. Just increment until we get an unused one.
+		for searchingForUnusedId {
+			potentialId = MD.previousAllocatedParticipantId.Add(1)
+			_, searchingForUnusedId = MD.participants.Get(potentialId)
+		}
+	}
+	m.id = potentialId
+	MD.participants.Set(m.id, m, false)
 }
 
 func (m *MDParticipantBase) Subscriber() *Subscriber {
@@ -142,6 +165,10 @@ func (m *MDParticipantBase) Name() string {
 	return m.name
 }
 
+func (m *MDParticipantBase) Id() uint32 {
+	return m.id
+}
+
 func (m *MDParticipantBase) IsTerminated() bool {
 	return m.terminated
 }
@@ -164,6 +191,8 @@ func (m *MDParticipantBase) RecycleParticipant() {
 	clear(m.postRemoves)
 	m.name = ""
 	m.url = ""
+	// We can't hold onto the ID; we can't ensure this participant will be reused before being garbage collected.
+	m.id = 0
 	m.terminated = false
 }
 
