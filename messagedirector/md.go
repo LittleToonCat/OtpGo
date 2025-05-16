@@ -38,7 +38,7 @@ type MessageDirector struct {
 	previousAllocatedParticipantId atomic.Uint32
 
 
-	// MD participants may directly queue datagarams to be routed by adding it into the
+	// MD participants may directly queue datagrams to be routed by adding it into the
 	// queue map, where they will be processed asynchronously
 	Queue     map[uint32][]QueueEntry
 	queueLock sync.Mutex
