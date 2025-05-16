@@ -52,15 +52,13 @@ func (m *MDParticipantBase) Init(handler MDParticipant) {
 
 	var potentialId uint32
 	// If we have free IDs, we can use one of them. Grab the first one the iterator retrieves and then use that.
-	if MD.freeParticipantIds.Length() > 0 {
-		iterator := MD.freeParticipantIds.WriteIterator()
-		for iterator.Next() {
-			potentialId = iterator.Key().Interface().(uint32)
-			break
-		}
+	iterator := MD.freeParticipantIds.WriteIterator()
+	if iterator.Next() {
+		potentialId = iterator.Key().Interface().(uint32)
 		MD.freeParticipantIds.DeleteNoLock(potentialId)
 		MD.freeParticipantIds.Unlock()
 	} else {
+		MD.freeParticipantIds.Unlock()
 		searchingForUnusedId := true
 		// On the very rare chance that we've wrapped around and are now starting at 0, we might have IDs already assigned in the map. Just increment until we get an unused one.
 		for searchingForUnusedId {
