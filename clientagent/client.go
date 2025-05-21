@@ -1090,9 +1090,8 @@ func (c *Client) queueLoop() {
 
 func (c *Client) handleHeartbeat() {
 	if c.config.Client.Heartbeat_Timeout != 0 {
-		// If the timer has already stopped, just stop it again to prevent potential issues.
-		if !c.heartbeat.Reset(time.Duration(c.config.Client.Heartbeat_Timeout) * time.Second) {
-			c.heartbeat.Stop()
+		if c.heartbeat.Stop() {
+			c.heartbeat.Reset(time.Duration(c.config.Client.Heartbeat_Timeout) * time.Second)
 		}
 	}
 }
