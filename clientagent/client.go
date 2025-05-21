@@ -107,7 +107,7 @@ type Client struct {
 
 	cleanDisconnect  bool
 	allowedInterests InterestPermission
-	heartbeat        *time.Ticker
+	heartbeat        *time.Timer
 	stopHeartbeat    chan bool
 	terminationBegun atomic.Bool
 	terminationLock  sync.Mutex
@@ -961,8 +961,8 @@ const (
 func (c *Client) init(config core.Role, conn gonet.Conn) {
 	c.allowedInterests = INTERESTS_ENABLED
 	if config.Client.Heartbeat_Timeout != 0 {
-		c.heartbeat = time.NewTicker(time.Duration(config.Client.Heartbeat_Timeout) * time.Second)
-		c.stopHeartbeat = make(chan bool)
+		c.heartbeat = time.NewTimer(time.Duration(config.Client.Heartbeat_Timeout) * time.Second)
+		c.stopHeartbeat = make(chan bool, 1)
 		go c.startHeartbeat()
 	}
 
@@ -978,7 +978,7 @@ func (c *Client) init(config core.Role, conn gonet.Conn) {
 
 func (c *Client) startHeartbeat() {
 	// Even though it is unnecessary, the heartbeat is contained in a select statement so that
-	//  the ticker can be replaced each time a heartbeat is sent.
+	//  the timer can be replaced each time a heartbeat is sent.
 	select {
 	case <-c.heartbeat.C:
 		// Time to disconnect!
@@ -1007,15 +1007,13 @@ func (c *Client) Terminate(err error) {
 		event.Send()
 	}
 
-	if c.config.Client.Heartbeat_Timeout != 0 {
-		c.heartbeat.Stop()
-	}
 	// (Sending to these channels from ReceiveDatagram or startHeartbeat
 	// will deadlock, starting a separate goroutine fixes this.)
 	go func() {
 		// Stop the queue goroutine
 		c.stopChan <- true
 		if c.config.Client.Heartbeat_Timeout != 0 {
+			c.heartbeat.Stop()
 			// Stop the heartbeat goroutine
 			c.stopHeartbeat <- true
 		}
@@ -1092,8 +1090,10 @@ func (c *Client) queueLoop() {
 
 func (c *Client) handleHeartbeat() {
 	if c.config.Client.Heartbeat_Timeout != 0 {
-		c.heartbeat.Stop()
-		c.heartbeat = time.NewTicker(time.Duration(c.config.Client.Heartbeat_Timeout) * time.Second)
+		// If the timer has already stopped, just stop it again to prevent potential issues.
+		if !c.heartbeat.Reset(time.Duration(c.config.Client.Heartbeat_Timeout) * time.Second) {
+			c.heartbeat.Stop()
+		}
 	}
 }
 
