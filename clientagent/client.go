@@ -460,7 +460,7 @@ func (c *Client) notifyInterestDone(interestId uint16, callers []Channel_t) {
 	}
 
 	resp := NewDatagram()
-	resp.AddMultipleServerHeader(callers, c.channel, CLIENTAGENT_DONE_INTEREST_RESP)
+	resp.AddMultipleServerHeader(callers, c.channel, CLIENT_AGENT_SET_INTEREST)
 	resp.AddChannel(c.channel)
 	resp.AddUint16(interestId)
 	c.RouteDatagram(resp)
