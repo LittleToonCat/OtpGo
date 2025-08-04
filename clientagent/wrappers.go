@@ -771,7 +771,7 @@ func LuaHandleAddInterest(L *lua.LState) int {
 		})
 	}
 
-	i := client.buildInterest(handle, parent, zones)
+	i := client.buildInterest(handle, parent, zones, false)
 
 	client.Lock()
 	defer client.Unlock()

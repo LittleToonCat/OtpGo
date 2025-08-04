@@ -51,6 +51,7 @@ type Interest struct {
 	id     uint16
 	parent Doid_t
 	zones  []Zone_t
+	server  bool
 }
 
 func (i *Interest) hasZone(zone Zone_t) bool {
@@ -234,11 +235,12 @@ func (c *Client) lookupInterests(parent Doid_t, zone Zone_t) []Interest {
 	return interests
 }
 
-func (c *Client) buildInterest(id uint16, parent Doid_t, zones []Zone_t) Interest {
+func (c *Client) buildInterest(id uint16, parent Doid_t, zones []Zone_t, server bool) Interest {
 	int := Interest{
 		id:     id,
 		parent: parent,
 		zones:  zones,
+		server: server,
 	}
 	return int
 }
@@ -278,14 +280,17 @@ func (c *Client) addInterest(i Interest, context uint32, caller Channel_t) {
 	if len(zones) == 0 {
 		// We aren't requesting any new zones, so let the client know we finished
 		c.notifyInterestDone(i.id, []Channel_t{caller})
-		c.handleInterestDone(i.id, context)
+
+		if (!i.server) {
+			c.handleInterestDone(i.id, context)
+		}
 		return
 	}
 
 	// Build a new IOP otherwise
 	iopContext := c.context.Add(1)
 	iop := NewInterestOperation(c, c.config.Tuning.Interest_Timeout, i.id,
-		context, iopContext, i.parent, zones, caller)
+		context, iopContext, i.parent, zones, caller, i.server)
 	c.pendingInterests.Set(iopContext, iop, false)
 
 	resp := NewDatagram()
@@ -313,7 +318,10 @@ func (c *Client) removeInterest(i Interest, context uint32) {
 
 	c.closeZones(i.parent, zones)
 	// c.notifyInterestDone(i.id, []Channel_t{caller})
-	c.handleInterestDone(i.id, context)
+
+	if (!i.server) {
+		c.handleInterestDone(i.id, context)
+	}
 
 	c.interests.Delete(i.id, false)
 }
@@ -498,7 +506,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			}
 		}
 
-		i := c.buildInterest(interestId, parentDoId, zones)
+		i := c.buildInterest(interestId, parentDoId, zones, true)
 
 		c.handleAddInterest(i, context)
 		c.addInterest(i, context, sender)
@@ -834,10 +842,12 @@ type InterestOperation struct {
 	// generateQueue []Datagram
 	generateQueue map[uint16][]Datagram
 	pendingQueue  []Datagram
+
+	server   bool
 }
 
 func NewInterestOperation(client *Client, timeout int, interestId uint16,
-	clientContext uint32, requestContext uint32, parent Doid_t, zones []Zone_t, caller Channel_t) *InterestOperation {
+	clientContext uint32, requestContext uint32, parent Doid_t, zones []Zone_t, caller Channel_t, server bool) *InterestOperation {
 	iop := &InterestOperation{
 		client:         client,
 		interestId:     interestId,
@@ -850,6 +860,7 @@ func NewInterestOperation(client *Client, timeout int, interestId uint16,
 		generateQueue:  map[uint16][]Datagram{},
 		pendingQueue:   []Datagram{},
 		callers:        []Channel_t{caller},
+		server:          server,
 	}
 
 	// Timeout
@@ -930,7 +941,10 @@ func (i *InterestOperation) finish() {
 
 	// Send out interest done messages
 	i.client.notifyInterestDone(i.interestId, i.callers)
-	i.client.handleInterestDone(i.interestId, i.clientContext)
+
+	if (!i.server) {
+		i.client.handleInterestDone(i.interestId, i.clientContext)
+	}
 
 	// Delete the IOP
 	i.client.pendingInterests.Delete(i.requestContext, false)
