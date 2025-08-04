@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/apex/log"
 	"github.com/fatih/color"
@@ -129,18 +128,22 @@ func (h *Handler) HandleLog(e *log.Entry) error {
 	color := Colors[e.Level]
 	level := Strings[e.Level]
 	name := e.Fields.Get("name")
-	t := time.Now()
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// if _, ok := h.Writer.(*colorable.Writer); ok {
-	grey.Fprintf(h.Writer, "[%s] ", t.Format("2006-01-02 01:02:03"))
+	hour := e.Timestamp.Hour()
+	if hour > 12 {
+		hour = hour - 12
+	}
+	if hour == 0 {
+		hour = 12
+	}
+
+	timeString := fmt.Sprintf("%02d:%02d:%02d", hour, e.Timestamp.Minute(), e.Timestamp.Second())
+
+	grey.Fprintf(h.Writer, "[%s %s] ", e.Timestamp.Format("2006-01-02"), timeString)
 	color.Fprintf(h.Writer, bold.Sprintf("%*s: ", 1, level))
-	// } else {
-	// fmt.Fprintf(h.Writer, "[%s] ", t.Format("2006-01-02 01:02:03"))
-	// fmt.Fprintf(h.Writer, fmt.Sprintf("%*s: ", 1, level))
-	// }
 
 	fmt.Fprintf(h.Writer, "%s: %s", name, e.Message)
 	fmt.Fprintln(h.Writer)
