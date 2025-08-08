@@ -516,13 +516,16 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)
 
-	var setDoc bson.D
-	var unsetDoc bson.D
+	var writes []mongo.WriteModel
 	for field, value := range packedValues {
 		if value.Size() == 0 {
-			unsetDoc = append(unsetDoc, bson.E{"fields." + field, ""})
+			updateModel := mongo.NewUpdateOneModel()
+			updateModel.SetFilter(filter)
+			updateModel.SetUpdate(bson.M{"$unset": bson.M{"fields." + field: ""}})
+			writes = append(writes, updateModel)
 			continue
 		}
+
 		dcField := dclass.GetFieldByName(field)
 		if dcField == dc.SwigcptrDCField(0) {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, object.Class)
@@ -532,39 +535,40 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 		unpacker.SetUnpackData(value)
 		unpacker.BeginUnpack(dcField)
 		b.db.log.Debugf("Beginning unpack field \"%s\"\n%s", field, DumpUnpacker(unpacker))
+		var setDoc bson.D
 		UnpackDataToBsonDocument(unpacker, "fields."+field, &setDoc, *b.db.log)
 		if !unpacker.EndUnpack() {
-			b.db.log.Errorf("Failed to unpack field \"%s\"!  Update aborted.\n%s", field, DumpUnpacker(unpacker))
+			b.db.log.Errorf("Failed to unpack field \"%s\"! Update aborted.\n%s", field, DumpUnpacker(unpacker))
 
 			for _, data := range packedValues {
 				dc.DeleteVector(data)
 			}
 			return
 		}
+
+		updateModel := mongo.NewUpdateOneModel()
+		updateModel.SetFilter(filter)
+		updateModel.SetUpdate(bson.M{"$set": setDoc})
+		writes = append(writes, updateModel)
 	}
 
 	for _, data := range packedValues {
 		dc.DeleteVector(data)
 	}
 
-	if setDoc == nil && unsetDoc == nil {
+	if len(writes) == 0 {
 		b.db.log.Warnf("Nothing to do for update to object %s(%d).", object.Class, doId)
 		return
 	}
-	update := bson.M{}
-	if setDoc != nil {
-		update["$set"] = setDoc
-	}
-	if unsetDoc != nil {
-		update["$unset"] = unsetDoc
-	}
-	result, err := b.objects.UpdateOne(context.Background(), filter, update)
+
+	bulkOption := options.BulkWrite().SetOrdered(false)
+	result, err := b.objects.BulkWrite(context.Background(), writes, bulkOption)
 	if err != nil {
-		b.db.log.Errorf("An error has occured when updating %s(%d): %s", object.Class, doId, err.Error())
+		b.db.log.Errorf("An error has occurred when updating %s(%d): %s", object.Class, doId, err.Error())
+		return
 	}
 
-	if result.MatchedCount == 1 && result.ModifiedCount == 1 {
+	if result.ModifiedCount > 0 {
 		b.db.log.Debugf("Successfully updated object %s(%d)", object.Class, doId)
 	}
-
 }
