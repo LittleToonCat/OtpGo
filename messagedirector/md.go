@@ -37,12 +37,11 @@ type MessageDirector struct {
 	// previousAllocatedParticipantId was the last ID assigned when a participant needed a fresh ID.
 	previousAllocatedParticipantId atomic.Uint32
 
-
 	// MD participants may directly queue datagrams to be routed by adding it into the
 	// queue map, where they will be processed asynchronously
-	Queue     map[uint32][]QueueEntry
-	queueLock sync.Mutex
-	queueCurrentPosition atomic.Uint32
+	Queue                       map[uint32][]QueueEntry
+	queueLock                   sync.Mutex
+	queueCurrentPosition        atomic.Uint32
 	queuePreviousStoredPosition atomic.Uint32
 
 	// RouteDatagram will insert to this channel to let the queue loop know there are
@@ -102,7 +101,7 @@ func Start() {
 func (m *MessageDirector) queueIsEmpty() bool {
 	m.queueLock.Lock()
 	defer m.queueLock.Unlock()
-	
+
 	// If we have no entries at all, return true.
 	if len(MD.Queue) == 0 {
 		return true
@@ -115,7 +114,7 @@ func (m *MessageDirector) queueIsEmpty() bool {
 		}
 	}
 
-	// If we got here, no entries have datagrams. 
+	// If we got here, no entries have datagrams.
 	return true
 }
 

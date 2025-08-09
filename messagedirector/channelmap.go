@@ -474,7 +474,7 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 
 func (c *ChannelMap) Send(ch Channel_t, data *MDDatagram) {
 	lock.Lock()
-	currentSubs, _ := c.subscriptions.Get(ch) 
+	currentSubs, _ := c.subscriptions.Get(ch)
 	subs := make([]*Subscriber, len(currentSubs))
 	copy(subs, currentSubs)
 	lock.Unlock()

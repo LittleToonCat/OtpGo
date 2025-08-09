@@ -96,16 +96,16 @@ func (m *MDParticipantBase) RouteDatagramEarly(datagram Datagram) {
 	MD.queueLock.Lock()
 	curPos := MD.queueCurrentPosition.Load()
 	queueEntry := QueueEntry{datagram, m}
-	_, ok := MD.Queue[curPos] 
+	_, ok := MD.Queue[curPos]
 	if !ok {
-		// This entry isn't in the queue yet. Make a new one.		
+		// This entry isn't in the queue yet. Make a new one.
 		nextPos := MD.queuePreviousStoredPosition.Add(1)
 		queueSlice := make([]QueueEntry, 0)
 		queueSlice = append(queueSlice, queueEntry)
 		MD.Queue[nextPos] = queueSlice
 	} else {
 		// Entry is in the map. Append this datagram to the end of this entry.
-		MD.Queue[curPos] = append(MD.Queue[curPos], queueEntry) 
+		MD.Queue[curPos] = append(MD.Queue[curPos], queueEntry)
 	}
 	MD.queueLock.Unlock()
 

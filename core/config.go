@@ -34,11 +34,11 @@ type Role struct {
 	}
 	Lua_File string
 	Client   struct {
-		Add_Interest      string
-		Write_Buffer_Size int
-		Heartbeat_Timeout int
-		Keepalive         int
-		Relocate          bool
+		Add_Interest         string
+		Write_Buffer_Size    int
+		Heartbeat_Timeout    int
+		Keepalive            int
+		Relocate             bool
 		Legacy_Handle_Object bool
 	}
 	Channels struct {

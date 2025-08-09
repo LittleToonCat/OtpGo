@@ -11,16 +11,15 @@ import (
 // MutexMap is a struct containing a map and a mutex. MutexMaps can use supporting functions to read and write data with appropriate locking.
 type MutexMap[keyType comparable, valueType any] struct {
 	innerMap map[keyType]valueType
-	mutex sync.RWMutex
+	mutex    sync.RWMutex
 }
 
 // NewMutexMap returns a pointer to a new MutexMap.
-func NewMutexMap[keyType comparable, valueType any]() *MutexMap[keyType, valueType]{
-	return &MutexMap[keyType, valueType] {
+func NewMutexMap[keyType comparable, valueType any]() *MutexMap[keyType, valueType] {
+	return &MutexMap[keyType, valueType]{
 		innerMap: make(map[keyType]valueType),
 	}
 }
-
 
 // Get returns the value assigned to a given key in the mutex map, along with a bool indicating whether the key was found.
 func (mutexMap *MutexMap[keyType, valueType]) Get(key keyType) (valueType, bool) {
@@ -41,7 +40,7 @@ func (mutexMap *MutexMap[keyType, valueType]) GetNoLock(key keyType) (valueType,
 // If holdLock is true, then the mutex will not be unlocked automatically; call [MutexMap.Unlock] to unlock the mutex as needed.
 func (mutexMap *MutexMap[keyType, valueType]) Set(key keyType, value valueType, holdLock bool) keyType {
 	mutexMap.mutex.Lock()
-	if (!holdLock) { 
+	if !holdLock {
 		defer mutexMap.mutex.Unlock()
 	}
 	mutexMap.innerMap[key] = value
@@ -59,7 +58,7 @@ func (mutexMap *MutexMap[keyType, valueType]) SetNoLock(key keyType, value value
 // If holdLock is true, then the mutex will not be unlocked automatically; call [MutexMap.Unlock] to unlock the mutex as needed.
 func (mutexMap *MutexMap[keyType, valueType]) Delete(key keyType, holdLock bool) {
 	mutexMap.mutex.Lock()
-	if (!holdLock) {
+	if !holdLock {
 		defer mutexMap.mutex.Unlock()
 	}
 	delete(mutexMap.innerMap, key)
@@ -75,7 +74,7 @@ func (mutexMap *MutexMap[keyType, valueType]) DeleteNoLock(key keyType) {
 // If holdLock is true, then the mutex will not be unlocked automatically; call [MutexMap.Unlock] to unlock the mutex as needed.
 func (mutexMap *MutexMap[keyType, valueType]) Clear(holdLock bool) {
 	mutexMap.mutex.Lock()
-	if (!holdLock) {
+	if !holdLock {
 		defer mutexMap.mutex.Unlock()
 	}
 	clear(mutexMap.innerMap)
@@ -113,7 +112,7 @@ func (mutexMap *MutexMap[keyType, valueType]) Unlock() {
 	mutexMap.mutex.Unlock()
 }
 
-// RUnlock read-unlocks the mutex map's mutex. Only use this if you have finished with an iterator provided by [MutexMap.Iterator]. 
+// RUnlock read-unlocks the mutex map's mutex. Only use this if you have finished with an iterator provided by [MutexMap.Iterator].
 func (mutexMap *MutexMap[keyType, valueType]) RUnlock() {
 	mutexMap.mutex.RUnlock()
 }

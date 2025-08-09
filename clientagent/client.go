@@ -51,7 +51,7 @@ type Interest struct {
 	id     uint16
 	parent Doid_t
 	zones  []Zone_t
-	server  bool
+	server bool
 }
 
 func (i *Interest) hasZone(zone Zone_t) bool {
@@ -84,8 +84,8 @@ type Client struct {
 	getContextMap         *MutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)]
 	queryFieldsContextMap *MutexMap[uint32, func(dgi *DatagramIterator)]
 
-	queue         []Datagram
-	queueLock     sync.Mutex
+	queue     []Datagram
+	queueLock sync.Mutex
 
 	shouldProcess chan bool
 	stopChan      chan bool
@@ -281,7 +281,7 @@ func (c *Client) addInterest(i Interest, context uint32, caller Channel_t) {
 		// We aren't requesting any new zones, so let the client know we finished
 		c.notifyInterestDone(i.id, []Channel_t{caller})
 
-		if (!i.server) {
+		if !i.server {
 			c.handleInterestDone(i.id, context)
 		}
 		return
@@ -319,7 +319,7 @@ func (c *Client) removeInterest(i Interest, context uint32) {
 	c.closeZones(i.parent, zones)
 	// c.notifyInterestDone(i.id, []Channel_t{caller})
 
-	if (!i.server) {
+	if !i.server {
 		c.handleInterestDone(i.id, context)
 	}
 
@@ -843,7 +843,7 @@ type InterestOperation struct {
 	generateQueue map[uint16][]Datagram
 	pendingQueue  []Datagram
 
-	server   bool
+	server bool
 }
 
 func NewInterestOperation(client *Client, timeout int, interestId uint16,
@@ -860,7 +860,7 @@ func NewInterestOperation(client *Client, timeout int, interestId uint16,
 		generateQueue:  map[uint16][]Datagram{},
 		pendingQueue:   []Datagram{},
 		callers:        []Channel_t{caller},
-		server:          server,
+		server:         server,
 	}
 
 	// Timeout
@@ -942,7 +942,7 @@ func (i *InterestOperation) finish() {
 	// Send out interest done messages
 	i.client.notifyInterestDone(i.interestId, i.callers)
 
-	if (!i.server) {
+	if !i.server {
 		i.client.handleInterestDone(i.interestId, i.clientContext)
 	}
 
@@ -1422,7 +1422,7 @@ func (c *Client) handleAddObject(do Doid_t, parent Doid_t, zone Zone_t, dc uint1
 	resp := NewDatagram()
 	resp.AddUint16(uint16(msgType))
 
-	if (!c.config.Client.Legacy_Handle_Object) {
+	if !c.config.Client.Legacy_Handle_Object {
 		resp.AddLocation(parent, zone)
 	}
 
