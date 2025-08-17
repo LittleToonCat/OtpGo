@@ -852,7 +852,6 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		dg.AddUint32(context)
 		dg.AddBool(success)
 		if success {
-			dg.AddUint16(uint16(found))
 			dg.AddDatagram(&fields)
 		}
 		d.RouteDatagramEarly(dg)
