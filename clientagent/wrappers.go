@@ -546,7 +546,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 			return
 		}
 
-		client.log.Debugf("queryObjectFields: Found fields for %s(%d)", clsName, doId)
+\		client.log.Debugf("queryObjectFields: Found fields for %s(%d)", clsName, doId)
 
 		fieldTable := client.ca.L.NewTable()
 
