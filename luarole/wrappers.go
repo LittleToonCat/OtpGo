@@ -422,7 +422,8 @@ func LuaQueryObjectFields(L *lua.LState) int {
 			return
 		}
 
-		participant.log.Debugf("queryObjectFields: Found fields for %s(%d)", clsName, doId)
+		found := dgi.ReadUint16()
+		participant.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
 
 		fieldTable := participant.L.NewTable()
 
@@ -436,7 +437,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		defer dc.DeleteDCPacker(unpacker)
 
 		unpacker.SetUnpackData(packedData)
-		for dgi.RemainingSize() >= Blobsize {
+		for i := uint16(0); i < found; i++ {
 			fieldId := unpacker.RawUnpackUint16().(uint)
 			field := cls.GetFieldByIndex(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
