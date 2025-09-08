@@ -546,11 +546,14 @@ func LuaQueryObjectFields(L *lua.LState) int {
 			return
 		}
 
+		_dgi := dgi.Copy()
+
 		var fields []uint16
-		for dgi.RemainingSize() >= Blobsize {
-			fields = append(fields, dgi.ReadUint16())
+		for _dgi.RemainingSize() >= Blobsize {
+			fields = append(fields, _dgi.ReadUint16())
+			_dgi.ReadRemainder()
 		}
-		found := uint16(len(fields))
+		found := len(fields)
 		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
 
 		fieldTable := client.ca.L.NewTable()
@@ -565,8 +568,8 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		defer dc.DeleteDCPacker(unpacker)
 
 		unpacker.SetUnpackData(packedData)
-		for i := uint16(0); i < found; i++ {
-			fieldId := dgi.ReadUint16()
+		for i := 0; i < found; i++ {
+			fieldId := unpacker.RawUnpackUint16().(uint)
 			field := cls.GetFieldByIndex(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
 				client.log.Warnf("queryObjectFields: Unknown field %d for class \"%s\"!", fieldId, clsName)
@@ -632,11 +635,14 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 			return
 		}
 
+		_dgi := dgi.Copy()
+
 		var fields []uint16
-		for dgi.RemainingSize() >= Blobsize {
-			fields = append(fields, dgi.ReadUint16())
+		for _dgi.RemainingSize() >= Blobsize {
+			fields = append(fields, _dgi.ReadUint16())
+			_dgi.ReadRemainder()
 		}
-		found := uint16(len(fields))
+		found := len(fields)
 		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
 
 		resultTable := client.ca.L.NewTable()
@@ -651,8 +657,8 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 		defer dc.DeleteDCPacker(unpacker)
 
 		unpacker.SetUnpackData(packedData)
-		for i := uint16(0); i < found; i++ {
-			fieldId := dgi.ReadUint16()
+		for i := 0; i < found; i++ {
+			fieldId := unpacker.RawUnpackUint16().(uint)
 			field := cls.GetFieldByIndex(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
 				client.log.Warnf("queryObjectFields: Unknown field %d for class \"%s\"!", fieldId, clsName)
