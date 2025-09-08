@@ -551,7 +551,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		var fields []uint16
 		for _dgi.RemainingSize() >= Blobsize {
 			fields = append(fields, _dgi.ReadUint16())
-			_dgi.ReadRemainder()
+			_dgi.ReadBlob()
 		}
 		found := len(fields)
 		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
@@ -640,7 +640,7 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 		var fields []uint16
 		for _dgi.RemainingSize() >= Blobsize {
 			fields = append(fields, _dgi.ReadUint16())
-			_dgi.ReadRemainder()
+			_dgi.ReadBlob()
 		}
 		found := len(fields)
 		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
