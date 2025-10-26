@@ -24,3 +24,6 @@ go.work
 otp.yaml
 
 .vscode
+
+# Personal (Rocket)
+build.bat

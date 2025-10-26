@@ -109,6 +109,8 @@ func (d *DatabaseServer) createBackend(config core.Role) (bool, DatabaseBackend,
 		return NewMongoBackend(d, config.Backend)
 	case "yaml":
 		return NewYAMLBackend(d, config.Backend)
+	case "mysql":
+		return NewMySQLBackend(d, config.Backend)
 	default:
 		return false, nil, fmt.Errorf("unknown backend type: %s", config.Backend.Type)
 	}
