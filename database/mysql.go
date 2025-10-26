@@ -768,7 +768,7 @@ func (b *MySQLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 	}
 
 	if len(fieldsMap) == 0 {
-		b.db.log.Warnf("Nothing to do for update to object %s(%d).", time.October.Class, doId)
+		b.db.log.Warnf("Nothing to do for update to object %s(%d).", obj.Class, doId)
 		return
 	}
 
