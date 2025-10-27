@@ -485,10 +485,10 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	}
 
 	switch msgType {
-	case CLIENTAGENT_EJECT:
+	case CLIENT_AGENT_EJECT:
 		reason, error := dgi.ReadUint16(), dgi.ReadString()
 		c.sendDisconnect(reason, error, false)
-	case CLIENTAGENT_DROP:
+	case CLIENT_AGENT_DROP:
 		c.lock.Lock()
 		c.Terminate(fmt.Errorf("dropped by outside sender: %d", sender))
 		c.lock.Unlock()
@@ -519,20 +519,20 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		} else {
 			c.log.Debugf("Attempted to remove non-existant interest: %d", interestId)
 		}
-	case CLIENTAGENT_SET_CLIENT_ID:
+	case CLIENT_AGENT_SET_CLIENT_ID:
 		c.SetChannel(dgi.ReadChannel())
-	case CLIENTAGENT_SEND_DATAGRAM:
+	case CLIENT_AGENT_SEND_DATAGRAM:
 		datagram := dgi.ReadDatagram()
 		c.client.SendDatagram(*datagram)
-	case CLIENTAGENT_OPEN_CHANNEL:
+	case CLIENT_AGENT_OPEN_CHANNEL:
 		c.SubscribeChannel(dgi.ReadChannel())
-	case CLIENTAGENT_CLOSE_CHANNEL:
+	case CLIENT_AGENT_CLOSE_CHANNEL:
 		c.UnsubscribeChannel(dgi.ReadChannel())
-	case CLIENTAGENT_ADD_POST_REMOVE:
+	case CLIENT_AGENT_ADD_POST_REMOVE:
 		c.AddPostRemove(*dgi.ReadDatagram())
-	case CLIENTAGENT_CLEAR_POST_REMOVES:
+	case CLIENT_AGENT_CLEAR_POST_REMOVES:
 		c.ClearPostRemoves()
-	case CLIENTAGENT_DECLARE_OBJECT:
+	case CLIENT_AGENT_DECLARE_OBJECT:
 		do, dc := dgi.ReadDoid(), dgi.ReadUint16()
 
 		if _, ok := c.declaredObjects.Get(do); ok {
@@ -545,7 +545,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			do: do,
 			dc: cls,
 		}, false)
-	case CLIENTAGENT_UNDECLARE_OBJECT:
+	case CLIENT_AGENT_UNDECLARE_OBJECT:
 		do := dgi.ReadDoid()
 
 		if _, ok := c.declaredObjects.Get(do); !ok {
@@ -562,7 +562,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			fields = append(fields, dgi.ReadUint16())
 		}
 		c.sendableFields.Set(do, fields, false)
-	case CLIENTAGENT_ADD_SESSION_OBJECT:
+	case CLIENT_AGENT_ADD_SESSION_OBJECT:
 		do := dgi.ReadDoid()
 		for _, d := range c.sessionObjects {
 			if d == do {
@@ -572,7 +572,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 
 		c.log.Debugf("Added session object with ID %d", do)
 		c.sessionObjects = append(c.sessionObjects, do)
-	case CLIENTAGENT_REMOVE_SESSION_OBJECT:
+	case CLIENT_AGENT_REMOVE_SESSION_OBJECT:
 		do := dgi.ReadDoid()
 		for _, d := range c.sessionObjects {
 			if d == do {
@@ -589,15 +589,15 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			}
 		}
 		c.sessionObjects = tempSessionObjectSlice
-	case CLIENTAGENT_GET_TLVS:
+	case CLIENT_AGENT_GET_TLVS:
 		resp := NewDatagram()
-		resp.AddServerHeader(sender, c.channel, CLIENTAGENT_GET_TLVS_RESP)
+		resp.AddServerHeader(sender, c.channel, CLIENT_AGENT_GET_TLVS_RESP)
 		resp.AddUint32(dgi.ReadUint32())
 		resp.AddDataBlob(c.client.Tlvs())
 		c.RouteDatagram(resp)
-	case CLIENTAGENT_GET_NETWORK_ADDRESS:
+	case CLIENT_AGENT_GET_NETWORK_ADDRESS:
 		resp := NewDatagram()
-		resp.AddServerHeader(sender, c.channel, CLIENTAGENT_GET_NETWORK_ADDRESS_RESP)
+		resp.AddServerHeader(sender, c.channel, CLIENT_AGENT_GET_NETWORK_ADDRESS_RESP)
 		resp.AddUint32(dgi.ReadUint32())
 		resp.AddString(c.client.RemoteIP())
 		resp.AddUint16(c.client.RemotePort())
