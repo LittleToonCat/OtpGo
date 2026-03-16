@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"otpgo/core"
@@ -204,7 +205,11 @@ func PackValue(packer dc.DCPacker, value interface{}, log log.Entry) {
 		if binData, ok := value.([]byte); ok {
 			packer.PackString(string(binData))
 		} else if stringValue, ok := value.(string); ok {
-			packer.PackString(stringValue)
+			if decoded, err := base64.StdEncoding.DecodeString(stringValue); err == nil {
+				packer.PackString(string(decoded))
+			} else {
+				packer.PackString(stringValue)
+			}
 		}
 	default:
 		if array, ok := value.([]interface{}); ok {
