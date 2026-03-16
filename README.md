@@ -18,3 +18,7 @@ The entire documentation and unit tests is pretty much a TODO right now, but it'
 [Mewtwo](https://gitlab.com/sunrisemmos/Mewtwo) ([Sunrise Games'](https://sunrise.games/) Toontown servers)
 
 [Dialga](https://github.com/WorldOfCarsRE/game-server) ([Sunrise Games'](https://sunrise.games/) World of Cars Online servers)
+
+[Gyarados](https://gitlab.com/sunrisemmos/pirates/game) ([Sunrise Games'](https://sunrise.games/) Pirates of the Caribbean Online servers)
+
+[Clefairy](https://github.com/PixieHollowRE/game-server) ([Sunrise Games'](https://sunrise.games/) Pixie Hollow servers)
