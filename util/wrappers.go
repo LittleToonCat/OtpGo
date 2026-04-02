@@ -323,6 +323,8 @@ var DatagramIteratorMethods = map[string]lua.LGFunction{
 	"readString":       LuaReadString,
 	"readRemainder":    LuaReadRemainder,
 	"readFixedString":  LuaReadFixedString,
+	"tell":             LuaTell,
+	"seek":             LuaSeek,
 }
 
 func LuaDgiToString(L *lua.LState) int {
@@ -420,6 +422,20 @@ func LuaReadFixedString(L *lua.LState) int {
 	size := L.CheckInt(2)
 	v := dgi.ReadData(Dgsize_t(size))
 	L.Push(lua.LString(v))
+	return 1
+}
+
+func LuaTell(L *lua.LState) int {
+	dgi := CheckDatagramIterator(L, 1)
+	v := dgi.Tell()
+	L.Push(lua.LNumber(v))
+	return 1
+}
+
+func LuaSeek(L *lua.LState) int {
+	dgi := CheckDatagramIterator(L, 1)
+	amount := L.CheckInt(2)
+	dgi.Seek(Dgsize_t(amount))
 	return 1
 }
 
