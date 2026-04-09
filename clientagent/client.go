@@ -815,7 +815,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 				lua.LNumber(msgType),
 				NewLuaDatagramIteratorFromExisting(c.ca.L, dgi))
 		} else {
-			c.log.Errorf("Received unknown server msgtype %d", msgType)
+			c.log.Errorf("Received unknown server msgtype %d from sender %d", msgType, sender)
 		}
 	}
 }

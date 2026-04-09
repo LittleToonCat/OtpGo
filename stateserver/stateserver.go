@@ -199,6 +199,6 @@ func (s *StateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case STATESERVER_OBJECT_DELETE_RAM:
 		s.handleDelete(dgi, sender)
 	default:
-		s.log.Warnf("Received unknown msgtype=%d", msgType)
+		s.log.Warnf("Received unknown msgtype %d from sender %d", msgType, sender)
 	}
 }

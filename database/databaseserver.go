@@ -176,7 +176,7 @@ func (d *DatabaseServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case DBSERVER_SET_STORED_VALUES:
 		d.handleSetStoredValues(dgi, sender)
 	default:
-		d.log.Warnf("Received unknown msgtype=%d", msgType)
+		d.log.Warnf("Received unknown msgtype %d from sender %d", msgType, sender)
 	}
 }
 
