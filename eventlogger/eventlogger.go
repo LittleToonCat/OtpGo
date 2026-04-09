@@ -137,7 +137,7 @@ func processPacket(dg Datagram, addr *net.UDPAddr) {
 		objectCount := dgi.ReadUint32()
 		description = fmt.Sprintf("Avatars:%d|TotalObjects:%d", avatarCount, objectCount)
 	default:
-		EventLoggerLog.Errorf("Received unknown message type: %d", messageType)
+		EventLoggerLog.Errorf("Received unknown message type %d from %s", messageType, who)
 		return
 	}
 
