@@ -324,7 +324,7 @@ func (b *YAMLBackend) SendGetStoredValuesError(doId Doid_t, fields []string, ctx
 
 func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
 	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
-		b.db.log.Errorf("GetStoredValues: File %d.yaml does not exist!")
+		b.db.log.Errorf("GetStoredValues: File %d.yaml does not exist!", doId)
 		b.SendGetStoredValuesError(doId, fields, ctx, sender)
 		return
 	}
@@ -445,7 +445,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 
 func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector) {
 	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
-		b.db.log.Errorf("SetStoredValues: File %d.yaml does not exist!")
+		b.db.log.Errorf("SetStoredValues: File %d.yaml does not exist!", doId)
 		return
 	}
 

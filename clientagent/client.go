@@ -168,10 +168,10 @@ func (c *Client) sendDisconnect(reason uint16, message string, security bool) {
 	// TODO: Implement security loglevel
 	var eventType string
 	if security {
-		c.log.Errorf("[SECURITY] Ejecting client (%s): %s", reason, message)
+		c.log.Errorf("[SECURITY] Ejecting client (%d): %s", reason, message)
 		eventType = "client-ejected-security"
 	} else {
-		c.log.Errorf("Ejecting client (%s): %s", reason, message)
+		c.log.Errorf("Ejecting client (%d): %s", reason, message)
 		eventType = "client-ejected"
 	}
 
