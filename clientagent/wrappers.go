@@ -1073,6 +1073,13 @@ func LuaSetLocation(L *lua.LState) int {
 	if obj, ok := client.ownedObjects.Get(do); ok {
 		obj.parent = parent
 		obj.zone = zone
+		client.ownedObjects.Set(do, obj, false)
+
+		if vobj, ok := client.visibleObjects.Get(do); ok {
+			vobj.parent = parent
+			vobj.zone = zone
+			client.visibleObjects.Set(do, vobj, false)
+		}
 
 		dg := NewDatagram()
 		dg.AddServerHeader(Channel_t(do), client.channel, STATESERVER_OBJECT_SET_ZONE)
