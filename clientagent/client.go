@@ -373,6 +373,39 @@ func (c *Client) closeZones(parent Doid_t, zones []Zone_t) {
 	}
 }
 
+func (c *Client) clearVisibleObjects() {
+	var interests []Interest
+	interestIterator := c.interests.Iterator()
+	for interestIterator.Next() {
+		interests = append(interests, interestIterator.Value().Interface().(Interest))
+	}
+	c.interests.RUnlock()
+
+	for _, i := range interests {
+		for _, zone := range i.zones {
+			if len(c.lookupInterests(i.parent, zone)) == 1 {
+				c.UnsubscribeChannel(LocationAsChannel(i.parent, zone))
+			}
+		}
+		c.interests.Delete(i.id, false)
+	}
+
+	var visible []Doid_t
+	objectIterator := c.visibleObjects.Iterator()
+	for objectIterator.Next() {
+		obj := objectIterator.Value().Interface().(VisibleObject)
+		visible = append(visible, obj.do)
+	}
+	c.visibleObjects.RUnlock()
+
+	for _, do := range visible {
+		c.addHistoricalObject(do)
+		c.visibleObjects.Delete(do, false)
+	}
+
+	c.seenObjects = make([]Doid_t, 0)
+}
+
 func (c *Client) historicalObject(do Doid_t) bool {
 	for i := range c.historicalObjects {
 		if c.historicalObjects[i] == do {

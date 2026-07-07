@@ -49,6 +49,7 @@ var ClientMethods = map[string]lua.LGFunction{
 	"addPostRemove":                LuaAddPostRemove,
 	"authenticated":                LuaGetSetAuthenticated,
 	"clearPostRemoves":             LuaClearPostRemoves,
+	"clearVisibleObjects":          LuaClearVisibleObjects,
 	"createDatabaseObject":         LuaCreateDatabaseObject,
 	"declareObject":                LuaDeclareObject,
 	"debug":                        LuaDebug,
@@ -1009,6 +1010,16 @@ func LuaClearPostRemoves(L *lua.LState) int {
 	client := CheckClient(L, 1)
 
 	client.ClearPostRemoves()
+	return 1
+}
+
+func LuaClearVisibleObjects(L *lua.LState) int {
+	client := CheckClient(L, 1)
+
+	client.Lock()
+	defer client.Unlock()
+
+	client.clearVisibleObjects()
 	return 1
 }
 
