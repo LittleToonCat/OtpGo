@@ -277,7 +277,7 @@ func (d *DistributedObject) sendOwnerEntry(owner Channel_t, client bool) {
 	// NOTE: We don't filter for ownrecv fields.  The receiver is expected to filter
 	// that out itselves.  This is the case for original Panda3D message handling:
 	// https://github.com/rocketprogrammer/panda3d/blob/otp-with-decompile/direct/src/dcparser/dcClass_ext.cxx#L162
-	d.appendRequiredData(dg, client)
+	d.appendRequiredData(dg, false)
 	d.appendOtherData(dg, client)
 	d.RouteDatagramEarly(dg)
 }
