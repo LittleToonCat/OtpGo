@@ -599,7 +599,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		do := dgi.ReadDoid()
 		for _, d := range c.sessionObjects {
 			if d == do {
-				c.log.Warnf("Received add sesion object with existing ID=%d", do)
+				c.log.Warnf("Received add session object with existing ID=%d", do)
 			}
 		}
 
@@ -611,7 +611,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			if d == do {
 				break
 			}
-			c.log.Warnf("Received remove sesion object with non-existant ID=%d", do)
+			c.log.Warnf("Received remove session object with non-existant ID=%d", do)
 		}
 
 		c.log.Debugf("Removed session object with ID %d", do)

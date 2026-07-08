@@ -966,7 +966,7 @@ func LuaAddSessionObject(L *lua.LState) int {
 
 	for _, d := range client.sessionObjects {
 		if d == do {
-			client.log.Warnf("Received add sesion object with existing ID=%d", do)
+			client.log.Warnf("Received add session object with existing ID=%d", do)
 		}
 	}
 
@@ -983,7 +983,7 @@ func LuaRemoveSessionObject(L *lua.LState) int {
 		if d == do {
 			break
 		}
-		client.log.Warnf("Received remove sesion object with non-existant ID=%d", do)
+		client.log.Warnf("Received remove session object with non-existant ID=%d", do)
 	}
 
 	client.log.Debugf("Removed session object with ID %d", do)
