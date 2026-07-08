@@ -823,6 +823,7 @@ func LuaHandleRemoveInterest(L *lua.LState) int {
 		client.removeInterest(i, context)
 	} else {
 		client.log.Debugf("Attempted to remove non-existant interest: %d", handle)
+		client.handleInterestDone(handle, context)
 	}
 
 	return 1
