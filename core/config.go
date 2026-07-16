@@ -76,6 +76,11 @@ type Role struct {
 		// YAML BACKEND
 		Directory string
 	}
+	// Forwarding system to keep game-specific messages out of the database code.
+	Forwarding []struct {
+		Msgtype uint16
+		Channel util.Channel_t
+	}
 
 	// EVENT LOGGER
 	Output         string

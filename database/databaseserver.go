@@ -55,6 +55,7 @@ type DatabaseServer struct {
 	max         Doid_t
 	objectTypes map[uint16]dc.DCClass
 	backend     DatabaseBackend
+	forwards    map[uint16]Channel_t
 
 	queue        []OperationQueueEntry
 	queueLock    sync.Mutex
@@ -70,11 +71,17 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 		min:          Doid_t(config.Generate.Min),
 		max:          Doid_t(config.Generate.Max),
 		objectTypes:  make(map[uint16]dc.DCClass),
+		forwards:     make(map[uint16]Channel_t),
 		log: log.WithFields(log.Fields{
 			"name":    fmt.Sprintf("DatabaseServer (%d)", config.Control),
 			"modName": "DatabaseServer",
 			"id":      fmt.Sprintf("%d", config.Control),
 		}),
+	}
+
+	// Populate message type forwards
+	for _, forward := range config.Forwarding {
+		db.forwards[forward.Msgtype] = forward.Channel
 	}
 
 	// Populate object types
@@ -176,6 +183,17 @@ func (d *DatabaseServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 	case DBSERVER_SET_STORED_VALUES:
 		d.handleSetStoredValues(dgi, sender)
 	default:
+		if channel, ok := d.forwards[msgType]; ok {
+			// Forward this message to the configured channel.
+			// This is used for example in Toontown to route to
+			// the EstateFetcher to keep game-specific code out of OtpGo
+			// itself.
+			dg := NewDatagram()
+			dg.AddServerHeader(channel, sender, msgType)
+			dg.AddData(dgi.ReadRemainder())
+			d.RouteDatagram(dg)
+			return
+		}
 		d.log.Warnf("Received unknown msgtype %d from sender %d", msgType, sender)
 	}
 }
