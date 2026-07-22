@@ -897,48 +897,61 @@ func LuaSendActivateObject(L *lua.LState) int {
 		return 0
 	}
 
+	DCLock.Lock()
+	defer DCLock.Unlock()
+
 	dg := NewDatagram()
-	if fields != nil {
-		dg.AddServerHeader(Channel_t(do), client.channel, STATESERVER_OBJECT_CREATE_WITH_REQUIR_OTHER_CONTEXT)
-	} else {
-		dg.AddServerHeader(Channel_t(do), client.channel, STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT)
-	}
-	dg.AddDoid(do)
+	dg.AddServerHeader(Channel_t(do), client.channel, STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT)
 	dg.AddLocation(0, 0)
+	dg.AddChannel(0)
 	dg.AddUint16(uint16(dclass.GetNumber()))
+	dg.AddUint32(0)
 
-	if fields != nil {
-		DCLock.Lock()
-		defer DCLock.Unlock()
-
-		packer := dc.NewDCPacker()
-		defer dc.DeleteDCPacker(packer)
-
-		length := uint16(0)
-		fields.ForEach(func(l1, data lua.LValue) {
-			name := string(l1.(lua.LString))
-			field := dclass.GetFieldByName(name)
-			if field == dc.SwigcptrDCField(0) {
-				L.ArgError(4, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", name, className))
-				return
-			}
-			length++
-			packer.RawPackUint16(uint(field.GetNumber()))
-			packer.BeginPack(field)
-			core.PackLuaValue(packer, data)
-			if !packer.EndPack() {
-				L.ArgError(4, "Pack failed!")
-				return
-			}
-
-		})
-		packedData := packer.GetBytes()
-		dg.AddUint16(length)
-		dg.AddVector(packedData)
-
-		dc.DeleteVector(packedData)
-		packer.ClearData()
+	numFields := dclass.GetNumInheritedFields()
+	for i := 0; i < numFields; i++ {
+		field := dclass.GetInheritedField(i)
+		molecular := field.AsMolecularField().(dc.DCMolecularField)
+		if molecular != dc.SwigcptrDCMolecularField(0) {
+			continue
+		}
+		if field.IsRequired() {
+			dg.AddData(VectorToByte(field.GetDefaultValue()))
+		}
 	}
+
+	if fields == nil {
+		dg.AddUint16(0)
+		client.RouteDatagram(dg)
+		return 1
+	}
+
+	packer := dc.NewDCPacker()
+	defer dc.DeleteDCPacker(packer)
+
+	length := uint16(0)
+	fields.ForEach(func(l1, data lua.LValue) {
+		name := string(l1.(lua.LString))
+		field := dclass.GetFieldByName(name)
+		if field == dc.SwigcptrDCField(0) {
+			L.ArgError(4, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", name, className))
+			return
+		}
+		length++
+		packer.RawPackUint16(uint(field.GetNumber()))
+		packer.BeginPack(field)
+		core.PackLuaValue(packer, data)
+		if !packer.EndPack() {
+			L.ArgError(4, "Pack failed!")
+			return
+		}
+
+	})
+	packedData := packer.GetBytes()
+	dg.AddUint16(length)
+	dg.AddVector(packedData)
+
+	dc.DeleteVector(packedData)
+	packer.ClearData()
 
 	client.RouteDatagram(dg)
 	return 1

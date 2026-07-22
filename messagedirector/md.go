@@ -8,6 +8,7 @@ import (
 	"otpgo/core"
 	"otpgo/net"
 	. "otpgo/util"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -48,6 +49,8 @@ type MessageDirector struct {
 	// datagrams to be processed.
 	shouldProcess chan bool
 
+	forwards map[uint16]Channel_t
+
 	// If an MD is configurated to be upstream, it will connect to the downstream MD and route channelmap
 	// events through it. Clients subscribing to channels that reside in other parts of the network will
 	// receive updates for them through the downstream MD.
@@ -71,6 +74,11 @@ func Start() {
 	MD.freeParticipantIds = NewMutexMap[uint32, bool]()
 	MD.previousAllocatedParticipantId.Store(0)
 	MD.Handler = MD
+
+	MD.forwards = make(map[uint16]Channel_t)
+	for _, forward := range core.Config.MessageDirector.Forwarding {
+		MD.forwards[forward.Msgtype] = forward.Channel
+	}
 
 	channelMap := ChannelMap{}
 	channelMap.init()
@@ -176,6 +184,17 @@ func (m *MessageDirector) queueLoop() {
 					mdDg := &MDDatagram{dg: seekDgi, sender: obj.md}
 					for _, recv := range receivers {
 						channelMap.Send(recv, mdDg)
+					}
+
+					if len(m.forwards) > 0 {
+						peek := NewDatagramIterator(&obj.dg)
+						peek.Seek(dgi.Tell())
+						if peek.RemainingSize() >= Chansize+2 {
+							peek.ReadChannel()
+							if forward, ok := m.forwards[peek.ReadUint16()]; ok && !slices.Contains(receivers, forward) {
+								channelMap.Send(forward, mdDg)
+							}
+						}
 					}
 
 					// Send message upstream if necessary

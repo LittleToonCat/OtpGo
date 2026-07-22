@@ -500,10 +500,16 @@ func (c *Client) notifyInterestDone(interestId uint16, callers []Channel_t) {
 		return
 	}
 
+	parent := Doid_t(0)
+	if i, ok := c.interests.Get(interestId); ok {
+		parent = i.parent
+	}
+
 	resp := NewDatagram()
 	resp.AddMultipleServerHeader(callers, c.channel, CLIENT_AGENT_SET_INTEREST)
 	resp.AddChannel(c.channel)
 	resp.AddUint16(interestId)
+	resp.AddDoid(parent)
 	c.RouteDatagram(resp)
 }
 

@@ -103,8 +103,12 @@ type ServerConfig struct {
 		Class string
 	}
 	MessageDirector struct {
-		Bind    string
-		Connect string
+		Bind       string
+		Connect    string
+		Forwarding []struct {
+			Msgtype uint16
+			Channel util.Channel_t
+		}
 	}
 	Debug struct {
 		Pprof bool

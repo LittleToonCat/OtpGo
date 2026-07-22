@@ -74,12 +74,14 @@ func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
 	return dbss
 }
 
-func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) {
-	do := dgi.ReadDoid()
+func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, do Doid_t, sender Channel_t) {
 	parent := dgi.ReadDoid()
 	zone := dgi.ReadZone()
+	dgi.ReadChannel() // owner
+	dcId := dgi.ReadUint16()
+	context := dgi.ReadUint32()
 
-	s.log.Debugf("Received activate for object=%d, other=%t", do, other)
+	s.log.Debugf("Received activate for object=%d", do)
 
 	if _, ok := s.objects[do]; ok {
 		s.log.Warnf("Received activate for already-active object with id %d", do)
@@ -89,7 +91,6 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 		return
 	}
 
-	dcId := dgi.ReadUint16()
 	if core.DC.GetNumClasses() < int(dcId) {
 		s.log.Errorf("Received activate for unknown dclass id %d", dcId)
 		return
@@ -112,12 +113,23 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 		dgQueue: []Datagram{},
 	}
 
-	if other {
+	DCLock.Lock()
+	defer DCLock.Unlock()
+
+	numFields := dclass.GetNumInheritedFields()
+	for i := 0; i < numFields; i++ {
+		dcField := dclass.GetInheritedField(i)
+		molecular := dcField.AsMolecularField().(dc.DCMolecularField)
+		if molecular != dc.SwigcptrDCMolecularField(0) {
+			continue
+		}
+		if dcField.IsRequired() {
+			dgi.SkipDCField(dcField, false)
+		}
+	}
+
+	if dgi.RemainingSize() >= 2 {
 		count := dgi.ReadUint16()
-
-		DCLock.Lock()
-		defer DCLock.Unlock()
-
 		for i := uint16(0); i < count; i++ {
 			field := dgi.ReadUint16()
 			dcField := dclass.GetFieldByIndex(int(field))
@@ -131,6 +143,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 				dgi.SkipDCField(dcField, false)
 				continue
 			}
+
 			data, ok := dgi.ReadDCField(dcField, true, false)
 			if !ok {
 				s.log.Errorf("Received invalid update data for field \"%s\"!", dcField.GetName())
@@ -171,6 +184,14 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, other bool) 
 	s.RouteDatagram(dg)
 
 	s.context++
+
+	if context != 0 {
+		resp := NewDatagram()
+		resp.AddServerHeader(sender, Channel_t(do), STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT_RESP)
+		resp.AddUint32(context)
+		resp.AddDoid(do)
+		s.RouteDatagram(resp)
+	}
 }
 
 func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *DatagramIterator) {
@@ -484,7 +505,7 @@ func (s *DatabaseStateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator)
 	case STATESERVER_OBJECT_CREATE_WITH_REQUIRED_CONTEXT:
 		fallthrough
 	case STATESERVER_OBJECT_CREATE_WITH_REQUIR_OTHER_CONTEXT:
-		s.handleActivate(dgi, msgType == STATESERVER_OBJECT_CREATE_WITH_REQUIR_OTHER_CONTEXT)
+		s.handleActivate(dgi, Doid_t(receivers[0]), sender)
 	case DBSS_OBJECT_GET_ACTIVATED:
 		context := dgi.ReadUint32()
 		doId := dgi.ReadDoid()

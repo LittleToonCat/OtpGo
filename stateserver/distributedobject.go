@@ -870,8 +870,8 @@ func (d *DistributedObject) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 			dg := NewDatagram()
 			dg.AddServerHeader(d.ownerChannel, sender, STATESERVER_OBJECT_CHANGE_OWNER_RECV)
 			dg.AddDoid(d.do)
-			dg.AddChannel(newOwner)
-			dg.AddChannel(d.ownerChannel)
+			dg.AddUint32(uint32(newOwner))
+			dg.AddUint32(uint32(d.ownerChannel))
 			d.RouteDatagramEarly(dg)
 		}
 

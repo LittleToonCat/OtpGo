@@ -198,6 +198,34 @@ func (s *StateServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		s.RouteDatagram(dg)
 	case STATESERVER_OBJECT_DELETE_RAM:
 		s.handleDelete(dgi, sender)
+	case STATESERVER_ADD_AI_RECV:
+		if sender == s.control {
+			return
+		}
+
+		do := dgi.ReadDoid()
+		aiChannel := Channel_t(dgi.ReadUint32())
+
+		dg = NewDatagram()
+		dg.AddServerHeader(Channel_t(do), s.control, STATESERVER_ADD_AI_RECV)
+		dg.AddChannel(aiChannel)
+		s.RouteDatagram(dg)
+	case CLIENT_AGENT_SET_INTEREST:
+		clientChannel := dgi.ReadChannel()
+		interestId := dgi.ReadUint16()
+		parent := dgi.ReadDoid()
+
+		obj, ok := s.objects[parent]
+		if !ok || obj.aiChannel == INVALID_CHANNEL {
+			s.log.Debugf("Cannot forward interest done for client %d, unknown parent %d", clientChannel, parent)
+			return
+		}
+
+		dg = NewDatagram()
+		dg.AddServerHeader(obj.aiChannel, s.control, CLIENT_AGENT_SET_INTEREST)
+		dg.AddChannel(clientChannel)
+		dg.AddUint16(interestId)
+		s.RouteDatagram(dg)
 	default:
 		s.log.Warnf("Received unknown msgtype %d from sender %d", msgType, sender)
 	}
