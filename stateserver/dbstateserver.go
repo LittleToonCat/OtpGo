@@ -658,9 +658,14 @@ func (s *DatabaseStateServer) finishFieldQuery(query *FieldQuery, dgi *DatagramI
 			if dgi.ReadBool() { // found
 				fieldData[fieldId] = data
 			} else {
-				s.log.Errorf("queryFields: Data for field \"%s\" not found", field)
-				success = false
-				break
+				dcField := core.DC.GetFieldByIndex(int(fieldId))
+				if dcField != dc.SwigcptrDCField(0) && dcField.HasDefaultValue() {
+					fieldData[fieldId] = VectorToByte(dcField.GetDefaultValue())
+				} else {
+					s.log.Errorf("queryFields: Data for field \"%s\" not found", field)
+					success = false
+					break
+				}
 			}
 		} else {
 			s.log.Errorf("queryFields: Got unexpected field \"%s\"", field)
