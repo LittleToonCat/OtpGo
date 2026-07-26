@@ -429,7 +429,9 @@ func LuaHasKeyword(L *lua.LState) int {
 func LuaGetDefaultValue(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 	dg := NewDatagram()
+	DCLock.Lock()
 	dg.AddVector(dcField.GetDefaultValue())
+	DCLock.Unlock()
 	L.Push(lua.LString(string(dg.Bytes())))
 	return 1
 }
@@ -471,7 +473,9 @@ func LuaIsParameter(L *lua.LState) int {
 }
 
 func NewLuaDCPacker(L *lua.LState) int {
+	DCLock.Lock()
 	packer := dc.NewDCPacker()
+	DCLock.Unlock()
 	ud := L.NewUserData()
 	ud.Value = packer
 	L.SetMetatable(ud, L.GetTypeMetatable(luaDCPackerType))
@@ -498,7 +502,9 @@ var DCPackerMethods = map[string]lua.LGFunction{
 
 func DeleteLuaDCPacker(L *lua.LState) int {
 	packer := CheckDCPacker(L, 1)
+	DCLock.Lock()
 	dc.DeleteDCPacker(packer)
+	DCLock.Unlock()
 	return 1
 }
 

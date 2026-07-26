@@ -259,7 +259,9 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 				s.log.Errorf("Received invalid update data for field \"%s\"!\n%x", field, data)
 				continue
 			}
+			DCLock.Lock()
 			s.log.Debugf("Got data for field \"%s\": %s", fields[i], FormatFieldData(dcField, data))
+			DCLock.Unlock()
 			obj.fieldUpdates[dcField] = data
 		} else {
 			s.log.Debugf("Data for field \"%s\" not found", fields[i])
@@ -281,8 +283,10 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 				delete(obj.fieldUpdates, dcField)
 			} else {
 				// Use the default value.
+				DCLock.Lock()
 				obj.requiredFields[dcField] = VectorToByte(dcField.GetDefaultValue())
 				s.log.Debugf("Using default value required for field \"%s\" %s", dcField.GetName(), FormatFieldData(dcField, obj.requiredFields[dcField]))
+				DCLock.Unlock()
 			}
 		} else if dcField.IsRam() {
 			if data, ok := obj.fieldUpdates[dcField]; ok {
@@ -387,7 +391,9 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 		return
 	}
 
+	DCLock.Lock()
 	s.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.\n%s", field.GetName(), FormatFieldData(field, data), do, dgi)
+	DCLock.Unlock()
 
 	dg := NewDatagram()
 	dg.AddServerHeader(s.database, Channel_t(do), DBSERVER_SET_STORED_VALUES)
@@ -659,9 +665,16 @@ func (s *DatabaseStateServer) finishFieldQuery(query *FieldQuery, dgi *DatagramI
 				fieldData[fieldId] = data
 			} else {
 				dcField := core.DC.GetFieldByIndex(int(fieldId))
-				if dcField != dc.SwigcptrDCField(0) && dcField.HasDefaultValue() {
-					fieldData[fieldId] = VectorToByte(dcField.GetDefaultValue())
-				} else {
+				hasDefault := false
+				if dcField != dc.SwigcptrDCField(0) {
+					DCLock.Lock()
+					if dcField.HasDefaultValue() {
+						fieldData[fieldId] = VectorToByte(dcField.GetDefaultValue())
+						hasDefault = true
+					}
+					DCLock.Unlock()
+				}
+				if !hasDefault {
 					s.log.Errorf("queryFields: Data for field \"%s\" not found", field)
 					success = false
 					break
