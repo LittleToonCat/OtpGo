@@ -120,7 +120,7 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 		ca:                    ca,
 		conn:                  conn,
 		queue:                 []Datagram{},
-		shouldProcess:         make(chan bool),
+		shouldProcess:         make(chan bool, 1),
 		stopChan:              make(chan bool),
 		createContextMap:      NewMutexMap[uint32, func(doId Doid_t)](),
 		getContextMap:         NewMutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)](),
