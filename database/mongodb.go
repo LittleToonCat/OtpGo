@@ -128,6 +128,10 @@ func PackBsonValue(packer dc.DCPacker, value interface{}) {
 	case dc.PTDouble:
 		if double, ok := value.(float64); ok {
 			packer.PackDouble(double)
+		} else if intValue, ok := value.(int32); ok {
+			packer.PackDouble(float64(intValue))
+		} else if int64Value, ok := value.(int64); ok {
+			packer.PackDouble(float64(int64Value))
 		}
 	case dc.PTInt:
 		fallthrough
@@ -140,6 +144,8 @@ func PackBsonValue(packer dc.DCPacker, value interface{}) {
 			packer.PackInt(int(intValue))
 		} else if int64Value, ok := value.(int64); ok {
 			packer.PackInt64(int64Value)
+		} else if double, ok := value.(float64); ok {
+			packer.PackInt64(int64(double))
 		}
 	case dc.PTString:
 		if stringValue, ok := value.(string); ok {
@@ -150,6 +156,10 @@ func PackBsonValue(packer dc.DCPacker, value interface{}) {
 			packer.PackString(string(binData.Data))
 		}
 	default:
+		if binData, ok := value.(primitive.Binary); ok {
+			packer.PackString(string(binData.Data))
+			return
+		}
 		if array, ok := value.(bson.A); ok {
 			packer.Push()
 			for _, v := range array {
