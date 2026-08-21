@@ -7,6 +7,7 @@ import (
 	"otpgo/messagedirector"
 	. "otpgo/util"
 	"strconv"
+	"time"
 
 	"fmt"
 
@@ -67,6 +68,19 @@ var ParticipantMethods = map[string]lua.LGFunction{
 	"createDatabaseObject":         LuaCreateDatabaseObject,
 	"getDatabaseValues":            LuaGetDatabaseValues,
 	"packFieldToDatagram":          LuaPackFieldToDatagram,
+	"doLater":                      LuaDoLater,
+}
+
+func LuaDoLater(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	seconds := float64(L.CheckNumber(2))
+	callback := L.CheckFunction(3)
+
+	sender := participant.sender
+	time.AfterFunc(time.Duration(seconds*float64(time.Second)), func() {
+		participant.CallLuaFunction(callback, sender)
+	})
+	return 0
 }
 
 func LuaInfo(L *lua.LState) int {
