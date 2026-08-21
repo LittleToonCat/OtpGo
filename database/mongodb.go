@@ -399,8 +399,14 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
 	filter := bson.M{"_id": doId}
 
+	projection := bson.M{"dclass": 1}
+	for _, field := range fields {
+		projection["fields."+field] = 1
+	}
+
 	var object StoredObject
-	err := b.objects.FindOne(context.Background(), filter).Decode(&object)
+	err := b.objects.FindOne(context.Background(), filter,
+		options.FindOne().SetProjection(projection)).Decode(&object)
 	if err != nil {
 		b.db.log.Errorf("Failed to retrieve object %d from database: %s", doId, err.Error())
 
@@ -508,7 +514,8 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 	filter := bson.M{"_id": doId}
 
 	var object StoredObject
-	err := b.objects.FindOne(context.Background(), filter).Decode(&object)
+	err := b.objects.FindOne(context.Background(), filter,
+		options.FindOne().SetProjection(bson.M{"dclass": 1})).Decode(&object)
 	if err != nil {
 		b.db.log.Errorf("Failed to retrieve object %d from database: %s", doId, err.Error())
 		return
