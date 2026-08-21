@@ -128,6 +128,10 @@ func PackBsonValue(packer dc.DCPacker, value interface{}) {
 	case dc.PTDouble:
 		if double, ok := value.(float64); ok {
 			packer.PackDouble(double)
+		} else if intValue, ok := value.(int32); ok {
+			packer.PackDouble(float64(intValue))
+		} else if int64Value, ok := value.(int64); ok {
+			packer.PackDouble(float64(int64Value))
 		}
 	case dc.PTInt:
 		fallthrough
@@ -140,6 +144,8 @@ func PackBsonValue(packer dc.DCPacker, value interface{}) {
 			packer.PackInt(int(intValue))
 		} else if int64Value, ok := value.(int64); ok {
 			packer.PackInt64(int64Value)
+		} else if double, ok := value.(float64); ok {
+			packer.PackInt64(int64(double))
 		}
 	case dc.PTString:
 		if stringValue, ok := value.(string); ok {
@@ -150,6 +156,10 @@ func PackBsonValue(packer dc.DCPacker, value interface{}) {
 			packer.PackString(string(binData.Data))
 		}
 	default:
+		if binData, ok := value.(primitive.Binary); ok {
+			packer.PackString(string(binData.Data))
+			return
+		}
 		if array, ok := value.(bson.A); ok {
 			packer.Push()
 			for _, v := range array {
@@ -389,8 +399,14 @@ func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCFiel
 func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
 	filter := bson.M{"_id": doId}
 
+	projection := bson.M{"dclass": 1}
+	for _, field := range fields {
+		projection["fields."+field] = 1
+	}
+
 	var object StoredObject
-	err := b.objects.FindOne(context.Background(), filter).Decode(&object)
+	err := b.objects.FindOne(context.Background(), filter,
+		options.FindOne().SetProjection(projection)).Decode(&object)
 	if err != nil {
 		b.db.log.Errorf("Failed to retrieve object %d from database: %s", doId, err.Error())
 
@@ -498,7 +514,8 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 	filter := bson.M{"_id": doId}
 
 	var object StoredObject
-	err := b.objects.FindOne(context.Background(), filter).Decode(&object)
+	err := b.objects.FindOne(context.Background(), filter,
+		options.FindOne().SetProjection(bson.M{"dclass": 1})).Decode(&object)
 	if err != nil {
 		b.db.log.Errorf("Failed to retrieve object %d from database: %s", doId, err.Error())
 		return
