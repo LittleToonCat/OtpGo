@@ -1,7 +1,6 @@
 package util
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
