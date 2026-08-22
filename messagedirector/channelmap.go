@@ -467,7 +467,7 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 
 	MDLog.Debugf("%s has subscribed to channel %d", p.participant.Name(), ch)
 
-	if subsLength == 1 {
+	if subsLength == 0 {
 		MD.AddChannel(ch)
 	}
 }
