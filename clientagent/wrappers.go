@@ -547,16 +547,6 @@ func LuaQueryObjectFields(L *lua.LState) int {
 			return
 		}
 
-		_dgi := dgi.Copy()
-
-		var fields []uint16
-		for _dgi.RemainingSize() >= Blobsize {
-			fields = append(fields, _dgi.ReadUint16())
-			_dgi.ReadBlob()
-		}
-		found := len(fields)
-		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
-
 		fieldTable := client.ca.L.NewTable()
 
 		DCLock.Lock()
@@ -569,21 +559,24 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		defer dc.DeleteDCPacker(unpacker)
 
 		unpacker.SetUnpackData(packedData)
-		for i := 0; i < found; i++ {
+		found := 0
+		for int64(unpacker.GetNumUnpackedBytes()) < packedData.Size() {
 			fieldId := unpacker.RawUnpackUint16().(uint)
 			field := cls.GetFieldByIndex(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
 				client.log.Warnf("queryObjectFields: Unknown field %d for class \"%s\"!", fieldId, clsName)
-				continue
+				break
 			}
 			unpacker.BeginUnpack(field)
 			lValue := core.UnpackDataToLuaValue(unpacker, client.ca.L)
 			if !unpacker.EndUnpack() {
 				client.log.Warnf("queryObjectFields: Unable to unpack field \"%s\"!\n%s", field.GetName(), DumpUnpacker(unpacker))
-				continue
+				break
 			}
 			fieldTable.RawSetString(field.GetName(), lValue)
+			found++
 		}
+		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
 
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
@@ -636,16 +629,6 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 			return
 		}
 
-		_dgi := dgi.Copy()
-
-		var fields []uint16
-		for _dgi.RemainingSize() >= Blobsize {
-			fields = append(fields, _dgi.ReadUint16())
-			_dgi.ReadBlob()
-		}
-		found := len(fields)
-		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
-
 		resultTable := client.ca.L.NewTable()
 
 		DCLock.Lock()
@@ -658,25 +641,28 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 		defer dc.DeleteDCPacker(unpacker)
 
 		unpacker.SetUnpackData(packedData)
-		for i := 0; i < found; i++ {
+		found := 0
+		for int64(unpacker.GetNumUnpackedBytes()) < packedData.Size() {
 			fieldId := unpacker.RawUnpackUint16().(uint)
 			field := cls.GetFieldByIndex(int(fieldId))
 			if field == dc.SwigcptrDCField(0) {
 				client.log.Warnf("queryObjectFields: Unknown field %d for class \"%s\"!", fieldId, clsName)
-				continue
+				break
 			}
 			unpacker.BeginUnpack(field)
 			lValue := core.UnpackDataToLuaValue(unpacker, client.ca.L)
 			if !unpacker.EndUnpack() {
 				client.log.Warnf("queryObjectFields: Unable to unpack field \"%s\"!\n%s", field.GetName(), DumpUnpacker(unpacker))
-				continue
+				break
 			}
 			fieldTable := client.ca.L.NewTable()
 			fieldTable.Append(lua.LString(field.GetName()))
 			fieldTable.Append(lValue)
 
 			resultTable.Append(fieldTable)
+			found++
 		}
+		client.log.Debugf("queryObjectFields: Found %d fields for %s(%d)", found, clsName, doId)
 
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, resultTable)
 	}
