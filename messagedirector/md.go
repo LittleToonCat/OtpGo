@@ -64,9 +64,6 @@ func init() {
 
 func Start() {
 	MD = &MessageDirector{}
-	MD.Queue = make(map[uint32][]QueueEntry)
-	MD.queueCurrentPosition.Store(1)
-	MD.queuePreviousStoredPosition.Store(0)
 	MD.shouldProcess = make(chan bool)
 	MD.participants = NewMutexMap[uint32, MDParticipant]()
 	MD.freeParticipantIds = NewMutexMap[uint32, bool]()
@@ -131,6 +128,9 @@ func (m *MessageDirector) enqueue(dg Datagram, p MDParticipant) {
 
 	select {
 	case m.shouldProcess <- true:
+	default:
+	}
+}
 
 func (m *MessageDirector) enqueueEarly(dg Datagram, p MDParticipant) {
 	m.queueLock.Lock()

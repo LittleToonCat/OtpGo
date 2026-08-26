@@ -12,10 +12,6 @@ var rangeLock sync.Mutex
 var channelMap *ChannelMap
 
 type MDDatagram struct {
-	dg       *DatagramIterator
-	sender   MDParticipant
-	sent     []*Subscriber
-	sendLock sync.Mutex
 	dg     *DatagramIterator
 	sender MDParticipant
 	sent   map[*Subscriber]struct{}
@@ -26,10 +22,11 @@ func NewMDDatagram(dg *DatagramIterator, sender MDParticipant) *MDDatagram {
 }
 
 func (m *MDDatagram) HasSent(p *Subscriber) bool {
-	for _, sub := range m.sent {
-		if sub == p {
-			return true
 	_, ok := m.sent[p]
+	return ok
+}
+
+func (m *MDDatagram) MarkSent(p *Subscriber) {
 	m.sent[p] = struct{}{}
 }
 
@@ -212,6 +209,7 @@ func (r *RangeMap) removeIntervalSub(int Range, p *Subscriber) {
 func (r *RangeMap) Remove(rng Range, sub *Subscriber) {
 	rangeLock.Lock()
 	r.remove(rng, sub, false)
+	r.hasRanges.Store(len(r.intervals) > 0)
 	rangeLock.Unlock()
 }
 
@@ -428,11 +426,9 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 				tempChannelsSlice := make([]Channel_t, 0)
 				tempChannelsSlice = append(p.channels[:n], p.channels[n+1:]...)
 				p.channels = tempChannelsSlice
+				break
 			}
 		}
-	} else {
-		c.ranges.Remove(Range{ch, ch}, p)
-	}
 
 		return newSubs, len(newSubs) == 0
 	})
@@ -465,8 +461,6 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 		return
 	}
 
-	lock.Lock()
-	subs, _ := c.subscriptions.Get(ch)
 	var subsLength int
 	c.subscriptions.Update(ch, func(subs []*Subscriber, ok bool) []*Subscriber {
 		subsLength = len(subs)
