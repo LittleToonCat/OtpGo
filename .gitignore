@@ -9,6 +9,9 @@ otpgo
 *.so
 *.dylib
 
+# Output build directory
+build
+
 # Test binary, built with `go test -c`
 *.test
 
