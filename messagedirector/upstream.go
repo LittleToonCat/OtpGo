@@ -26,6 +26,7 @@ func NewMDUpstream(md *MessageDirector, address string) *MDUpstream {
 	}
 	socket := net.NewSocketTransport(conn, 0, 4096)
 	up.client = net.NewClient(socket, up, 60*time.Second)
+	up.client.Start()
 	MDLog.Infof("Successfully connected to upstream at %s", address)
 	if core.Config.Daemon.Name != "" {
 		up.SetName(core.Config.Daemon.Name)
@@ -75,18 +76,7 @@ func (m *MDUpstream) HandleDatagram(datagram Datagram, dgi *DatagramIterator) {
 }
 
 func (m *MDUpstream) ReceiveDatagram(datagram Datagram) {
-	MD.queueLock.Lock()
-	nextPos := MD.queuePreviousStoredPosition.Add(1)
-	queueEntry := QueueEntry{datagram, nil}
-	queueSlice := make([]QueueEntry, 0)
-	queueSlice = append(queueSlice, queueEntry)
-	MD.Queue[nextPos] = queueSlice
-	MD.queueLock.Unlock()
-
-	select {
-	case MD.shouldProcess <- true:
-	default:
-	}
+	MD.enqueue(datagram, nil)
 }
 
 func (m *MDUpstream) Terminate(err error) {

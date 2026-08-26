@@ -24,8 +24,12 @@ func TestMain(m *testing.M) {
 
 	StartDaemon(
 		core.ServerConfig{MessageDirector: struct {
-			Bind    string
-			Connect string
+			Bind       string
+			Connect    string
+			Forwarding []struct {
+				Msgtype uint16
+				Channel Channel_t
+			}
 		}{Bind: "127.0.0.1:57123", Connect: "127.0.0.1:57124"}})
 	Start()
 
@@ -198,7 +202,7 @@ func TestMD_PostRemove(t *testing.T) {
 	prDg := (&TestDatagram{}).Create([]Channel_t{6969}, 6969, 2000)
 	prDg.AddString("nosyliam is epic")
 
-	addPrDg := (&TestDatagram{}).CreateAddPostRemove(420, *prDg)
+	addPrDg := (&TestDatagram{}).CreateAddPostRemove(*prDg)
 	client1.SendDatagram(*addPrDg)
 
 	// Post remove should be pre-routed upstream
@@ -214,7 +218,7 @@ func TestMD_PostRemove(t *testing.T) {
 	client1 = (&TestMDConnection{}).Connect(":57123", "client #1")
 
 	// Upstream should receive the PR and a clear_post_remove
-	clearPrDg := (&TestDatagram{}).CreateClearPostRemove(420)
+	clearPrDg := (&TestDatagram{}).CreateClearPostRemove()
 	mainClient.ExpectMany(t, []Datagram{*prDg, *clearPrDg}, false, true)
 
 	// Reconnect; the PR shouldn't be sent again
@@ -223,12 +227,12 @@ func TestMD_PostRemove(t *testing.T) {
 	mainClient.ExpectNone(t)
 
 	// Add the previous PR to the other client
-	addPrDg = (&TestDatagram{}).CreateAddPostRemove(69, *prDg)
+	addPrDg = (&TestDatagram{}).CreateAddPostRemove(*prDg)
 	client2.SendDatagram(*addPrDg)
 	mainClient.Expect(t, *addPrDg, false)
 
 	// Cancel it!
-	clearPrDg = (&TestDatagram{}).CreateClearPostRemove(69)
+	clearPrDg = (&TestDatagram{}).CreateClearPostRemove()
 	client2.SendDatagram(*clearPrDg)
 	mainClient.Expect(t, *clearPrDg, false)
 
@@ -239,10 +243,10 @@ func TestMD_PostRemove(t *testing.T) {
 
 	// Let's add some more PRs to client 1
 	prs := []Datagram{
-		*(&TestDatagram{}).CreateAddPostRemove(69, *prDg),
-		*(&TestDatagram{}).CreateAddPostRemove(69,
+		*(&TestDatagram{}).CreateAddPostRemove(*prDg),
+		*(&TestDatagram{}).CreateAddPostRemove(
 			*(&TestDatagram{}).Create([]Channel_t{0x1337}, 6969, 0xBEEF)),
-		*(&TestDatagram{}).CreateAddPostRemove(420,
+		*(&TestDatagram{}).CreateAddPostRemove(
 			*(&TestDatagram{}).Create([]Channel_t{0x13337}, 6969, 0xDEAD)),
 	}
 	client1.SendDatagram(prs[0])
@@ -265,8 +269,7 @@ func TestMD_PostRemove(t *testing.T) {
 		*prDg,
 		*(&TestDatagram{}).Create([]Channel_t{0x1337}, 6969, 0xBEEF),
 		*(&TestDatagram{}).Create([]Channel_t{0x13337}, 6969, 0xDEAD),
-		*(&TestDatagram{}).CreateClearPostRemove(69),
-		*(&TestDatagram{}).CreateClearPostRemove(420),
+		*(&TestDatagram{}).CreateClearPostRemove(),
 	}
 
 	mainClient.ExpectMany(t, expected, false, true)

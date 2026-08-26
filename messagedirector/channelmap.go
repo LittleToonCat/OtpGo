@@ -5,28 +5,29 @@ import (
 	"slices"
 	"sort"
 	"sync"
+	"sync/atomic"
 )
 
-// TODO: Rewrite everything for efficiency
-
-var lock sync.Mutex
 var rangeLock sync.Mutex
 var channelMap *ChannelMap
 
 type MDDatagram struct {
-	dg       *DatagramIterator
-	sender   MDParticipant
-	sent     []*Subscriber
-	sendLock sync.Mutex
+	dg     *DatagramIterator
+	sender MDParticipant
+	sent   map[*Subscriber]struct{}
+}
+
+func NewMDDatagram(dg *DatagramIterator, sender MDParticipant) *MDDatagram {
+	return &MDDatagram{dg: dg, sender: sender, sent: make(map[*Subscriber]struct{})}
 }
 
 func (m *MDDatagram) HasSent(p *Subscriber) bool {
-	for _, sub := range m.sent {
-		if sub == p {
-			return true
-		}
-	}
-	return false
+	_, ok := m.sent[p]
+	return ok
+}
+
+func (m *MDDatagram) MarkSent(p *Subscriber) {
+	m.sent[p] = struct{}{}
 }
 
 type Range struct {
@@ -42,6 +43,8 @@ type RangeMap struct {
 	subscribers  []*Subscriber
 	intervals    map[Range][]*Subscriber
 	intervalSubs map[*Subscriber][]Range
+
+	hasRanges atomic.Bool
 }
 
 func NewRangeMap() *RangeMap {
@@ -114,6 +117,7 @@ func addRange(slice []Range, r Range) []Range {
 func (r *RangeMap) Add(rng Range, sub *Subscriber) {
 	rangeLock.Lock()
 	r.add(rng, sub)
+	r.hasRanges.Store(len(r.intervals) > 0)
 	MD.AddRange(rng.Min, rng.Max)
 	rangeLock.Unlock()
 }
@@ -205,6 +209,7 @@ func (r *RangeMap) removeIntervalSub(int Range, p *Subscriber) {
 func (r *RangeMap) Remove(rng Range, sub *Subscriber) {
 	rangeLock.Lock()
 	r.remove(rng, sub, false)
+	r.hasRanges.Store(len(r.intervals) > 0)
 	rangeLock.Unlock()
 }
 
@@ -308,10 +313,12 @@ func (r *RangeMap) remove(rng Range, sub *Subscriber, nested bool) {
 }
 
 func (r *RangeMap) Send(ch Channel_t, data *MDDatagram) {
+	if !r.hasRanges.Load() {
+		return
+	}
+
 	rangeLock.Lock()
 	defer rangeLock.Unlock()
-
-	data.sendLock.Lock()
 
 	for rng, subs := range r.intervals {
 		if rng.Min <= ch && rng.Max >= ch {
@@ -319,15 +326,13 @@ func (r *RangeMap) Send(ch Channel_t, data *MDDatagram) {
 				if data.sender == nil || sub.participant.Subscriber() != data.sender.Subscriber() {
 					// found = true
 					if !data.HasSent(sub.participant.Subscriber()) {
-						data.sent = append(data.sent, sub.participant.Subscriber())
+						data.MarkSent(sub.participant.Subscriber())
 						sub.participant.HandleDatagram(*data.dg.Dg, data.dg.Copy())
 					}
 				}
 			}
 		}
 	}
-
-	data.sendLock.Unlock()
 }
 
 // Each MD participant is represented as a subscriber within the MD; when a participant desires to listen to
@@ -403,34 +408,32 @@ func (c *ChannelMap) UnsubscribeChannel(p *Subscriber, ch Channel_t) {
 		return
 	}
 
-	lock.Lock()
+	var hadDirectSubs bool
+	c.subscriptions.UpdateOrDelete(ch, func(subs []*Subscriber, ok bool) ([]*Subscriber, bool) {
+		hadDirectSubs = len(subs) > 0
+		if !hadDirectSubs {
+			c.ranges.Remove(Range{ch, ch}, p)
+			return subs, false
+		}
 
-	subs, _ := c.subscriptions.Get(ch)
-	if len(subs) > 0 {
 		i := slices.Index(subs, p)
-		// Delete element. We have to recreate the slice, otherwise participants may get stuck in the backing array.
-		tempSubsSlice := make([]*Subscriber, 0)
-		tempSubsSlice = append(subs[:i], subs[i+1:]...)
-		subs = tempSubsSlice
+		newSubs := make([]*Subscriber, 0, len(subs)-1)
+		newSubs = append(newSubs, subs[:i]...)
+		newSubs = append(newSubs, subs[i+1:]...)
+
 		for n, userCh := range p.channels {
 			if userCh == ch {
 				tempChannelsSlice := make([]Channel_t, 0)
 				tempChannelsSlice = append(p.channels[:n], p.channels[n+1:]...)
 				p.channels = tempChannelsSlice
+				break
 			}
 		}
-	} else {
-		c.ranges.Remove(Range{ch, ch}, p)
-	}
+
+		return newSubs, len(newSubs) == 0
+	})
 
 	MDLog.Debugf("%s has unsubscribed from channel %d", p.participant.Name(), ch)
-
-	if len(subs) == 0 {
-		c.subscriptions.Delete(ch, false)
-	} else {
-		c.subscriptions.Set(ch, subs, false)
-	}
-	lock.Unlock()
 
 	if !c.IsAnySubscribed(ch) {
 		MD.RemoveChannel(ch)
@@ -458,12 +461,12 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 		return
 	}
 
-	lock.Lock()
-	subs, _ := c.subscriptions.Get(ch)
-	c.subscriptions.Set(ch, append(subs, p), false)
-	p.channels = append(p.channels, ch)
-	subsLength := len(subs)
-	lock.Unlock()
+	var subsLength int
+	c.subscriptions.Update(ch, func(subs []*Subscriber, ok bool) []*Subscriber {
+		subsLength = len(subs)
+		p.channels = append(p.channels, ch)
+		return append(slices.Clone(subs), p)
+	})
 
 	MDLog.Debugf("%s has subscribed to channel %d", p.participant.Name(), ch)
 
@@ -473,22 +476,14 @@ func (c *ChannelMap) SubscribeChannel(p *Subscriber, ch Channel_t) {
 }
 
 func (c *ChannelMap) Send(ch Channel_t, data *MDDatagram) {
-	lock.Lock()
-	currentSubs, _ := c.subscriptions.Get(ch)
-	subs := make([]*Subscriber, len(currentSubs))
-	copy(subs, currentSubs)
-	lock.Unlock()
-	if len(subs) > 0 {
-		data.sendLock.Lock()
-		for _, sub := range subs {
-			if data.sender == nil || sub.participant.Subscriber() != data.sender.Subscriber() {
-				if !data.HasSent(sub.participant.Subscriber()) {
-					data.sent = append(data.sent, sub.participant.Subscriber())
-					sub.participant.HandleDatagram(*data.dg.Dg, data.dg.Copy())
-				}
+	subs, _ := c.subscriptions.Get(ch)
+	for _, sub := range subs {
+		if data.sender == nil || sub.participant.Subscriber() != data.sender.Subscriber() {
+			if !data.HasSent(sub.participant.Subscriber()) {
+				data.MarkSent(sub.participant.Subscriber())
+				sub.participant.HandleDatagram(*data.dg.Dg, data.dg.Copy())
 			}
 		}
-		data.sendLock.Unlock()
 	}
 	c.ranges.Send(ch, data)
 }

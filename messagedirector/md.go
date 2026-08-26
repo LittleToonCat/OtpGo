@@ -40,10 +40,8 @@ type MessageDirector struct {
 
 	// MD participants may directly queue datagrams to be routed by adding it into the
 	// queue map, where they will be processed asynchronously
-	Queue                       map[uint32][]QueueEntry
-	queueLock                   sync.Mutex
-	queueCurrentPosition        atomic.Uint32
-	queuePreviousStoredPosition atomic.Uint32
+	Queue     [][]QueueEntry
+	queueLock sync.Mutex
 
 	// RouteDatagram will insert to this channel to let the queue loop know there are
 	// datagrams to be processed.
@@ -66,9 +64,6 @@ func init() {
 
 func Start() {
 	MD = &MessageDirector{}
-	MD.Queue = make(map[uint32][]QueueEntry)
-	MD.queueCurrentPosition.Store(1)
-	MD.queuePreviousStoredPosition.Store(0)
 	MD.shouldProcess = make(chan bool)
 	MD.participants = NewMutexMap[uint32, MDParticipant]()
 	MD.freeParticipantIds = NewMutexMap[uint32, bool]()
@@ -110,44 +105,94 @@ func (m *MessageDirector) queueIsEmpty() bool {
 	m.queueLock.Lock()
 	defer m.queueLock.Unlock()
 
-	// If we have no entries at all, return true.
-	if len(MD.Queue) == 0 {
-		return true
-	}
-
-	// Otherwise, check the rest of the entries for datagrams.
-	for _, entry := range MD.Queue {
-		if len(entry) > 0 {
-			return false
-		}
-	}
-
-	// If we got here, no entries have datagrams.
-	return true
+	return len(MD.Queue) == 0 || (len(MD.Queue) == 1 && len(MD.Queue[0]) == 0)
 }
 
 func (m *MessageDirector) getDatagramFromQueue() QueueEntry {
 	m.queueLock.Lock()
 	defer m.queueLock.Unlock()
-	curPos := MD.queueCurrentPosition.Load()
-	_, ok := MD.Queue[curPos]
-	hasDgs := ok && len(MD.Queue[curPos]) > 0
 
-	for !hasDgs {
-		// At this point, the first entry has run out of datagrams, so we will delete the entry and move on.
-		delete(MD.Queue, curPos)
-		curPos = MD.queueCurrentPosition.Add(1)
-		_, ok = MD.Queue[curPos]
-		hasDgs = ok && len(MD.Queue[curPos]) > 0
+	for len(MD.Queue) > 0 && len(MD.Queue[0]) == 0 {
+		MD.Queue = MD.Queue[1:]
 	}
 
-	obj := MD.Queue[curPos][0]
-	MD.Queue[curPos] = MD.Queue[curPos][1:]
+	obj := MD.Queue[0][0]
+	MD.Queue[0] = MD.Queue[0][1:]
 	return obj
 }
 
+func (m *MessageDirector) enqueue(dg Datagram, p MDParticipant) {
+	m.queueLock.Lock()
+	m.Queue = append(m.Queue, []QueueEntry{{dg, p}})
+	m.queueLock.Unlock()
+
+	select {
+	case m.shouldProcess <- true:
+	default:
+	}
+}
+
+func (m *MessageDirector) enqueueEarly(dg Datagram, p MDParticipant) {
+	m.queueLock.Lock()
+	if len(m.Queue) == 0 {
+		m.Queue = append(m.Queue, []QueueEntry{{dg, p}})
+	} else {
+		m.Queue[0] = append(m.Queue[0], QueueEntry{dg, p})
+	}
+	m.queueLock.Unlock()
+
+	select {
+	case m.shouldProcess <- true:
+	default:
+	}
+}
+
+func (m *MessageDirector) dispatchEntry(obj QueueEntry) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(DatagramIteratorEOF); ok {
+				MDLog.Error("Reached end of datagram")
+				// TODO
+			}
+		}
+	}()
+
+	// Iterate the datagram for receivers
+	var receivers []Channel_t
+	dgi := NewDatagramIterator(&obj.dg)
+	chanCount := dgi.ReadUint8()
+	for n := 0; uint8(n) < chanCount; n++ {
+		receivers = append(receivers, dgi.ReadChannel())
+	}
+
+	// MDLog.Debugf("Routing datagram to channels: %v", receivers)
+
+	// Send payload datagram to every available receiver
+	seekDgi := NewDatagramIterator(&obj.dg)
+	seekDgi.Seek(dgi.Tell())
+	mdDg := NewMDDatagram(seekDgi, obj.md)
+	for _, recv := range receivers {
+		channelMap.Send(recv, mdDg)
+	}
+
+	if len(m.forwards) > 0 {
+		peek := NewDatagramIterator(&obj.dg)
+		peek.Seek(dgi.Tell())
+		if peek.RemainingSize() >= Chansize+2 {
+			peek.ReadChannel()
+			if forward, ok := m.forwards[peek.ReadUint16()]; ok && !slices.Contains(receivers, forward) {
+				channelMap.Send(forward, mdDg)
+			}
+		}
+	}
+
+	// Send message upstream if necessary
+	if obj.md != nil && m.upstream != nil {
+		m.upstream.HandleDatagram(obj.dg, nil)
+	}
+}
+
 func (m *MessageDirector) queueLoop() {
-	finish := make(chan bool)
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt)
 
@@ -156,54 +201,7 @@ func (m *MessageDirector) queueLoop() {
 		case <-MD.shouldProcess:
 			for !m.queueIsEmpty() {
 				obj := m.getDatagramFromQueue()
-				go func() {
-					// We are running in a goroutine so that our main read loop will not crash if a datagram EOF is thrown.
-					defer func() {
-						if r := recover(); r != nil {
-							if _, ok := r.(DatagramIteratorEOF); ok {
-								MDLog.Error("Reached end of datagram")
-								// TODO
-							}
-							finish <- true
-						}
-					}()
-
-					// Iterate the datagram for receivers
-					var receivers []Channel_t
-					dgi := NewDatagramIterator(&obj.dg)
-					chanCount := dgi.ReadUint8()
-					for n := 0; uint8(n) < chanCount; n++ {
-						receivers = append(receivers, dgi.ReadChannel())
-					}
-
-					// MDLog.Debugf("Routing datagram to channels: %v", receivers)
-
-					// Send payload datagram to every available receiver
-					seekDgi := NewDatagramIterator(&obj.dg)
-					seekDgi.Seek(dgi.Tell())
-					mdDg := &MDDatagram{dg: seekDgi, sender: obj.md}
-					for _, recv := range receivers {
-						channelMap.Send(recv, mdDg)
-					}
-
-					if len(m.forwards) > 0 {
-						peek := NewDatagramIterator(&obj.dg)
-						peek.Seek(dgi.Tell())
-						if peek.RemainingSize() >= Chansize+2 {
-							peek.ReadChannel()
-							if forward, ok := m.forwards[peek.ReadUint16()]; ok && !slices.Contains(receivers, forward) {
-								channelMap.Send(forward, mdDg)
-							}
-						}
-					}
-
-					// Send message upstream if necessary
-					if obj.md != nil && m.upstream != nil {
-						m.upstream.HandleDatagram(obj.dg, nil)
-					}
-					finish <- true
-				}()
-				<-finish
+				m.dispatchEntry(obj)
 			}
 		case <-signalCh:
 			return
