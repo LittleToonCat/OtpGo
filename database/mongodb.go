@@ -40,25 +40,25 @@ type MongoBackend struct {
 	objects *mongo.Collection
 }
 
-func UnpackDataToBsonArray(unpacker dc.DCPacker, array *bson.A, log log.Entry) {
+func UnpackDataToBsonArray(unpacker *dc.DCPacker, array *bson.A, log log.Entry) {
 	switch unpacker.GetPackType() {
 	case dc.PTInvalid:
 		log.Errorf("UnpackDataToBsonArray: PTInvalid reached!\n%s", DumpUnpacker(unpacker))
 		*array = append(*array, "invalid")
 	case dc.PTDouble:
-		*array = append(*array, unpacker.UnpackDouble().(float64))
+		*array = append(*array, unpacker.UnpackDouble())
 	case dc.PTInt:
-		*array = append(*array, unpacker.UnpackInt().(int))
+		*array = append(*array, unpacker.UnpackInt())
 	case dc.PTUint:
-		*array = append(*array, unpacker.UnpackUint().(uint))
+		*array = append(*array, unpacker.UnpackUint())
 	case dc.PTInt64:
-		*array = append(*array, unpacker.UnpackInt64().(int64))
+		*array = append(*array, unpacker.UnpackInt64())
 	case dc.PTUint64:
-		*array = append(*array, unpacker.UnpackUint64().(uint64))
+		*array = append(*array, unpacker.UnpackUint64())
 	case dc.PTString:
-		*array = append(*array, unpacker.UnpackString().(string))
+		*array = append(*array, unpacker.UnpackString())
 	case dc.PTBlob:
-		vector := unpacker.UnpackBlob().(dc.Vector)
+		vector := unpacker.UnpackBlob()
 		data := []byte{}
 		for i := int64(0); i < vector.Size(); i++ {
 			data = append(data, vector.Get(int(i)))
@@ -79,24 +79,24 @@ func UnpackDataToBsonArray(unpacker dc.DCPacker, array *bson.A, log log.Entry) {
 	log.Debugf("Resulting Array: %v", *array)
 }
 
-func UnpackDataToBsonDocument(unpacker dc.DCPacker, name string, doc *bson.D, log log.Entry) {
+func UnpackDataToBsonDocument(unpacker *dc.DCPacker, name string, doc *bson.D, log log.Entry) {
 	switch unpacker.GetPackType() {
 	case dc.PTInvalid:
 		log.Errorf("UnpackDataToBsonDocument: PTInvalid reached!\n%s", DumpUnpacker(unpacker))
 	case dc.PTDouble:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackDouble().(float64)})
+		*doc = append(*doc, bson.E{name, unpacker.UnpackDouble()})
 	case dc.PTInt:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackInt().(int)})
+		*doc = append(*doc, bson.E{name, unpacker.UnpackInt()})
 	case dc.PTUint:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackUint().(uint)})
+		*doc = append(*doc, bson.E{name, unpacker.UnpackUint()})
 	case dc.PTInt64:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackInt64().(int64)})
+		*doc = append(*doc, bson.E{name, unpacker.UnpackInt64()})
 	case dc.PTUint64:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackUint64().(uint64)})
+		*doc = append(*doc, bson.E{name, unpacker.UnpackUint64()})
 	case dc.PTString:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackString().(string)})
+		*doc = append(*doc, bson.E{name, unpacker.UnpackString()})
 	case dc.PTBlob:
-		vector := unpacker.UnpackBlob().(dc.Vector)
+		vector := unpacker.UnpackBlob()
 		data := []byte{}
 		for i := int64(0); i < vector.Size(); i++ {
 			data = append(data, vector.Get(int(i)))
@@ -121,7 +121,7 @@ func UnpackDataToBsonDocument(unpacker dc.DCPacker, name string, doc *bson.D, lo
 	log.Debugf("Resulting Document: %v", *doc)
 }
 
-func PackBsonValue(packer dc.DCPacker, value interface{}) {
+func PackBsonValue(packer *dc.DCPacker, value interface{}) {
 	switch packer.GetPackType() {
 	case dc.PTInvalid:
 		// TODO: Error out
@@ -264,23 +264,18 @@ func (b *MongoBackend) AssignDoIdMonotonic() Doid_t {
 	return globals.DoId.Monotonic
 }
 
-func (b *MongoBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector,
+func (b *MongoBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCField]dc.Vector,
 	ctx uint32, sender Channel_t) {
 
 	var doc bson.D
-
-	DCLock.Lock()
-	defer DCLock.Unlock()
 
 	defaults := map[dc.DCField]dc.Vector{}
 
 	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
 		field := dclass.GetInheritedField(i)
 		if field.IsDb() {
-			if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
-				if molecular != dc.SwigcptrDCMolecularField(0) {
-					continue
-				}
+			if field.AsMolecularField() != nil {
+				continue
 			}
 
 			data, ok := datas[field]
@@ -425,7 +420,7 @@ func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 	}
 
 	dclass := core.DC.GetClassByName(object.Class)
-	if dclass == dc.SwigcptrDCClass(0) {
+	if dclass == nil {
 		b.db.log.Errorf("Class %s for object %d does not exist!", object.Class, doId)
 
 		// Reply with an error.
@@ -447,16 +442,13 @@ func (b *MongoBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 	fieldsMap := make(bson.M)
 	_ = bson.Unmarshal(doc, &fieldsMap)
 
-	DCLock.Lock()
-	defer DCLock.Unlock()
-
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
 	packedData := map[string]dc.Vector{}
 	for _, field := range fields {
 		dcField := dclass.GetFieldByName(field)
-		if dcField == dc.SwigcptrDCField(0) {
+		if dcField == nil {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, object.Class)
 			continue
 		}
@@ -522,13 +514,10 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 	}
 
 	dclass := core.DC.GetClassByName(object.Class)
-	if dclass == dc.SwigcptrDCClass(0) {
+	if dclass == nil {
 		b.db.log.Errorf("Class %s for object %d does not exist!", object.Class, doId)
 		return
 	}
-
-	DCLock.Lock()
-	defer DCLock.Unlock()
 
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)
@@ -544,7 +533,7 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 		}
 
 		dcField := dclass.GetFieldByName(field)
-		if dcField == dc.SwigcptrDCField(0) {
+		if dcField == nil {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, object.Class)
 			continue
 		}

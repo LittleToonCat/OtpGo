@@ -5,7 +5,7 @@ import (
 	"otpgo/dc"
 )
 
-var DC dc.DCFile = dc.NewDCFile()
+var DC *dc.DCFile = dc.NewDCFile()
 
 func LoadDC() (err error) {
 	if Config.General.DC_Disable_Multiple_Inheritance {
@@ -20,7 +20,7 @@ func LoadDC() (err error) {
 	for _, conf := range Config.General.DC_Files {
 		ok := DC.Read(conf)
 		if !ok {
-			return fmt.Errorf("failed to read DC file %s: %v", conf, err)
+			return fmt.Errorf("failed to read DC file %s: %v", conf, DC.LastParseErrors())
 		}
 	}
 	return nil

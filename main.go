@@ -9,7 +9,6 @@ import (
 	"otpgo/clientagent"
 	"otpgo/core"
 	"otpgo/database"
-	"otpgo/dc"
 	"otpgo/eventlogger"
 	"otpgo/luarole"
 	"otpgo/messagedirector"
@@ -141,7 +140,7 @@ Revision: %s
 	for _, ud := range core.Config.Uberdogs {
 		class := core.DC.GetClassByName(ud.Class)
 		// Check if the method returns a NULL pointer
-		if class == dc.SwigcptrDCClass(0) {
+		if class == nil {
 			mainLog.Fatalf("For UberDOG %d, class %s does not exist!", ud.ID, ud.Class)
 			return
 		}

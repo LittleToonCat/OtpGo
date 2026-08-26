@@ -12,25 +12,25 @@ import (
 
 // DC wrappers for Lua
 
-func UnpackDataToLuaValue(unpacker dc.DCPacker, L *lua.LState) lua.LValue {
+func UnpackDataToLuaValue(unpacker *dc.DCPacker, L *lua.LState) lua.LValue {
 	var value lua.LValue
 	switch unpacker.GetPackType() {
 	case dc.PTInvalid:
 		value = lua.LNil
 	case dc.PTDouble:
-		value = lua.LNumber(unpacker.UnpackDouble().(float64))
+		value = lua.LNumber(unpacker.UnpackDouble())
 	case dc.PTInt:
-		value = lua.LNumber(unpacker.UnpackInt().(int))
+		value = lua.LNumber(unpacker.UnpackInt())
 	case dc.PTUint:
-		value = lua.LNumber(unpacker.UnpackUint().(uint))
+		value = lua.LNumber(unpacker.UnpackUint())
 	case dc.PTInt64:
-		value = NewLuaInt64(L, unpacker.UnpackInt64().(int64))
+		value = NewLuaInt64(L, unpacker.UnpackInt64())
 	case dc.PTUint64:
-		value = NewLuaUint64(L, unpacker.UnpackUint64().(uint64))
+		value = NewLuaUint64(L, unpacker.UnpackUint64())
 	case dc.PTString:
 		fallthrough
 	case dc.PTBlob:
-		value = lua.LString(unpacker.UnpackString().(string))
+		value = lua.LString(unpacker.UnpackString())
 	default:
 		// If we reached here, that means it is a list
 		// of nested fields (e.g. an array type, an atomic field, a
@@ -49,7 +49,7 @@ func UnpackDataToLuaValue(unpacker dc.DCPacker, L *lua.LState) lua.LValue {
 	return value
 }
 
-func PackLuaValue(packer dc.DCPacker, value lua.LValue) {
+func PackLuaValue(packer *dc.DCPacker, value lua.LValue) {
 	switch packer.GetPackType() {
 	case dc.PTInvalid:
 	case dc.PTDouble:
@@ -143,33 +143,33 @@ func RegisterLuaDCTypes(L *lua.LState) {
 	RegisterDCPackerType(L)
 }
 
-func NewLuaDCFile(L *lua.LState, dcFile dc.DCFile) *lua.LUserData {
+func NewLuaDCFile(L *lua.LState, dcFile *dc.DCFile) *lua.LUserData {
 	ud := L.NewUserData()
 	ud.Value = dcFile
 	L.SetMetatable(ud, L.GetTypeMetatable(luaDCFileType))
 	return ud
 }
 
-func CheckDCFile(L *lua.LState, n int) dc.DCFile {
+func CheckDCFile(L *lua.LState, n int) *dc.DCFile {
 	ud := L.CheckUserData(n)
-	if dc, ok := ud.Value.(dc.DCFile); ok {
-		return dc
+	if dcFile, ok := ud.Value.(*dc.DCFile); ok {
+		return dcFile
 	}
 	L.ArgError(n, "DCFile expected")
 	return nil
 }
 
-func NewLuaDCClass(L *lua.LState, dclass dc.DCClass) *lua.LUserData {
+func NewLuaDCClass(L *lua.LState, dclass *dc.DCClass) *lua.LUserData {
 	ud := L.NewUserData()
 	ud.Value = dclass
 	L.SetMetatable(ud, L.GetTypeMetatable(luaDCClassType))
 	return ud
 }
 
-func CheckDCClass(L *lua.LState, n int) dc.DCClass {
+func CheckDCClass(L *lua.LState, n int) *dc.DCClass {
 	ud := L.CheckUserData(n)
-	if dc, ok := ud.Value.(dc.DCClass); ok {
-		return dc
+	if dclass, ok := ud.Value.(*dc.DCClass); ok {
+		return dclass
 	}
 	L.ArgError(n, "DCClass expected")
 	return nil
@@ -184,8 +184,8 @@ func NewLuaDCField(L *lua.LState, dcField dc.DCField) *lua.LUserData {
 
 func CheckDCField(L *lua.LState, n int) dc.DCField {
 	ud := L.CheckUserData(n)
-	if dc, ok := ud.Value.(dc.DCField); ok {
-		return dc
+	if dcField, ok := ud.Value.(dc.DCField); ok {
+		return dcField
 	}
 	L.ArgError(n, "DCField expected")
 	return nil
@@ -210,7 +210,7 @@ func LuaGetClass(L *lua.LState) int {
 
 	dclass := dcFile.GetClass(cls)
 
-	if dclass == dc.SwigcptrDCClass(0) {
+	if dclass == nil {
 		L.ArgError(2, fmt.Sprintf("Could not find class with index %d", cls))
 		return 0
 	}
@@ -225,7 +225,7 @@ func LuaGetClassByName(L *lua.LState) int {
 
 	dclass := dcFile.GetClassByName(cls)
 
-	if dclass == dc.SwigcptrDCClass(0) {
+	if dclass == nil {
 		L.ArgError(2, fmt.Sprintf("Could not find class with name \"%s\"", cls))
 		return 0
 	}
@@ -239,7 +239,7 @@ func LuaFileGetFieldByIndex(L *lua.LState) int {
 	index := L.CheckInt(2)
 
 	dcField := dcFile.GetFieldByIndex(index)
-	if dcField == dc.SwigcptrDCField(0) {
+	if dcField == nil {
 		L.ArgError(2, fmt.Sprintf("Could not find field with index %d", index))
 		return 0
 	}
@@ -309,7 +309,7 @@ func LuaGetParent(L *lua.LState) int {
 	n := L.CheckInt(2)
 
 	parentClass := dclass.GetParent(n)
-	if parentClass == dc.SwigcptrDCClass(0) {
+	if parentClass == nil {
 		L.ArgError(2, fmt.Sprintf("Could not find parent class with index %d", n))
 		return 0
 	}
@@ -330,7 +330,7 @@ func LuaGetField(L *lua.LState) int {
 	n := L.CheckInt(2)
 
 	dcField := dcClass.GetInheritedField(n)
-	if dcField == dc.SwigcptrDCField(0) {
+	if dcField == nil {
 		L.ArgError(2, fmt.Sprintf("Could not find field %d", n))
 		return 0
 	}
@@ -344,7 +344,7 @@ func LuaClassGetFieldByIndex(L *lua.LState) int {
 	index := L.CheckInt(2)
 
 	dcField := dcClass.GetFieldByIndex(index)
-	if dcField == dc.SwigcptrDCField(0) {
+	if dcField == nil {
 		L.ArgError(2, fmt.Sprintf("Could not find field with index %d", index))
 		return 0
 	}
@@ -358,7 +358,7 @@ func LuaGetFieldByName(L *lua.LState) int {
 	name := L.CheckString(2)
 
 	dcField := dcClass.GetFieldByName(name)
-	if dcField == dc.SwigcptrDCField(0) {
+	if dcField == nil {
 		L.ArgError(2, fmt.Sprintf("Could not find field with name \"%s\"", name))
 		return 0
 	}
@@ -429,53 +429,31 @@ func LuaHasKeyword(L *lua.LState) int {
 func LuaGetDefaultValue(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 	dg := NewDatagram()
-	DCLock.Lock()
 	dg.AddVector(dcField.GetDefaultValue())
-	DCLock.Unlock()
 	L.Push(lua.LString(string(dg.Bytes())))
 	return 1
 }
 
 func LuaIsAtomic(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
-	if atomic, ok := dcField.AsAtomicField().(dc.DCAtomicField); ok {
-		if atomic != dc.SwigcptrDCAtomicField(0) {
-			L.Push(lua.LBool(true))
-			return 1
-		}
-	}
-	L.Push(lua.LBool(false))
+	L.Push(lua.LBool(dcField.AsAtomicField() != nil))
 	return 1
 }
 
 func LuaIsMolecular(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
-	if molecular, ok := dcField.AsMolecularField().(dc.DCMolecularField); ok {
-		if molecular != dc.SwigcptrDCMolecularField(0) {
-			L.Push(lua.LBool(true))
-			return 1
-		}
-	}
-	L.Push(lua.LBool(false))
+	L.Push(lua.LBool(dcField.AsMolecularField() != nil))
 	return 1
 }
 
 func LuaIsParameter(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
-	if parameter, ok := dcField.AsParameter().(dc.DCParameter); ok {
-		if parameter != dc.SwigcptrDCParameter(0) {
-			L.Push(lua.LBool(true))
-			return 1
-		}
-	}
-	L.Push(lua.LBool(false))
+	L.Push(lua.LBool(dcField.AsParameter() != nil))
 	return 1
 }
 
 func NewLuaDCPacker(L *lua.LState) int {
-	DCLock.Lock()
 	packer := dc.NewDCPacker()
-	DCLock.Unlock()
 	ud := L.NewUserData()
 	ud.Value = packer
 	L.SetMetatable(ud, L.GetTypeMetatable(luaDCPackerType))
@@ -483,9 +461,9 @@ func NewLuaDCPacker(L *lua.LState) int {
 	return 1
 }
 
-func CheckDCPacker(L *lua.LState, n int) dc.DCPacker {
+func CheckDCPacker(L *lua.LState, n int) *dc.DCPacker {
 	ud := L.CheckUserData(n)
-	if packer, ok := ud.Value.(dc.DCPacker); ok {
+	if packer, ok := ud.Value.(*dc.DCPacker); ok {
 		return packer
 	}
 	L.ArgError(n, "DCPacker expected")
@@ -502,9 +480,7 @@ var DCPackerMethods = map[string]lua.LGFunction{
 
 func DeleteLuaDCPacker(L *lua.LState) int {
 	packer := CheckDCPacker(L, 1)
-	DCLock.Lock()
 	dc.DeleteDCPacker(packer)
-	DCLock.Unlock()
 	return 1
 }
 
@@ -513,8 +489,6 @@ func LuaDCPackerPackField(L *lua.LState) int {
 	field := CheckDCField(L, 2)
 	dg := CheckDatagram(L, 3)
 	value := L.Get(4)
-
-	DCLock.Lock()
 
 	packer.BeginPack(field)
 
@@ -528,7 +502,6 @@ func LuaDCPackerPackField(L *lua.LState) int {
 	}
 	packer.ClearData()
 
-	DCLock.Unlock()
 	L.Push(lua.LBool(success))
 	return 1
 }
@@ -537,8 +510,6 @@ func LuaDCPackerPackFieldDefaultValue(L *lua.LState) int {
 	packer := CheckDCPacker(L, 1)
 	field := CheckDCField(L, 2)
 	dg := CheckDatagram(L, 3)
-
-	DCLock.Lock()
 
 	packer.BeginPack(field)
 	packer.PackDefaultValue()
@@ -552,7 +523,6 @@ func LuaDCPackerPackFieldDefaultValue(L *lua.LState) int {
 	}
 	packer.ClearData()
 
-	DCLock.Unlock()
 	L.Push(lua.LBool(success))
 	return 1
 }
@@ -571,7 +541,6 @@ func LuaDCPackerUnpackField(L *lua.LState) int {
 		dgi = CheckDatagramIterator(L, 3)
 	}
 
-	DCLock.Lock()
 	offset := dgi.Tell()
 
 	vectorData := dgi.ReadRemainderAsVector()
@@ -585,7 +554,6 @@ func LuaDCPackerUnpackField(L *lua.LState) int {
 	value := UnpackDataToLuaValue(unpacker, L)
 	unpacker.EndUnpack()
 
-	DCLock.Unlock()
 	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
 	L.Push(value)
 	return 1
@@ -596,7 +564,6 @@ func LuaDCPackerSkipField(L *lua.LState) int {
 	field := CheckDCField(L, 2)
 	dgi := CheckDatagramIterator(L, 3)
 
-	DCLock.Lock()
 	offset := dgi.Tell()
 
 	vectorData := dgi.ReadRemainderAsVector()
@@ -613,7 +580,6 @@ func LuaDCPackerSkipField(L *lua.LState) int {
 	if success {
 		dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
 	}
-	DCLock.Unlock()
 	L.Push(lua.LBool(success))
 	return 1
 }

@@ -126,7 +126,7 @@ func (b *YAMLBackend) AssignDoId() (Doid_t, error) {
 	return doId, nil
 }
 
-func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector,
+func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCField]dc.Vector,
 	ctx uint32, sender Channel_t) {
 
 	obj := &YAMLObject{
@@ -135,18 +135,13 @@ func (b *YAMLBackend) CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField
 		Fields: yaml.MapSlice{},
 	}
 
-	DCLock.Lock()
-	defer DCLock.Unlock()
-
 	defaults := map[dc.DCField]dc.Vector{}
 
 	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
 		field := dclass.GetInheritedField(i)
 		if field.IsDb() {
-			if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
-				if molecular != dc.SwigcptrDCMolecularField(0) {
-					continue
-				}
+			if field.AsMolecularField() != nil {
+				continue
 			}
 
 			data, ok := datas[field]
@@ -373,14 +368,11 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 	}
 
 	dclass := core.DC.GetClassByName(obj.Class)
-	if dclass == dc.SwigcptrDCClass(0) {
+	if dclass == nil {
 		b.db.log.Errorf("Class %s for object %d does not exist!", obj.Class, doId)
 		b.SendGetStoredValuesError(doId, fields, ctx, sender)
 		return
 	}
-
-	DCLock.Lock()
-	defer DCLock.Unlock()
 
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
@@ -388,7 +380,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 	packedData := map[string]dc.Vector{}
 	for _, field := range fields {
 		dcField := dclass.GetFieldByName(field)
-		if dcField == dc.SwigcptrDCField(0) {
+		if dcField == nil {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, obj.Class)
 			continue
 		}
@@ -489,17 +481,14 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 	}
 
 	dclass := core.DC.GetClassByName(obj.Class)
-	if dclass == dc.SwigcptrDCClass(0) {
+	if dclass == nil {
 		b.db.log.Errorf("Class %s for object %d does not exist!", obj.Class, doId)
 		return
 	}
 
-	DCLock.Lock()
-	defer DCLock.Unlock()
-
 	for field, value := range packedValues {
 		dcField := dclass.GetFieldByName(field)
-		if dcField == dc.SwigcptrDCField(0) {
+		if dcField == nil {
 			b.db.log.Errorf("Field %s for class %s does not exist!", field, obj.Class)
 			continue
 		}
@@ -517,10 +506,8 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
 		field := dclass.GetInheritedField(i)
 		if field.IsDb() {
-			if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
-				if molecular != dc.SwigcptrDCMolecularField(0) {
-					continue
-				}
+			if field.AsMolecularField() != nil {
+				continue
 			}
 
 			if value, ok := objFields[field.GetName()]; ok {
