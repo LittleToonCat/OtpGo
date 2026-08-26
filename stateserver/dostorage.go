@@ -55,7 +55,7 @@ func (doStore *DOStorage) recycleDO(do *DistributedObject) {
 }
 
 func (doStore *DOStorage) createDO(ss *StateServer, doid Doid_t,
-	dclass dc.DCClass, requiredFields FieldValues,
+	dclass *dc.DCClass, requiredFields FieldValues,
 	ramFields FieldValues) *DistributedObject {
 	do := doStore.DOPool.Get().(*DistributedObject)
 	do.log = log.WithFields(log.Fields{

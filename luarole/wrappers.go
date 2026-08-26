@@ -235,14 +235,12 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 	callback := L.CheckFunction(7)
 
 	cls := core.DC.GetClassByName(clsName)
-	if cls == dc.SwigcptrDCClass(0) {
+	if cls == nil {
 		L.ArgError(2, "Class not found.")
 		return 0
 	}
 
 	senderContext := participant.sender
-
-	DCLock.Lock()
 
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
@@ -252,16 +250,14 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 	fields.ForEach(func(l1, data lua.LValue) {
 		name := string(l1.(lua.LString))
 		field := cls.GetFieldByName(name)
-		if field == dc.SwigcptrDCField(0) {
+		if field == nil {
 			L.ArgError(3, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", name, clsName))
-			DCLock.Unlock()
 			return
 		}
 		packer.BeginPack(field)
 		core.PackLuaValue(packer, data)
 		if !packer.EndPack() {
 			L.ArgError(3, "Pack failed!")
-			DCLock.Unlock()
 			return
 		}
 
@@ -269,7 +265,6 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 		packer.ClearData()
 	})
 
-	DCLock.Unlock()
 	callbackFunc := func(doId Doid_t) {
 		participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId))
 	}
@@ -289,7 +284,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 	callback := L.CheckFunction(7)
 
 	cls := core.DC.GetClassByName(clsName)
-	if cls == dc.SwigcptrDCClass(0) {
+	if cls == nil {
 		L.ArgError(3, "Class not found.")
 		return 0
 	}
@@ -322,8 +317,6 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 			return
 		}
 
-		DCLock.Lock()
-
 		packedValues := make([]dc.Vector, count)
 		hasValue := map[string]bool{}
 		for i := uint16(0); i < count; i++ {
@@ -343,7 +336,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 			found := hasValue[field]
 
 			dcField := cls.GetFieldByName(field)
-			if dcField == dc.SwigcptrDCField(0) {
+			if dcField == nil {
 				participant.log.Warnf("GetStoredValues: Field \"%s\" does not exist for class \"%s\"", field, clsName)
 				if found {
 					dc.DeleteVector(packedValues[i])
@@ -368,7 +361,6 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				dc.DeleteVector(data)
 			}
 		}
-		DCLock.Unlock()
 		participant.CallLuaFunction(callback, senderContext, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
 
@@ -387,7 +379,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 	senderContext := participant.sender
 
 	cls := core.DC.GetClassByName(clsName)
-	if cls == dc.SwigcptrDCClass(0) {
+	if cls == nil {
 		L.ArgError(3, "Class not found.")
 		return 0
 	}
@@ -401,7 +393,7 @@ func LuaQueryObjectFields(L *lua.LState) int {
 	var fieldIds []uint16
 	for _, fieldName := range fields {
 		field := cls.GetFieldByName(fieldName)
-		if field == dc.SwigcptrDCField(0) {
+		if field == nil {
 			participant.log.Warnf("queryObjectFields: Class \"%s\" does not have field \"%s\"!", clsName, fieldName)
 			continue
 		}
@@ -424,9 +416,6 @@ func LuaQueryObjectFields(L *lua.LState) int {
 
 		fieldTable := participant.L.NewTable()
 
-		DCLock.Lock()
-		defer DCLock.Unlock()
-
 		packedData := dgi.ReadRemainderAsVector()
 		defer dc.DeleteVector(packedData)
 
@@ -436,9 +425,9 @@ func LuaQueryObjectFields(L *lua.LState) int {
 		unpacker.SetUnpackData(packedData)
 		found := 0
 		for int64(unpacker.GetNumUnpackedBytes()) < packedData.Size() {
-			fieldId := unpacker.RawUnpackUint16().(uint)
+			fieldId := unpacker.RawUnpackUint16()
 			field := cls.GetFieldByIndex(int(fieldId))
-			if field == dc.SwigcptrDCField(0) {
+			if field == nil {
 				participant.log.Warnf("queryObjectFields: Unknown field %d for class \"%s\"!", fieldId, clsName)
 				break
 			}
@@ -478,12 +467,10 @@ func LuaSetDatabaseValues(L *lua.LState) int {
 	fields := L.CheckTable(5)
 
 	cls := core.DC.GetClassByName(clsName)
-	if cls == dc.SwigcptrDCClass(0) {
+	if cls == nil {
 		L.ArgError(2, "Class not found.")
 		return 0
 	}
-
-	DCLock.Lock()
 
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
@@ -493,7 +480,7 @@ func LuaSetDatabaseValues(L *lua.LState) int {
 	fields.ForEach(func(l1, data lua.LValue) {
 		name := string(l1.(lua.LString))
 		field := cls.GetFieldByName(name)
-		if field == dc.SwigcptrDCField(0) {
+		if field == nil {
 			L.ArgError(3, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", name, clsName))
 			return
 		}
@@ -508,7 +495,6 @@ func LuaSetDatabaseValues(L *lua.LState) int {
 		packer.ClearData()
 	})
 
-	DCLock.Unlock()
 	participant.setDatabaseValues(doId, dbChannel, packedFields)
 
 	return 1
@@ -538,19 +524,16 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 	}
 
 	cls := core.DC.GetClassByName(clsName)
-	if cls == dc.SwigcptrDCClass(0) {
+	if cls == nil {
 		L.ArgError(3, "Class not found.")
 		return 0
 	}
-
-	DCLock.Lock()
-	defer DCLock.Unlock()
 
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
 	field := cls.GetFieldByName(fieldName)
-	if field == dc.SwigcptrDCField(0) {
+	if field == nil {
 		L.ArgError(4, fmt.Sprintf("Field \"%s\" not found in class \"%s\"", fieldName, clsName))
 		return 0
 	}

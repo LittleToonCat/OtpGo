@@ -32,7 +32,7 @@ const (
 
 type DeclaredObject struct {
 	do Doid_t
-	dc dc.DCClass
+	dc *dc.DCClass
 }
 
 type OwnedObject struct {
@@ -422,7 +422,7 @@ func (c *Client) addHistoricalObject(do Doid_t) {
 	c.historicalObjects = append(c.historicalObjects, do)
 }
 
-func (c *Client) lookupObject(do Doid_t) dc.DCClass {
+func (c *Client) lookupObject(do Doid_t) *dc.DCClass {
 	// Search UberDOGs
 	for i := range core.Uberdogs {
 		if core.Uberdogs[i].Id == do {
@@ -657,7 +657,7 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		if sender != c.channel {
 			field := dgi.ReadUint16()
 			dcField := dclass.GetFieldByIndex(int(field))
-			if dcField == dc.SwigcptrDCField(0) {
+			if dcField == nil {
 				c.log.Warnf("Received server-side field update for object %s(%d) with unknown field %d", dclass.GetName(), do, field)
 				return
 			}
@@ -1303,7 +1303,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 	}
 
 	dcField := dclass.GetFieldByIndex(int(field))
-	if dcField == dc.SwigcptrDCField(0) {
+	if dcField == nil {
 		c.sendDisconnect(CLIENT_DISCONNECT_FORBIDDEN_FIELD, fmt.Sprintf("Attempted to send field update to %s(%d) with unknown field: %d", dclass.GetName(), do, field), true)
 		// Skip the data to prevent the excess data ejection.
 		dgi.Skip(dgi.RemainingSize())
@@ -1316,9 +1316,6 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 		dgi.Skip(dgi.RemainingSize())
 		return
 	}
-
-	DCLock.Lock()
-	defer DCLock.Unlock()
 
 	packedData := dgi.ReadRemainderAsVector()
 	defer dc.DeleteVector(packedData)
@@ -1359,14 +1356,11 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 	c.RouteDatagram(dg)
 }
 
-func (c *Client) handleUpdateField(do Doid_t, dclass dc.DCClass, dcField dc.DCField, dgi *DatagramIterator) {
+func (c *Client) handleUpdateField(do Doid_t, dclass *dc.DCClass, dcField dc.DCField, dgi *DatagramIterator) {
 	lFunc := c.ca.L.GetGlobal(fmt.Sprintf("handle%s_%s", dclass.GetName(), dcField.GetName()))
 	if lFunc.Type() == lua.LTFunction {
 		// Call the Lua function instead of sending the
 		// built-in response.
-
-		DCLock.Lock()
-		defer DCLock.Unlock()
 
 		packedData := dgi.ReadRemainderAsVector()
 		defer dc.DeleteVector(packedData)

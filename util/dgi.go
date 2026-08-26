@@ -142,13 +142,7 @@ func (dgi *DatagramIterator) ReadBlob() []uint8 {
 }
 
 func (dgi *DatagramIterator) ReadVector() dc.Vector {
-	data := dgi.ReadBlob()
-
-	vector := dc.NewVector()
-	for _, b := range data {
-		vector.Add(b)
-	}
-	return vector
+	return dc.Vector(dgi.ReadBlob())
 }
 
 func (dgi *DatagramIterator) ReadBlob32() []uint8 {
@@ -180,21 +174,10 @@ func (dgi *DatagramIterator) ReadRemainder() []uint8 {
 }
 
 func (dgi *DatagramIterator) ReadRemainderAsVector() dc.Vector {
-	remainder := dgi.ReadRemainder()
-
-	vector := dc.NewVector()
-	for _, b := range remainder {
-		vector.Add(b)
-	}
-	return vector
+	return dc.Vector(dgi.ReadRemainder())
 }
 
 func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, lock bool) ([]byte, bool) {
-	if lock {
-		DCLock.Lock()
-		defer DCLock.Unlock()
-	}
-
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)
 
@@ -208,7 +191,7 @@ func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, 
 	unpacker.SetUnpackData(vectorData)
 	unpacker.BeginUnpack(field)
 
-	packedData := unpacker.UnpackLiteralValue().(dc.Vector)
+	packedData := unpacker.UnpackLiteralValue()
 	defer dc.DeleteVector(packedData)
 
 	if !unpacker.EndUnpack() {
@@ -220,15 +203,11 @@ func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, 
 	}
 
 	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
-	return VectorToByte(packedData), true
+	return []byte(packedData), true
 }
 
-func (dgi *DatagramIterator) SkipDCField(field dc.DCField, lock bool) bool {
-	if lock {
-		DCLock.Lock()
-		defer DCLock.Unlock()
-	}
 
+func (dgi *DatagramIterator) SkipDCField(field dc.DCField, lock bool) bool {
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)
 

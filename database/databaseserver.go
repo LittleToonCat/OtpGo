@@ -24,13 +24,13 @@ type OperationQueueEntry struct {
 	operation uint8
 	data      interface{}
 	doId      Doid_t
-	dclass    dc.DCClass
+	dclass    *dc.DCClass
 	context   uint32
 	sender    Channel_t
 }
 
 type DatabaseBackend interface {
-	CreateStoredObject(dclass dc.DCClass, datas map[dc.DCField]dc.Vector, ctx uint32, sender Channel_t)
+	CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCField]dc.Vector, ctx uint32, sender Channel_t)
 	GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t)
 	SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector)
 }
@@ -53,7 +53,7 @@ type DatabaseServer struct {
 	control     Channel_t
 	min         Doid_t
 	max         Doid_t
-	objectTypes map[uint16]dc.DCClass
+	objectTypes map[uint16]*dc.DCClass
 	backend     DatabaseBackend
 	forwards    map[uint16]Channel_t
 
@@ -70,7 +70,7 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 		processQueue: make(chan bool),
 		min:          Doid_t(config.Generate.Min),
 		max:          Doid_t(config.Generate.Max),
-		objectTypes:  make(map[uint16]dc.DCClass),
+		objectTypes:  make(map[uint16]*dc.DCClass),
 		forwards:     make(map[uint16]Channel_t),
 		log: log.WithFields(log.Fields{
 			"name":    fmt.Sprintf("DatabaseServer (%d)", config.Control),
@@ -87,7 +87,7 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 	// Populate object types
 	for _, obj := range config.Objects {
 		dclass := core.DC.GetClassByName(obj.Class)
-		if dclass == dc.SwigcptrDCClass(0) {
+		if dclass == nil {
 			db.log.Fatalf("For object type %d, \"%s\" does not exist!", obj.ID, obj.Class)
 		}
 		db.objectTypes[uint16(obj.ID)] = dclass
@@ -224,7 +224,7 @@ func (d *DatabaseServer) HandleCreateObject(dgi *DatagramIterator, sender Channe
 		blob := dgi.ReadVector()
 
 		field := dclass.GetFieldByName(name)
-		if field == dc.SwigcptrDCField(0) {
+		if field == nil {
 			log.Errorf("Field \"%s\" does not exist for class \"%s\"!", name, dclass.GetName())
 		}
 

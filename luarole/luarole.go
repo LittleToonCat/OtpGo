@@ -298,19 +298,17 @@ func (l *LuaRole) setDatabaseValues(doId Doid_t, dbChannel Channel_t, packedValu
 
 func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 	dclass := core.DC.GetClassByName(className)
-	if dclass == dc.SwigcptrDCClass(0) {
+	if dclass == nil {
 		l.log.Errorf("handleUpdateField: Class \"%s\" does not exist!", className)
 		return
 	}
 	fieldId := dgi.ReadUint16()
 	dcField := dclass.GetFieldByIndex(int(fieldId))
-	if dcField == dc.SwigcptrDCField(0) {
+	if dcField == nil {
 		l.log.Errorf("handleUpdateField: Field number %d does not exist in class \"%s\"!", fieldId, className)
 		return
 	}
 
-	DCLock.Lock()
-	defer DCLock.Unlock()
 	packedData := dgi.ReadRemainderAsVector()
 	defer dc.DeleteVector(packedData)
 	if !dcField.ValidateRanges(packedData) {
@@ -339,19 +337,16 @@ func (l *LuaRole) handleUpdateField(dgi *DatagramIterator, className string) {
 
 func (l *LuaRole) sendUpdateToChannel(channel Channel_t, fromDoId Doid_t, className string, fieldName string, value lua.LValue) {
 	cls := core.DC.GetClassByName(className)
-	if cls == dc.SwigcptrDCClass(0) {
+	if cls == nil {
 		l.log.Warnf("sendUpdateToChannel: Class name \"%s\" not found!", className)
 		return
 	}
 
 	field := cls.GetFieldByName(fieldName)
-	if field == dc.SwigcptrDCField(0) {
+	if field == nil {
 		l.log.Warnf("sendUpdateToChannel: Class \"%s\" does not have field \"%s\"!", className, fieldName)
 		return
 	}
-
-	DCLock.Lock()
-	defer DCLock.Unlock()
 
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)

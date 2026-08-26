@@ -61,12 +61,12 @@ func (s *StateServer) registerObjects(objects []struct {
 	// Create an ObjectServer or DistributedObject object to rep ourself.
 	dclass := core.DC.GetClassByName("ObjectServer")
 
-	if dclass == dc.SwigcptrDCClass(0) {
+	if dclass == nil {
 		// Older client support
 		dclass = core.DC.GetClassByName("DistributedObject")
 	}
 
-	if dclass != dc.SwigcptrDCClass(0) {
+	if dclass != nil {
 		dg := NewDatagram()
 		dg.AddString(dclass.GetName())          // setName
 		dg.AddUint32(uint32(core.DC.GetHash())) // setDcHash
@@ -82,7 +82,7 @@ func (s *StateServer) registerObjects(objects []struct {
 	for _, obj := range objects {
 		dclass := core.DC.GetClassByName(obj.Class)
 		// Check if the method returns a NULL pointer
-		if dclass == dc.SwigcptrDCClass(0) {
+		if dclass == nil {
 			s.log.Fatalf("For Configured class %d, class %s does not exist!", obj.ID, obj.Class)
 			return
 		}
@@ -98,7 +98,7 @@ func (s *StateServer) registerObjects(objects []struct {
 }
 
 func (s *StateServer) CreateDistributedObjectWithData(doid Doid_t, parent Doid_t,
-	zone Zone_t, dclass dc.DCClass, requiredFields FieldValues,
+	zone Zone_t, dclass *dc.DCClass, requiredFields FieldValues,
 	ramFields FieldValues) *DistributedObject {
 	do := NewDistributedObjectWithData(s, doid, parent, zone, dclass, requiredFields, ramFields)
 	s.objects[doid] = do

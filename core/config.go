@@ -14,8 +14,8 @@ var Hash uint32
 var StopChan chan bool // For test purposes
 
 type Uberdog struct {
-	Id    util.Doid_t
-	Class dc.DCClass
+	Id        util.Doid_t
+	Class     *dc.DCClass
 }
 
 var Uberdogs []Uberdog

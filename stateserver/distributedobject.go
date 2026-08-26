@@ -25,7 +25,7 @@ type DistributedObject struct {
 	do          Doid_t
 	parent      Doid_t
 	zone        Zone_t
-	dclass      dc.DCClass
+	dclass      *dc.DCClass
 
 	requiredFields FieldValues
 	ramFields      FieldValues
@@ -39,7 +39,7 @@ type DistributedObject struct {
 }
 
 func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
-	zone Zone_t, dclass dc.DCClass, requiredFields FieldValues,
+	zone Zone_t, dclass *dc.DCClass, requiredFields FieldValues,
 	ramFields FieldValues) *DistributedObject {
 
 	do := ss.doStore.createDO(ss, doid, dclass, requiredFields, ramFields)
@@ -67,20 +67,16 @@ func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
 }
 
 func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
-	zone Zone_t, dclass dc.DCClass, dgi *DatagramIterator, hasOther bool,
+	zone Zone_t, dclass *dc.DCClass, dgi *DatagramIterator, hasOther bool,
 	isMainObj bool) (bool, *DistributedObject, error) {
 
 	do := ss.doStore.createDO(ss, doid, dclass, nil, nil)
 
-	DCLock.Lock()
-
 	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
 		field := dclass.GetInheritedField(i)
 		if field.IsRequired() {
-			if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
-				if molecular != dc.SwigcptrDCMolecularField(0) {
-					continue
-				}
+			if field.AsMolecularField() != nil {
+				continue
 			}
 			if data, ok := dgi.ReadDCField(field, true, false); ok {
 				do.requiredFields[field] = data
@@ -96,7 +92,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 		for i := 0; i < int(count); i++ {
 			id := dgi.ReadUint16()
 			field := dclass.GetFieldByIndex(int(id))
-			if field == dc.SwigcptrDCField(0) {
+			if field == nil {
 				do.log.Errorf("Receieved unknown field with ID %d within an OTHER section!  Ignoring.", id)
 				break
 			}
@@ -119,8 +115,6 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 	do.SetName(fmt.Sprintf("%s (%d)", dclass.GetName(), doid))
 
 	do.log.Debug("Object instantiated ...")
-
-	DCLock.Unlock()
 
 	if !isMainObj {
 		do.SubscribeChannel(Channel_t(doid))
@@ -158,10 +152,8 @@ func (d *DistributedObject) appendRequiredData(dg Datagram, client bool) {
 	count := d.dclass.GetNumInheritedFields()
 	for i := 0; i < int(count); i++ {
 		field := d.dclass.GetInheritedField(i)
-		if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
-			if molecular != dc.SwigcptrDCMolecularField(0) {
-				continue
-			}
+		if field.AsMolecularField() != nil {
+			continue
 		}
 
 		if field.IsRequired() && (!client || field.IsBroadcast() ||
@@ -178,10 +170,8 @@ func (d *DistributedObject) appendRequiredDataDoidLast(dg Datagram, client bool)
 	count := d.dclass.GetNumInheritedFields()
 	for i := 0; i < int(count); i++ {
 		field := d.dclass.GetInheritedField(i)
-		if molecular, ok := field.AsMolecularField().(dc.DCMolecularField); ok {
-			if molecular != dc.SwigcptrDCMolecularField(0) {
-				continue
-			}
+		if field.AsMolecularField() != nil {
+			continue
 		}
 
 		if field.IsRequired() && (!client || field.IsBroadcast() ||
@@ -473,7 +463,7 @@ func (d *DistributedObject) saveField(field dc.DCField, data []byte) bool {
 func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channel_t) bool {
 	fieldId := dgi.ReadUint16()
 	field := d.dclass.GetFieldByIndex(int(fieldId))
-	if field == dc.SwigcptrDCField(0) {
+	if field == nil {
 		d.log.Warnf("Update received for unknown field ID=%d", fieldId)
 		return false
 	}
@@ -494,7 +484,7 @@ func (d *DistributedObject) handleMultipleUpdates(dgi *DatagramIterator, count u
 	for i := 0; i < int(count); i++ {
 		fieldId := dgi.ReadUint16()
 		field := d.dclass.GetFieldByIndex(int(fieldId))
-		if field == dc.SwigcptrDCField(0) {
+		if field == nil {
 			d.log.Warnf("Update received for unknown field ID=%d", fieldId)
 			return false
 		}
@@ -513,13 +503,11 @@ func (d *DistributedObject) handleMultipleUpdates(dgi *DatagramIterator, count u
 }
 
 func (d *DistributedObject) finishHandleUpdate(field dc.DCField, data []byte, sender Channel_t) {
-	DCLock.Lock()
-	defer DCLock.Unlock()
 	// Print out the human formatted data
 	d.log.Debugf("Handling update for field \"%s\": %s", field.GetName(), FormatFieldData(field, data))
 
-	molecular := field.AsMolecularField().(dc.DCMolecularField)
-	if molecular != dc.SwigcptrDCMolecularField(0) {
+	molecular := field.AsMolecularField()
+	if molecular != nil {
 		// Time to pull out a DatagramIterator for this one.
 		dg := NewDatagram()
 		dg.AddData(data)
@@ -527,7 +515,7 @@ func (d *DistributedObject) finishHandleUpdate(field dc.DCField, data []byte, se
 
 		count := molecular.GetNumAtomics()
 		for n := 0; n < count; n++ {
-			atomic := molecular.GetAtomic(n).AsField().(dc.DCField)
+			atomic := molecular.GetAtomic(n).AsField()
 			atomicData, ok := dgi.ReadDCField(atomic, true, false)
 			if !ok {
 				d.log.Errorf("Failed to read atomic field \"%s\" of molecular field \"%s\".", atomic.GetName(), molecular.GetName())
@@ -565,14 +553,14 @@ func (d *DistributedObject) finishHandleUpdate(field dc.DCField, data []byte, se
 
 func (d *DistributedObject) handleOneGet(out *Datagram, fieldId uint16, allowUnset bool, subfield bool) bool {
 	field := d.dclass.GetFieldByIndex(int(fieldId))
-	if field == dc.SwigcptrDCField(0) {
+	if field == nil {
 		d.log.Warnf("Query received for unknown field ID=%d", fieldId)
 		return false
 	}
 
 	d.log.Debugf("Handling query for field %s", field.GetName())
-	molecular := field.AsMolecularField().(dc.DCMolecularField)
-	if molecular != dc.SwigcptrDCMolecularField(0) {
+	molecular := field.AsMolecularField()
+	if molecular != nil {
 		count := molecular.GetNumAtomics()
 		out.AddUint16(fieldId)
 		for n := 0; n < count; n++ {

@@ -13,7 +13,7 @@ type LoadingObject struct {
 	do     Doid_t
 	parent Doid_t
 	zone   Zone_t
-	dclass dc.DCClass
+	dclass *dc.DCClass
 
 	requiredFields FieldValues
 	ramFields      FieldValues
@@ -113,14 +113,11 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, do Doid_t, s
 		dgQueue: []Datagram{},
 	}
 
-	DCLock.Lock()
-	defer DCLock.Unlock()
-
 	numFields := dclass.GetNumInheritedFields()
 	for i := 0; i < numFields; i++ {
 		dcField := dclass.GetInheritedField(i)
-		molecular := dcField.AsMolecularField().(dc.DCMolecularField)
-		if molecular != dc.SwigcptrDCMolecularField(0) {
+		molecular := dcField.AsMolecularField()
+		if molecular != nil {
 			continue
 		}
 		if dcField.IsRequired() {
@@ -133,7 +130,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, do Doid_t, s
 		for i := uint16(0); i < count; i++ {
 			field := dgi.ReadUint16()
 			dcField := dclass.GetFieldByIndex(int(field))
-			if dcField == dc.SwigcptrDCField(0) {
+			if dcField == nil {
 				s.log.Errorf("Received invalid field index %d", field)
 				return
 			}
@@ -162,8 +159,8 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, do Doid_t, s
 	count := dclass.GetNumInheritedFields()
 	for i := 0; i < count; i++ {
 		field := dclass.GetInheritedField(i)
-		molecular := field.AsMolecularField().(dc.DCMolecularField)
-		if molecular != dc.SwigcptrDCMolecularField(0) {
+		molecular := field.AsMolecularField()
+		if molecular != nil {
 			continue
 		}
 		if field.IsRequired() && field.IsDb() {
@@ -236,7 +233,7 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 		found := hasValue[field]
 
 		dcField := obj.dclass.GetFieldByName(field)
-		if dcField == dc.SwigcptrDCField(0) {
+		if dcField == nil {
 			s.log.Warnf("Field \"%s\" does not exist for class \"%s\"", field, obj.dclass.GetName())
 			continue
 		}
@@ -259,9 +256,7 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 				s.log.Errorf("Received invalid update data for field \"%s\"!\n%x", field, data)
 				continue
 			}
-			DCLock.Lock()
 			s.log.Debugf("Got data for field \"%s\": %s", fields[i], FormatFieldData(dcField, data))
-			DCLock.Unlock()
 			obj.fieldUpdates[dcField] = data
 		} else {
 			s.log.Debugf("Data for field \"%s\" not found", fields[i])
@@ -273,8 +268,8 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 	numFields := obj.dclass.GetNumInheritedFields()
 	for i := 0; i < numFields; i++ {
 		dcField := obj.dclass.GetInheritedField(i)
-		molecular := dcField.AsMolecularField().(dc.DCMolecularField)
-		if molecular != dc.SwigcptrDCMolecularField(0) {
+		molecular := dcField.AsMolecularField()
+		if molecular != nil {
 			continue
 		}
 		if dcField.IsRequired() {
@@ -283,10 +278,8 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 				delete(obj.fieldUpdates, dcField)
 			} else {
 				// Use the default value.
-				DCLock.Lock()
-				obj.requiredFields[dcField] = VectorToByte(dcField.GetDefaultValue())
+				obj.requiredFields[dcField] = []byte(dcField.GetDefaultValue())
 				s.log.Debugf("Using default value required for field \"%s\" %s", dcField.GetName(), FormatFieldData(dcField, obj.requiredFields[dcField]))
-				DCLock.Unlock()
 			}
 		} else if dcField.IsRam() {
 			if data, ok := obj.fieldUpdates[dcField]; ok {
@@ -375,7 +368,7 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 
 	fieldId := dgi.ReadUint16()
 	field := core.DC.GetFieldByIndex(int(fieldId))
-	if field == dc.SwigcptrDCField(0) {
+	if field == nil {
 		s.log.Warnf("Update received for unknown field ID=%d", fieldId)
 	}
 
@@ -391,9 +384,7 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 		return
 	}
 
-	DCLock.Lock()
 	s.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.\n%s", field.GetName(), FormatFieldData(field, data), do, dgi)
-	DCLock.Unlock()
 
 	dg := NewDatagram()
 	dg.AddServerHeader(s.database, Channel_t(do), DBSERVER_SET_STORED_VALUES)
@@ -422,15 +413,12 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 
 	count := dgi.ReadUint16()
 
-	DCLock.Lock()
-	defer DCLock.Unlock()
-
 	fieldUpdates := map[string][]byte{}
 
 	for i := 0; i < int(count); i++ {
 		fieldId := dgi.ReadUint16()
 		field := core.DC.GetFieldByIndex(int(fieldId))
-		if field == dc.SwigcptrDCField(0) {
+		if field == nil {
 			s.log.Warnf("Update received for unknown field ID=%d", fieldId)
 			return
 		}
@@ -557,7 +545,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		context = dgi.ReadUint32()
 
 		field := core.DC.GetFieldByIndex(int(fieldId))
-		if field == dc.SwigcptrDCField(0) {
+		if field == nil {
 			s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
 			return
 		}
@@ -568,7 +556,7 @@ func (s *DatabaseStateServer) handleQueryFields(dgi *DatagramIterator, sender Ch
 		for dgi.RemainingSize() >= Blobsize {
 			fieldId := dgi.ReadUint16()
 			field := core.DC.GetFieldByIndex(int(fieldId))
-			if field == dc.SwigcptrDCField(0) {
+			if field == nil {
 				s.log.Errorf("handleQueryFields: Received invalid field index %d", fieldId)
 				return
 			}
@@ -666,13 +654,11 @@ func (s *DatabaseStateServer) finishFieldQuery(query *FieldQuery, dgi *DatagramI
 			} else {
 				dcField := core.DC.GetFieldByIndex(int(fieldId))
 				hasDefault := false
-				if dcField != dc.SwigcptrDCField(0) {
-					DCLock.Lock()
+				if dcField != nil {
 					if dcField.HasDefaultValue() {
-						fieldData[fieldId] = VectorToByte(dcField.GetDefaultValue())
+						fieldData[fieldId] = []byte(dcField.GetDefaultValue())
 						hasDefault = true
 					}
-					DCLock.Unlock()
 				}
 				if !hasDefault {
 					s.log.Errorf("queryFields: Data for field \"%s\" not found", field)
@@ -786,7 +772,7 @@ func (s *DatabaseStateServer) handleDClassQuery(dgi *DatagramIterator, query *DC
 
 	s.log.Debugf("handleQueryAll: Found DClass name \"%s\" for object=%d", className, do)
 	dclass := core.DC.GetClassByName(className)
-	if dclass == dc.SwigcptrDCClass(0) {
+	if dclass == nil {
 		s.log.Errorf("handleQueryAll: Retreived unknown class of name \"%s\"!", className)
 		return
 	}
@@ -820,8 +806,8 @@ func (s *DatabaseStateServer) handleDClassQuery(dgi *DatagramIterator, query *DC
 	count := dclass.GetNumInheritedFields()
 	for i := 0; i < count; i++ {
 		field := dclass.GetInheritedField(i)
-		molecular := field.AsMolecularField().(dc.DCMolecularField)
-		if molecular != dc.SwigcptrDCMolecularField(0) {
+		molecular := field.AsMolecularField()
+		if molecular != nil {
 			continue
 		}
 		if field.IsRequired() && field.IsDb() {
