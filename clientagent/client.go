@@ -1022,6 +1022,7 @@ func (c *Client) init(config core.Role, conn gonet.Conn) {
 	socket := net.NewSocketTransport(conn,
 		time.Duration(config.Client.Keepalive)*time.Second, config.Client.Write_Buffer_Size)
 	c.client = net.NewClient(socket, c, time.Duration(5)*time.Second)
+	c.client.Start()
 
 	event := eventlogger.NewLoggedEvent("client-connected", "Client", strconv.FormatUint(uint64(c.allocatedChannel), 10),
 		fmt.Sprintf("%s|%s", conn.RemoteAddr().String(), conn.LocalAddr().String()),

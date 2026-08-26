@@ -54,6 +54,25 @@ func (mutexMap *MutexMap[keyType, valueType]) SetNoLock(key keyType, value value
 	return key
 }
 
+func (mutexMap *MutexMap[keyType, valueType]) Update(key keyType, fn func(value valueType, ok bool) valueType) {
+	mutexMap.mutex.Lock()
+	defer mutexMap.mutex.Unlock()
+	old, ok := mutexMap.innerMap[key]
+	mutexMap.innerMap[key] = fn(old, ok)
+}
+
+func (mutexMap *MutexMap[keyType, valueType]) UpdateOrDelete(key keyType, fn func(value valueType, ok bool) (valueType, bool)) {
+	mutexMap.mutex.Lock()
+	defer mutexMap.mutex.Unlock()
+	old, ok := mutexMap.innerMap[key]
+	newVal, del := fn(old, ok)
+	if del {
+		delete(mutexMap.innerMap, key)
+	} else {
+		mutexMap.innerMap[key] = newVal
+	}
+}
+
 // Delete deletes the key/value pair with the given key from the mutex map.
 // If holdLock is true, then the mutex will not be unlocked automatically; call [MutexMap.Unlock] to unlock the mutex as needed.
 func (mutexMap *MutexMap[keyType, valueType]) Delete(key keyType, holdLock bool) {

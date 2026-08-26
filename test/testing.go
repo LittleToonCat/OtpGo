@@ -117,7 +117,7 @@ func (u *UpstreamHandler) HandleConnect(conn gonet.Conn) {
 
 func StartDaemon(config core.ServerConfig) {
 	core.Config = &config
-	eventlogger.StartEventLogger()
+	eventlogger.StartEventLogger(core.Role{})
 
 }
 
@@ -143,7 +143,7 @@ func StartUpstream(bindAddr string) *UpstreamHandler {
 			panic(fmt.Sprintf("Failed to open upstream: %s", err.Error()))
 		}
 	}()
-	go server.Start(bindAddr, errChan)
+	go server.Start(bindAddr, errChan, false)
 	return handler
 }
 
@@ -306,19 +306,17 @@ func (d *TestDatagram) CreateRemoveRange(upper Channel_t, lower Channel_t) *Data
 	return d.Dg
 }
 
-func (d *TestDatagram) CreateAddPostRemove(sender Channel_t, data Datagram) *Datagram {
+func (d *TestDatagram) CreateAddPostRemove(data Datagram) *Datagram {
 	dg := NewDatagram()
 	dg.AddControlHeader(CONTROL_ADD_POST_REMOVE)
-	dg.AddChannel(sender)
 	dg.AddBlob(&data)
 	d.DatagramIterator = NewDatagramIterator(&dg)
 	return d.Dg
 }
 
-func (d *TestDatagram) CreateClearPostRemove(sender Channel_t) *Datagram {
+func (d *TestDatagram) CreateClearPostRemove() *Datagram {
 	dg := NewDatagram()
 	dg.AddControlHeader(CONTROL_CLEAR_POST_REMOVES)
-	dg.AddChannel(sender)
 	d.DatagramIterator = NewDatagramIterator(&dg)
 	return d.Dg
 }
@@ -353,6 +351,7 @@ func (c *TestMDConnection) Set(conn gonet.Conn, name string) *TestMDConnection {
 	c.name = name
 	socket := net.NewSocketTransport(conn, 60*time.Second, 4096)
 	c.Client = net.NewClient(socket, c, 200*time.Millisecond)
+	c.Client.Start()
 	return c
 }
 
@@ -367,6 +366,7 @@ func (c *TestMDConnection) Connect(addr string, name string) *TestMDConnection {
 
 	socket := net.NewSocketTransport(conn, 60*time.Second, 4096)
 	c.Client = net.NewClient(socket, c, 200*time.Millisecond)
+	c.Client.Start()
 	return c
 }
 

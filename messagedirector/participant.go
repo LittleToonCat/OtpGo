@@ -76,43 +76,13 @@ func (m *MDParticipantBase) Subscriber() *Subscriber {
 
 // RouteDatagram appends a datagram to the end of the MD queue.
 func (m *MDParticipantBase) RouteDatagram(datagram Datagram) {
-	MD.queueLock.Lock()
-	nextPos := MD.queuePreviousStoredPosition.Add(1)
-	queueEntry := QueueEntry{datagram, m}
-	queueSlice := make([]QueueEntry, 0)
-	queueSlice = append(queueSlice, queueEntry)
-	MD.Queue[nextPos] = queueSlice
-	MD.queueLock.Unlock()
-
-	select {
-	case MD.shouldProcess <- true:
-	default:
-	}
+	MD.enqueue(datagram, m)
 }
 
 // RouteDatagramEarly appends a datagram to the end of the current queue entry that will be processed.
 // This is used to keep datagrams in the same flow together, so they can be processed in the expected order.
 func (m *MDParticipantBase) RouteDatagramEarly(datagram Datagram) {
-	MD.queueLock.Lock()
-	curPos := MD.queueCurrentPosition.Load()
-	queueEntry := QueueEntry{datagram, m}
-	_, ok := MD.Queue[curPos]
-	if !ok {
-		// This entry isn't in the queue yet. Make a new one.
-		nextPos := MD.queuePreviousStoredPosition.Add(1)
-		queueSlice := make([]QueueEntry, 0)
-		queueSlice = append(queueSlice, queueEntry)
-		MD.Queue[nextPos] = queueSlice
-	} else {
-		// Entry is in the map. Append this datagram to the end of this entry.
-		MD.Queue[curPos] = append(MD.Queue[curPos], queueEntry)
-	}
-	MD.queueLock.Unlock()
-
-	select {
-	case MD.shouldProcess <- true:
-	default:
-	}
+	MD.enqueueEarly(datagram, m)
 }
 
 func (m *MDParticipantBase) PostRemove() {
@@ -120,7 +90,9 @@ func (m *MDParticipantBase) PostRemove() {
 		m.RouteDatagram(dg)
 	}
 
-	MD.RecallPostRemoves()
+	if len(m.postRemoves) > 0 {
+		MD.RecallPostRemoves()
+	}
 }
 
 func (m *MDParticipantBase) AddPostRemove(dg Datagram) {
@@ -135,7 +107,7 @@ func (m *MDParticipantBase) ClearPostRemoves() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	clear(m.postRemoves)
+	m.postRemoves = m.postRemoves[:0]
 	MD.RecallPostRemoves()
 }
 
@@ -186,7 +158,7 @@ func (m *MDParticipantBase) RecycleParticipant() {
 	defer m.mu.Unlock()
 
 	m.subscriber = nil
-	clear(m.postRemoves)
+	m.postRemoves = nil
 	m.name = ""
 	m.url = ""
 	// We can't hold onto the ID; we can't ensure this participant will be reused before being garbage collected.
@@ -210,8 +182,9 @@ func NewMDParticipant(conn gonet.Conn) *MDNetworkParticipant {
 	participant.MDParticipantBase.Init(participant)
 	socket := net.NewSocketTransport(conn, 0, 4096)
 
-	participant.client = net.NewClient(socket, participant, 60*time.Second)
 	participant.SetName(conn.RemoteAddr().String())
+	participant.client = net.NewClient(socket, participant, 60*time.Second)
+	participant.client.Start()
 	return participant
 }
 

@@ -44,9 +44,10 @@ type Client struct {
 }
 
 func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Client {
-	client := &Client{
+	return &Client{
 		tr:      tr,
 		handler: handler,
+		timeout: timeout,
 		remote:  tr.Conn().RemoteAddr().(*gonet.TCPAddr),
 		local:   tr.Conn().LocalAddr().(*gonet.TCPAddr),
 		tlvs:    []byte{},
@@ -57,9 +58,10 @@ func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Cl
 			},
 		},
 	}
-	client.initialize()
-	client.timeout = timeout
-	return client
+}
+
+func (c *Client) Start() {
+	c.initialize()
 }
 
 func (c *Client) initialize() {
