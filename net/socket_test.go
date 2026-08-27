@@ -16,13 +16,12 @@ var socket *socketTransport
 func TestSocketTransport_Write(t *testing.T) {
 	dg := util.NewDatagram()
 	dg.AddInt64(5)
-	if _, err := socket.WriteDatagram(dg); err != nil {
+	if _, err := socket.Write(dg.Bytes()); err != nil {
 		t.Error(err)
 	}
 
 	go func() {
-		err := <-socket.Flush()
-		if err != nil {
+		if err := socket.Flush(); err != nil {
 			t.Error(err)
 		}
 	}()

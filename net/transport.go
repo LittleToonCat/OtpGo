@@ -5,18 +5,17 @@ package net
 import (
 	"io"
 	"net"
-	"otpgo/util"
+	"time"
 )
 
 // Transport represents a stream transport mechanism.
 type Transport interface {
 	io.ReadWriteCloser
 
-	// WriteString writes a datagram to the transport
-	WriteDatagram(datagram util.Datagram) (n int, err error)
+	SetWriteDeadline(t time.Time) error
 
-	// Flush writes any buffered data to the underlying io.Writer.
-	Flush() chan error
+	// Flush writes any buffered data to the underlying connection.
+	Flush() error
 
 	// Closed returns if the transport is closed or not
 	Closed() bool

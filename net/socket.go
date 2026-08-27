@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"io"
 	"net"
-	"otpgo/util"
 	"sync/atomic"
 	"time"
 )
@@ -44,8 +43,8 @@ func (s *socketTransport) Write(p []byte) (n int, err error) {
 	return s.bw.Write(p)
 }
 
-func (s *socketTransport) WriteDatagram(datagram util.Datagram) (n int, err error) {
-	return s.bw.Write(datagram.Bytes())
+func (s *socketTransport) SetWriteDeadline(t time.Time) error {
+	return s.conn.SetWriteDeadline(t)
 }
 
 func (s *socketTransport) Close() error {
@@ -66,10 +65,6 @@ func (s *socketTransport) Conn() net.Conn {
 }
 
 // Flush writes any buffered data to the underlying io.Writer.
-func (s *socketTransport) Flush() chan error {
-	errChan := make(chan error)
-	go func() {
-		errChan <- s.bw.Flush()
-	}()
-	return errChan
+func (s *socketTransport) Flush() error {
+	return s.bw.Flush()
 }

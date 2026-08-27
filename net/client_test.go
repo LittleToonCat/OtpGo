@@ -100,4 +100,5 @@ func init() {
 	}
 	participant = &MDParticipantFake{}
 	netclient = NewClient(Transport(ssocket), participant, 1*time.Second)
+	go netclient.writeLoop()
 }

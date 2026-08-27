@@ -15,9 +15,12 @@ import (
 
 const BUFF_SIZE = 4096
 
+const maxOutboundBytes = 4 * 1024 * 1024
+
 // DatagramHandler is an interface for which structures that can accept datagrams may
 //
 //	implement to accept datagrams from a client, such as an MD participant.
+// implement to accept datagrams from a client, such as an MD participant.
 type DatagramHandler interface {
 	// Handles a message received from the client
 	ReceiveDatagram(Datagram)
@@ -41,16 +44,26 @@ type Client struct {
 	tlvs           []byte
 	readBufferPool sync.Pool
 	disconnecting  atomic.Bool
+
+	outMu          sync.Mutex
+	outQueue       [][]byte
+	outBytes       int
+	outWake        chan struct{}
+	writerStop     chan struct{}
+	writerStopOnce sync.Once
+	writerDone     atomic.Bool
 }
 
 func NewClient(tr Transport, handler DatagramHandler, timeout time.Duration) *Client {
 	return &Client{
-		tr:      tr,
-		handler: handler,
-		timeout: timeout,
-		remote:  tr.Conn().RemoteAddr().(*gonet.TCPAddr),
-		local:   tr.Conn().LocalAddr().(*gonet.TCPAddr),
-		tlvs:    []byte{},
+		tr:         tr,
+		handler:    handler,
+		timeout:    timeout,
+		remote:     tr.Conn().RemoteAddr().(*gonet.TCPAddr),
+		local:      tr.Conn().LocalAddr().(*gonet.TCPAddr),
+		tlvs:       []byte{},
+		outWake:    make(chan struct{}, 1),
+		writerStop: make(chan struct{}),
 		readBufferPool: sync.Pool{
 			New: func() any {
 				buff := make([]byte, BUFF_SIZE)
@@ -79,6 +92,7 @@ func (c *Client) initialize() {
 			}
 		}
 	}
+	go c.writeLoop()
 	go c.read()
 }
 
@@ -158,33 +172,73 @@ func (c *Client) SendDatagram(datagram Datagram) {
 		return
 	}
 
-	dg := NewDatagram()
+	payload := datagram.Bytes()
+	frame := make([]byte, Blobsize+len(payload))
+	binary.LittleEndian.PutUint16(frame[0:Blobsize], uint16(len(payload)))
+	copy(frame[Blobsize:], payload)
 
-	c.Lock()
-	defer c.Unlock()
-
-	dg.AddUint16(uint16(datagram.Len()))
-	dg.Write(datagram.Bytes())
-
-	if _, err := c.tr.WriteDatagram(dg); err != nil {
-		c.disconnect(err, false)
+	c.outMu.Lock()
+	if c.outBytes+len(frame) > maxOutboundBytes {
+		c.outMu.Unlock()
+		c.disconnect(errors.New("outbound queue exceeded"), true)
 		return
 	}
-
-	writeTimer := time.NewTimer(c.timeout)
+	c.outQueue = append(c.outQueue, frame)
+	c.outBytes += len(frame)
+	c.outMu.Unlock()
 
 	select {
-	case err := <-c.tr.Flush():
-		if !writeTimer.Stop() {
-			<-writeTimer.C
-		}
-		if err != nil {
-			c.disconnect(err, false)
+	case c.outWake <- struct{}{}:
+	default:
+	}
+}
+
+func (c *Client) writeLoop() {
+	defer c.writerDone.Store(true)
+
+	for {
+		select {
+		case <-c.writerStop:
+			c.flushOutbound()
+			c.tr.Close()
 			return
+		case <-c.outWake:
+			if err := c.flushOutbound(); err != nil {
+				c.tr.Close()
+				c.writerDone.Store(true)
+				c.disconnect(err, true)
+				return
+			}
 		}
-	case <-writeTimer.C:
-		c.disconnect(errors.New("write timeout"), false)
-		return
+	}
+}
+
+func (c *Client) flushOutbound() error {
+	for {
+		c.outMu.Lock()
+		batch := c.outQueue
+		c.outQueue = nil
+		c.outBytes = 0
+		c.outMu.Unlock()
+
+		if len(batch) == 0 {
+			return nil
+		}
+
+		writeDeadline := c.timeout
+		if writeDeadline <= 0 {
+			writeDeadline = 30 * time.Second
+		}
+		c.tr.SetWriteDeadline(time.Now().Add(writeDeadline))
+
+		for _, frame := range batch {
+			if _, err := c.tr.Write(frame); err != nil {
+				return err
+			}
+		}
+		if err := c.tr.Flush(); err != nil {
+			return err
+		}
 	}
 }
 
@@ -200,7 +254,11 @@ func (c *Client) Close(needsLock bool) {
 		defer c.Unlock()
 	}
 
-	c.tr.Close()
+	c.writerStopOnce.Do(func() { close(c.writerStop) })
+
+	if c.writerDone.Load() {
+		c.tr.Close()
+	}
 }
 
 // disconnect disconnects the client.
