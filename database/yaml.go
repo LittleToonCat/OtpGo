@@ -484,3 +484,8 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string][]byt
 func (b *YAMLBackend) DeleteStoredObject(doId Doid_t) {
 	b.db.log.Warnf("DeleteStoredObject(%d): not implemented for the yaml backend", doId)
 }
+
+func (b *YAMLBackend) GetRelatedValues(req GetRelatedRequest, sender Channel_t) {
+	b.db.log.Warnf("GetRelatedValues: not implemented for the yaml backend")
+	b.db.sendGetRelatedResp(sender, req.Context, 1, nil, nil, nil, nil)
+}

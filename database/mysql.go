@@ -522,6 +522,62 @@ func (b *MySQLBackend) SetStoredValues(doId Doid_t, packedValues map[string][]by
 	}
 }
 
+func (b *MySQLBackend) fetchDoc(doId Doid_t) (string, map[string]interface{}, bool) {
+	queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var class string
+	var raw []byte
+	err := b.dbConn.QueryRowContext(queryCtx,
+		"SELECT dclass, fields FROM objects WHERE _id = ?", doId).Scan(&class, &raw)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			b.db.log.Errorf("fetchDoc(%d): %s", doId, err.Error())
+		}
+		return "", nil, false
+	}
+
+	doc := map[string]interface{}{}
+	if raw != nil {
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			b.db.log.Errorf("fetchDoc(%d): unmarshal: %s", doId, err.Error())
+			return "", nil, false
+		}
+	}
+	return class, doc, true
+}
+
+func (b *MySQLBackend) GetRelatedValues(req GetRelatedRequest, sender Channel_t) {
+	parentClass, parentDoc, ok := b.fetchDoc(req.ParentDoId)
+	if !ok {
+		b.db.sendGetRelatedResp(sender, req.Context, 1, nil, nil, nil, nil)
+		return
+	}
+
+	childIDs, code := b.db.relatedChildDOIDs(req, parentClass, parentDoc)
+	if code != 0 {
+		b.db.sendGetRelatedResp(sender, req.Context, code, nil, nil, nil, nil)
+		return
+	}
+
+	var children []relatedChildPacked
+	for _, id := range childIDs {
+		cClass, cDoc, found := b.fetchDoc(id)
+		if !found || cClass != req.TargetClass {
+			b.db.log.Warnf("GetRelatedValues(%d): referenced %s %d missing or wrong class",
+				req.ParentDoId, req.TargetClass, id)
+			continue
+		}
+		children = append(children, relatedChildPacked{
+			doId:   id,
+			values: packDocFieldsJSON(b.db.log, req.TargetClass, req.TargetFields, cDoc),
+		})
+	}
+
+	parentValues := packDocFieldsJSON(b.db.log, parentClass, req.ParentFields, parentDoc)
+	b.db.sendGetRelatedResp(sender, req.Context, 0, req.ParentFields, parentValues, req.TargetFields, children)
+}
+
 func (b *MySQLBackend) DeleteStoredObject(doId Doid_t) {
 	queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

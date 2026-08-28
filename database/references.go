@@ -1,6 +1,13 @@
 package database
 
 // ReferenceRegistry holds the configured relationships between db-backed fields
+// and the dclasses they reference (see core.RelationshipConfig / otp.yml
+// "relationships"). It is consumed by the Postgres backend to build JSONB
+// indexes and, when enabled, to enforce referential integrity on writes.
+//
+// The registry never inspects stored JSON - reference DOIDs are always taken
+// from the packed DC bytes carried in a CREATE/SET datagram.
+
 import (
 	"fmt"
 
@@ -23,6 +30,8 @@ type ReferenceRegistry struct {
 	all     []Reference
 }
 
+// LoadReferenceRegistry resolves every relationship entry against the loaded DC
+// file, returning a descriptive error if any entry is invalid.
 func LoadReferenceRegistry(rels []core.RelationshipConfig, dcf *dc.DCFile) (*ReferenceRegistry, error) {
 	reg := &ReferenceRegistry{byClass: make(map[string][]Reference)}
 
@@ -62,6 +71,8 @@ func LoadReferenceRegistry(rels []core.RelationshipConfig, dcf *dc.DCFile) (*Ref
 	return reg, nil
 }
 
+// referenceKind reports whether a field is a scalar uint reference (false) or a
+// list of uint references (true), and errors for anything else.
 func referenceKind(field dc.DCField) (isList bool, err error) {
 	switch field.PackType() {
 	case dc.PTInt, dc.PTUint, dc.PTInt64, dc.PTUint64:
@@ -92,6 +103,8 @@ func (r *ReferenceRegistry) All() []Reference {
 	return r.all
 }
 
+// ExtractDOIDs returns the non-zero DOIDs contained in a packed reference field
+// value. `packed` is the raw DC field blob from a CREATE/SET datagram.
 func (r *ReferenceRegistry) ExtractDOIDs(ref Reference, packed []byte) ([]Doid_t, error) {
 	if len(packed) == 0 {
 		return nil, nil

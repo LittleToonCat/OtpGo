@@ -19,6 +19,7 @@ const (
 	GetStoredValuesOperation
 	SetStoredValuesOperation
 	DeleteObjectOperation
+	GetRelatedOperation
 )
 
 type OperationQueueEntry struct {
@@ -35,6 +36,7 @@ type DatabaseBackend interface {
 	GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t)
 	SetStoredValues(doId Doid_t, packedValues map[string][]byte)
 	DeleteStoredObject(doId Doid_t)
+	GetRelatedValues(req GetRelatedRequest, sender Channel_t)
 }
 
 type Config struct {
@@ -174,6 +176,8 @@ func (d *DatabaseServer) queueLoop() {
 					d.backend.SetStoredValues(op.doId, op.data.(map[string][]byte))
 				case DeleteObjectOperation:
 					d.backend.DeleteStoredObject(op.doId)
+				case GetRelatedOperation:
+					d.backend.GetRelatedValues(op.data.(GetRelatedRequest), op.sender)
 				}
 			}
 		case <-signalCh:
@@ -205,6 +209,8 @@ func (d *DatabaseServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		d.handleSetStoredValues(dgi, sender)
 	case DBSERVER_DELETE_STORED_OBJECT:
 		d.handleDeleteStoredObject(dgi, sender)
+	case DBSERVER_GET_RELATED:
+		d.handleGetRelated(dgi, sender)
 	default:
 		if channel, ok := d.forwards[msgType]; ok {
 			// Forward this message to the configured channel.
@@ -304,6 +310,36 @@ func (d *DatabaseServer) handleSetStoredValues(dgi *DatagramIterator, sender Cha
 	op := OperationQueueEntry{operation: SetStoredValuesOperation,
 		doId: doId, data: packedValues}
 	d.queue = append(d.queue, op)
+	d.queueLock.Unlock()
+
+	select {
+	case d.processQueue <- true:
+	default:
+	}
+}
+
+func (d *DatabaseServer) handleGetRelated(dgi *DatagramIterator, sender Channel_t) {
+	req := GetRelatedRequest{}
+	req.Context = dgi.ReadUint32()
+	req.ParentDoId = dgi.ReadDoid()
+
+	parentCount := dgi.ReadUint16()
+	req.ParentFields = make([]string, parentCount)
+	for i := uint16(0); i < parentCount; i++ {
+		req.ParentFields[i] = dgi.ReadString()
+	}
+
+	req.RelationField = dgi.ReadString()
+	req.TargetClass = dgi.ReadString()
+
+	targetCount := dgi.ReadUint16()
+	req.TargetFields = make([]string, targetCount)
+	for i := uint16(0); i < targetCount; i++ {
+		req.TargetFields[i] = dgi.ReadString()
+	}
+
+	d.queueLock.Lock()
+	d.queue = append(d.queue, OperationQueueEntry{operation: GetRelatedOperation, data: req, sender: sender})
 	d.queueLock.Unlock()
 
 	select {

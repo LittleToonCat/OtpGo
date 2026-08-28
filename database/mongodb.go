@@ -529,3 +529,91 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string][]by
 func (b *MongoBackend) DeleteStoredObject(doId Doid_t) {
 	b.db.log.Warnf("DeleteStoredObject(%d): not implemented for the mongodb backend", doId)
 }
+
+func (b *MongoBackend) fetchBsonDoc(doId Doid_t) (string, bson.M, bool) {
+	var object StoredObject
+	err := b.objects.FindOne(context.Background(), bson.M{"_id": doId}).Decode(&object)
+	if err != nil {
+		if err != mongo.ErrNoDocuments {
+			b.db.log.Errorf("fetchBsonDoc(%d): %s", doId, err.Error())
+		}
+		return "", nil, false
+	}
+
+	raw, _ := bson.Marshal(object.Fields)
+	m := bson.M{}
+	_ = bson.Unmarshal(raw, &m)
+	return object.Class, m, true
+}
+
+func packBsonDocFields(logger *log.Entry, clsName string, fieldNames []string, doc bson.M) map[string][]byte {
+	cls := core.DC.GetClassByName(clsName)
+	if cls == nil {
+		logger.Errorf("packBsonDocFields: class %s does not exist", clsName)
+		return nil
+	}
+
+	packer := dc.NewDCPacker()
+	defer dc.DeleteDCPacker(packer)
+
+	out := make(map[string][]byte, len(fieldNames))
+	for _, name := range fieldNames {
+		dcField := cls.GetFieldByName(name)
+		if dcField == nil {
+			logger.Errorf("packBsonDocFields: field %s does not exist for class %s", name, clsName)
+			continue
+		}
+
+		if name == "DcObjectType" {
+			out[name] = dcField.ParseString("\"" + clsName + "\"")
+			continue
+		}
+
+		value, ok := doc[name]
+		if !ok {
+			continue
+		}
+
+		packer.BeginPack(dcField)
+		PackBsonValue(packer, value)
+		if !packer.EndPack() {
+			logger.Errorf("packBsonDocFields: pack failed for %s.%s", clsName, name)
+			packer.ClearData()
+			continue
+		}
+		out[name] = packer.GetBytes()
+		packer.ClearData()
+	}
+	return out
+}
+
+func (b *MongoBackend) GetRelatedValues(req GetRelatedRequest, sender Channel_t) {
+	parentClass, parentDoc, ok := b.fetchBsonDoc(req.ParentDoId)
+	if !ok {
+		b.db.sendGetRelatedResp(sender, req.Context, 1, nil, nil, nil, nil)
+		return
+	}
+
+	childIDs, code := b.db.relatedChildDOIDs(req, parentClass, parentDoc)
+	if code != 0 {
+		b.db.sendGetRelatedResp(sender, req.Context, code, nil, nil, nil, nil)
+		return
+	}
+
+	var children []relatedChildPacked
+	for _, id := range childIDs {
+		cClass, cDoc, found := b.fetchBsonDoc(id)
+		if !found || cClass != req.TargetClass {
+			b.db.log.Warnf("GetRelatedValues(%d): referenced %s %d missing or wrong class",
+				req.ParentDoId, req.TargetClass, id)
+			continue
+		}
+		children = append(children, relatedChildPacked{
+			doId:   id,
+			values: packBsonDocFields(b.db.log, req.TargetClass, req.TargetFields, cDoc),
+		})
+	}
+
+	parentValues := packBsonDocFields(b.db.log, parentClass, req.ParentFields, parentDoc)
+	b.db.sendGetRelatedResp(sender, req.Context, 0, req.ParentFields, parentValues, req.TargetFields, children)
+}

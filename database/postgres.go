@@ -496,6 +496,92 @@ func (b *PostgresBackend) SetStoredValues(doId Doid_t, packedValues map[string][
 	b.db.log.Debugf("Successfully updated object %s(%d)", obj.Class, doId)
 }
 
+func (b *PostgresBackend) GetRelatedValues(req GetRelatedRequest, sender Channel_t) {
+	queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var parentClass string
+	var parentRaw []byte
+	err := b.dbConn.QueryRowContext(queryCtx,
+		`SELECT dclass, fields FROM objects WHERE _id = $1`, req.ParentDoId).Scan(&parentClass, &parentRaw)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			b.db.log.Errorf("GetRelatedValues(%d): %s", req.ParentDoId, err.Error())
+		}
+		b.db.sendGetRelatedResp(sender, req.Context, 1, nil, nil, nil, nil)
+		return
+	}
+
+	parentDoc := map[string]interface{}{}
+	if parentRaw != nil {
+		if err = json.Unmarshal(parentRaw, &parentDoc); err != nil {
+			b.db.log.Errorf("GetRelatedValues(%d): unmarshal parent: %s", req.ParentDoId, err.Error())
+			b.db.sendGetRelatedResp(sender, req.Context, 1, nil, nil, nil, nil)
+			return
+		}
+	}
+
+	fieldName, _, _, ok := resolveRelationField(b.db.references, parentClass, req.RelationField, req.TargetClass)
+	if !ok {
+		b.db.log.Warnf("GetRelatedValues(%d): no relationship from %s to %s (field %q)",
+			req.ParentDoId, parentClass, req.TargetClass, req.RelationField)
+		b.db.sendGetRelatedResp(sender, req.Context, 2, nil, nil, nil, nil)
+		return
+	}
+
+	childIDs := docChildDOIDs(parentDoc[fieldName])
+
+	var children []relatedChildPacked
+	if len(childIDs) > 0 {
+		ids := make([]int64, len(childIDs))
+		for i, d := range childIDs {
+			ids[i] = int64(d)
+		}
+
+		rows, err := b.dbConn.QueryContext(queryCtx,
+			`SELECT _id, fields FROM objects WHERE _id = ANY($1) AND dclass = $2`,
+			pq.Array(ids), req.TargetClass)
+		if err != nil {
+			b.db.log.Errorf("GetRelatedValues(%d): child query: %s", req.ParentDoId, err.Error())
+			b.db.sendGetRelatedResp(sender, req.Context, 1, nil, nil, nil, nil)
+			return
+		}
+
+		childDocs := make(map[Doid_t]map[string]interface{}, len(ids))
+		for rows.Next() {
+			var id int64
+			var raw []byte
+			if err := rows.Scan(&id, &raw); err != nil {
+				rows.Close()
+				b.db.log.Errorf("GetRelatedValues(%d): scan child: %s", req.ParentDoId, err.Error())
+				b.db.sendGetRelatedResp(sender, req.Context, 1, nil, nil, nil, nil)
+				return
+			}
+			doc := map[string]interface{}{}
+			if raw != nil {
+				_ = json.Unmarshal(raw, &doc)
+			}
+			childDocs[Doid_t(id)] = doc
+		}
+		rows.Close()
+		for _, id := range childIDs {
+			doc, present := childDocs[id]
+			if !present {
+				b.db.log.Warnf("GetRelatedValues(%d): referenced %s %d missing or wrong class",
+					req.ParentDoId, req.TargetClass, id)
+				continue
+			}
+			children = append(children, relatedChildPacked{
+				doId:   id,
+				values: packDocFieldsJSON(b.db.log, req.TargetClass, req.TargetFields, doc),
+			})
+		}
+	}
+
+	parentValues := packDocFieldsJSON(b.db.log, parentClass, req.ParentFields, parentDoc)
+	b.db.sendGetRelatedResp(sender, req.Context, 0, req.ParentFields, parentValues, req.TargetFields, children)
+}
+
 func (b *PostgresBackend) DeleteStoredObject(doId Doid_t) {
 	queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

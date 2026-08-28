@@ -85,6 +85,29 @@ func PackValue(packer *dc.DCPacker, value interface{}, log log.Entry) {
 		}
 	}
 
+	if value == nil {
+		switch packer.GetPackType() {
+		case dc.PTString, dc.PTBlob:
+			packer.PackString("")
+			return
+		case dc.PTDouble:
+			packer.PackDouble(0)
+			return
+		case dc.PTInt:
+			packer.PackInt(0)
+			return
+		case dc.PTUint:
+			packer.PackUint(0)
+			return
+		case dc.PTInt64:
+			packer.PackInt64(0)
+			return
+		case dc.PTUint64:
+			packer.PackUint64(0)
+			return
+		}
+	}
+
 	switch packer.GetPackType() {
 	case dc.PTInvalid:
 		// TODO: Error out
