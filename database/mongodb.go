@@ -525,3 +525,7 @@ func (b *MongoBackend) SetStoredValues(doId Doid_t, packedValues map[string][]by
 		b.db.log.Debugf("Successfully updated object %s(%d)", object.Class, doId)
 	}
 }
+
+func (b *MongoBackend) DeleteStoredObject(doId Doid_t) {
+	b.db.log.Warnf("DeleteStoredObject(%d): not implemented for the mongodb backend", doId)
+}

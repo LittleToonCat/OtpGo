@@ -306,7 +306,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 	}
 
 	if obj.ID != doId {
-		b.db.log.Errorf(fmt.Sprintf("%d.yaml contains data for id %d instead!", doId, obj.ID))
+		b.db.log.Errorf("%d.yaml contains data for id %d instead!", doId, obj.ID)
 		b.SendGetStoredValuesError(doId, fields, ctx, sender)
 		return
 	}
@@ -412,7 +412,7 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string][]byt
 	}
 
 	if obj.ID != doId {
-		b.db.log.Errorf(fmt.Sprintf("%d.yaml contains data for id %d instead!", doId, obj.ID))
+		b.db.log.Errorf("%d.yaml contains data for id %d instead!", doId, obj.ID)
 		return
 	}
 
@@ -479,4 +479,8 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string][]byt
 		b.db.log.Errorf("Error when writing to %d.yaml: %s", doId, err.Error())
 		return
 	}
+}
+
+func (b *YAMLBackend) DeleteStoredObject(doId Doid_t) {
+	b.db.log.Warnf("DeleteStoredObject(%d): not implemented for the yaml backend", doId)
 }

@@ -20,6 +20,13 @@ type Uberdog struct {
 
 var Uberdogs []Uberdog
 
+// RelationshipConfig maps a db-backed reference field to the dclass it points at.
+type RelationshipConfig struct {
+	Class  string
+	Field  string
+	Target string
+}
+
 type Role struct {
 	Type string
 	Name string
@@ -69,13 +76,15 @@ type Role struct {
 	Backend struct {
 		Type string
 
-		// MONGO BACKEND
+		// MONGO / POSTGRES BACKEND
 		Server   string
 		Database string
 
 		// YAML BACKEND
 		Directory string
 	}
+	Relationships []RelationshipConfig
+	Enforce_Referential_Integrity bool
 	// Forwarding system to keep game-specific messages out of the database code.
 	Forwarding []struct {
 		Msgtype uint16

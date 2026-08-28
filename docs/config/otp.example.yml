@@ -107,6 +107,20 @@ roles:
       backend:
           type: bdb
           filename: main_database.db
+          # PostgreSQL backend specific
+          #type: postgres
+          #server: "postgres://user:pass@localhost:5432/otpgo?sslmode=disable"  # URL or libpq keyword string
+          #database: otpgo  # optional; overrides the db name in `server` Created automatically if it doesn't exist.
+
+      # Optional. Declares which db-backed fields hold references (DOIDs) to other
+      # stored objects.
+      #relationships:
+      #    - {class: Account, field: ESTATE_ID,     target: DistributedEstate}
+      #    - {class: Account, field: ACCOUNT_AV_SET, target: DistributedToon}
+
+      # Optionally reject a create/update that points a reference
+      # field at a missing object or one of the wrong dclass.
+      #enforce_referential_integrity: true
 
     # We will then create a database state server which provides state-server-like
     #     behavior on database objects.  The dbss does not have a control channel,

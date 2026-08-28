@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"otpgo/core"
@@ -12,7 +11,6 @@ import (
 
 	"otpgo/dc"
 
-	"github.com/apex/log"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -37,213 +35,6 @@ type MySQLBackend struct {
 	dbConn *sql.DB
 }
 
-func UnpackDataToArray(unpacker *dc.DCPacker, array *[]interface{}, log log.Entry) {
-	switch unpacker.GetPackType() {
-	case dc.PTInvalid:
-		log.Errorf("UnpackDataToArray: PTInvalid reached!\n%s", DumpUnpacker(unpacker))
-		*array = append(*array, "invalid")
-	case dc.PTDouble:
-		*array = append(*array, unpacker.UnpackDouble())
-	case dc.PTInt:
-		*array = append(*array, unpacker.UnpackInt())
-	case dc.PTUint:
-		*array = append(*array, unpacker.UnpackUint())
-	case dc.PTInt64:
-		*array = append(*array, unpacker.UnpackInt64())
-	case dc.PTUint64:
-		*array = append(*array, unpacker.UnpackUint64())
-	case dc.PTString:
-		*array = append(*array, unpacker.UnpackString())
-	case dc.PTBlob:
-		data := unpacker.UnpackBlob()
-		*array = append(*array, data)
-	default:
-		// More nested fields, nest call this exact function.
-		nestedArray := []interface{}{}
-		unpacker.Push()
-		for unpacker.MoreNestedFields() {
-			UnpackDataToArray(unpacker, &nestedArray, log)
-		}
-		unpacker.Pop()
-		*array = append(*array, nestedArray)
-	}
-
-	log.Debugf("Resulting Array: %v", *array)
-}
-
-func UnpackDataToDocument(unpacker *dc.DCPacker, name string, doc map[string]interface{}, log log.Entry) {
-	switch unpacker.GetPackType() {
-	case dc.PTInvalid:
-		log.Errorf("UnpackDataToDocument: PTInvalid reached!\n%s", DumpUnpacker(unpacker))
-	case dc.PTDouble:
-		doc[name] = unpacker.UnpackDouble()
-	case dc.PTInt:
-		doc[name] = unpacker.UnpackInt()
-	case dc.PTUint:
-		doc[name] = unpacker.UnpackUint()
-	case dc.PTInt64:
-		doc[name] = unpacker.UnpackInt64()
-	case dc.PTUint64:
-		doc[name] = unpacker.UnpackUint64()
-	case dc.PTString:
-		doc[name] = unpacker.UnpackString()
-	case dc.PTBlob:
-		data := unpacker.UnpackBlob()
-		doc[name] = data
-	default:
-		// If we reached here, that means it is a list
-		// of nested fields (e.g. an array type, an atomic field, a
-		// class parameter, or a switch case).
-		//
-		// We'll have to create an array for these types.
-		array := []interface{}{}
-		unpacker.Push()
-		for unpacker.MoreNestedFields() {
-			UnpackDataToArray(unpacker, &array, log)
-		}
-		unpacker.Pop()
-		doc[name] = array
-	}
-
-	log.Debugf("Resulting Document: %v", doc)
-}
-
-func PackValue(packer *dc.DCPacker, value interface{}, log log.Entry) {
-	if array, ok := value.([]interface{}); ok && len(array) == 1 {
-		switch packer.GetPackType() {
-		case dc.PTDouble, dc.PTInt, dc.PTUint, dc.PTInt64, dc.PTUint64, dc.PTString, dc.PTBlob:
-			value = array[0]
-		}
-	}
-
-	switch packer.GetPackType() {
-	case dc.PTInvalid:
-		// TODO: Error out
-	case dc.PTDouble:
-		if double, ok := value.(float64); ok {
-			packer.PackDouble(double)
-		} else if intValue, ok := value.(int64); ok {
-			packer.PackDouble(float64(intValue))
-		} else if intValue, ok := value.(int); ok {
-			packer.PackDouble(float64(intValue))
-		} else if jsonNumber, ok := value.(json.Number); ok {
-			if floatVal, err := jsonNumber.Float64(); err == nil {
-				packer.PackDouble(floatVal)
-			}
-		}
-	case dc.PTInt:
-		if intValue, ok := value.(int64); ok {
-			packer.PackInt(int(intValue))
-		} else if intValue, ok := value.(int); ok {
-			packer.PackInt(intValue)
-		} else if floatValue, ok := value.(float64); ok {
-			packer.PackInt(int(floatValue))
-		} else if jsonNumber, ok := value.(json.Number); ok {
-			if intVal, err := jsonNumber.Int64(); err == nil {
-				packer.PackInt(int(intVal))
-			}
-		}
-	case dc.PTUint:
-		if intValue, ok := value.(int64); ok {
-			packer.PackUint(uint(intValue))
-		} else if intValue, ok := value.(int); ok {
-			packer.PackUint(uint(intValue))
-		} else if floatValue, ok := value.(float64); ok {
-			packer.PackUint(uint(floatValue))
-		} else if jsonNumber, ok := value.(json.Number); ok {
-			if intVal, err := jsonNumber.Int64(); err == nil {
-				packer.PackUint(uint(intVal))
-			}
-		}
-	case dc.PTInt64:
-		if intValue, ok := value.(int64); ok {
-			packer.PackInt64(intValue)
-		} else if intValue, ok := value.(int); ok {
-			packer.PackInt64(int64(intValue))
-		} else if floatValue, ok := value.(float64); ok {
-			packer.PackInt64(int64(floatValue))
-		} else if jsonNumber, ok := value.(json.Number); ok {
-			if intVal, err := jsonNumber.Int64(); err == nil {
-				packer.PackInt64(intVal)
-			}
-		}
-	case dc.PTUint64:
-		if intValue, ok := value.(int64); ok {
-			packer.PackUint64(uint64(intValue))
-		} else if intValue, ok := value.(int); ok {
-			packer.PackUint64(uint64(intValue))
-		} else if floatValue, ok := value.(float64); ok {
-			packer.PackUint64(uint64(floatValue))
-		} else if jsonNumber, ok := value.(json.Number); ok {
-			if intVal, err := jsonNumber.Int64(); err == nil {
-				packer.PackUint64(uint64(intVal))
-			}
-		}
-	case dc.PTString:
-		if stringValue, ok := value.(string); ok {
-			packer.PackString(stringValue)
-		} else if boolValue, ok := value.(bool); ok {
-			if boolValue {
-				packer.PackString("true")
-			} else {
-				packer.PackString("false")
-			}
-		} else if jsonNumber, ok := value.(json.Number); ok {
-			packer.PackString(jsonNumber.String())
-		}
-	case dc.PTBlob:
-		if binData, ok := value.([]byte); ok {
-			packer.PackString(string(binData))
-		} else if stringValue, ok := value.(string); ok {
-			if decoded, err := base64.StdEncoding.DecodeString(stringValue); err == nil {
-				packer.PackString(string(decoded))
-			} else {
-				packer.PackString(stringValue)
-			}
-		}
-	default:
-		if array, ok := value.([]interface{}); ok {
-			packer.Push()
-			for _, v := range array {
-				PackValue(packer, v, log)
-			}
-			packer.Pop()
-		} else if doc, ok := value.(map[string]interface{}); ok {
-			// This is for Astron database compatibility.
-			// They store atomic (method) field values as a document,
-			// using their names as keys.  They will be replaced as an
-			// array upon restorage.
-			packer.Push()
-			numValues := len(doc)
-			for i := 0; i < numValues; i++ {
-				field := packer.GetCurrentField().AsField().(dc.DCField)
-				name := field.GetName()
-				if name == "" {
-					name = fmt.Sprintf("_%d", i)
-				}
-				if v, ok := doc[name]; ok {
-					PackValue(packer, v, log)
-				} else {
-					// Maybe "_{element_number}" is the key instead.
-					if name != "" {
-						name = fmt.Sprintf("_%d", i)
-						if v, ok := doc[name]; ok {
-							PackValue(packer, v, log)
-						}
-					}
-				}
-			}
-			packer.Pop()
-		} else if value == nil {
-			return
-		} else {
-			log.Warnf("Unknown value type in PackValue: %T with value: %v", value, value)
-			if strValue := fmt.Sprintf("%v", value); strValue != "" {
-				packer.PackString(strValue)
-			}
-		}
-	}
-}
 func NewMySQLBackend(db *DatabaseServer, config Config) (bool, *MySQLBackend, error) {
 	dbConn, err := sql.Open("mysql", config.Server)
 	if err != nil {
@@ -729,4 +520,20 @@ func (b *MySQLBackend) SetStoredValues(doId Doid_t, packedValues map[string][]by
 	if rowsAffected > 0 {
 		b.db.log.Debugf("Successfully updated object %s(%d)", obj.Class, doId)
 	}
+}
+
+func (b *MySQLBackend) DeleteStoredObject(doId Doid_t) {
+	queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	res, err := b.dbConn.ExecContext(queryCtx, "DELETE FROM objects WHERE _id = ?", doId)
+	if err != nil {
+		b.db.log.Errorf("DeleteStoredObject(%d): %s", doId, err.Error())
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		b.db.log.Warnf("DeleteStoredObject(%d): object not found", doId)
+		return
+	}
+	b.db.log.Debugf("Deleted object %d", doId)
 }

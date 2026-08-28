@@ -18,6 +18,7 @@ const (
 	CreateObjectOperation uint8 = iota
 	GetStoredValuesOperation
 	SetStoredValuesOperation
+	DeleteObjectOperation
 )
 
 type OperationQueueEntry struct {
@@ -33,6 +34,7 @@ type DatabaseBackend interface {
 	CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCField][]byte, ctx uint32, sender Channel_t)
 	GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t)
 	SetStoredValues(doId Doid_t, packedValues map[string][]byte)
+	DeleteStoredObject(doId Doid_t)
 }
 
 type Config struct {
@@ -56,6 +58,9 @@ type DatabaseServer struct {
 	objectTypes map[uint16]*dc.DCClass
 	backend     DatabaseBackend
 	forwards    map[uint16]Channel_t
+
+	references  *ReferenceRegistry
+	enforceRefs bool
 
 	queue        []OperationQueueEntry
 	queueLock    sync.Mutex
@@ -93,6 +98,18 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 		db.objectTypes[uint16(obj.ID)] = dclass
 	}
 
+	// Resolve the (optional) relationship map.
+	refs, err := LoadReferenceRegistry(config.Relationships, core.DC)
+	if err != nil {
+		db.log.Fatal(err.Error())
+	}
+	db.references = refs
+	db.enforceRefs = config.Enforce_Referential_Integrity
+	if !refs.Empty() {
+		db.log.Infof("Loaded %d field relationship(s); referential integrity enforcement: %t",
+			len(refs.All()), db.enforceRefs)
+	}
+
 	if ok, backend, err := db.createBackend(config); ok {
 		db.backend = backend
 	} else {
@@ -118,6 +135,8 @@ func (d *DatabaseServer) createBackend(config core.Role) (bool, DatabaseBackend,
 		return NewYAMLBackend(d, config.Backend)
 	case "mysql":
 		return NewMySQLBackend(d, config.Backend)
+	case "postgres", "postgresql":
+		return NewPostgresBackend(d, config.Backend)
 	default:
 		return false, nil, fmt.Errorf("unknown backend type: %s", config.Backend.Type)
 	}
@@ -153,6 +172,8 @@ func (d *DatabaseServer) queueLoop() {
 					d.backend.GetStoredValues(op.doId, op.data.([]string), op.context, op.sender)
 				case SetStoredValuesOperation:
 					d.backend.SetStoredValues(op.doId, op.data.(map[string][]byte))
+				case DeleteObjectOperation:
+					d.backend.DeleteStoredObject(op.doId)
 				}
 			}
 		case <-signalCh:
@@ -182,6 +203,8 @@ func (d *DatabaseServer) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		d.HandleGetStoredValues(dgi, sender)
 	case DBSERVER_SET_STORED_VALUES:
 		d.handleSetStoredValues(dgi, sender)
+	case DBSERVER_DELETE_STORED_OBJECT:
+		d.handleDeleteStoredObject(dgi, sender)
 	default:
 		if channel, ok := d.forwards[msgType]; ok {
 			// Forward this message to the configured channel.
@@ -281,6 +304,19 @@ func (d *DatabaseServer) handleSetStoredValues(dgi *DatagramIterator, sender Cha
 	op := OperationQueueEntry{operation: SetStoredValuesOperation,
 		doId: doId, data: packedValues}
 	d.queue = append(d.queue, op)
+	d.queueLock.Unlock()
+
+	select {
+	case d.processQueue <- true:
+	default:
+	}
+}
+
+func (d *DatabaseServer) handleDeleteStoredObject(dgi *DatagramIterator, sender Channel_t) {
+	doId := dgi.ReadDoid()
+
+	d.queueLock.Lock()
+	d.queue = append(d.queue, OperationQueueEntry{operation: DeleteObjectOperation, doId: doId, sender: sender})
 	d.queueLock.Unlock()
 
 	select {
