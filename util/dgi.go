@@ -170,51 +170,20 @@ func (dgi *DatagramIterator) ReadRemainder() []uint8 {
 }
 
 func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, lock bool) ([]byte, bool) {
-	unpacker := dc.NewDCPacker()
-	defer dc.DeleteDCPacker(unpacker)
-
-	offset := dgi.Tell()
-
-	vectorData := dgi.ReadRemainder()
-
-	dgi.Seek(offset)
-
-	unpacker.SetUnpackData(vectorData)
-	unpacker.BeginUnpack(field)
-
-	packedData := unpacker.UnpackLiteralValue()
-
-	if !unpacker.EndUnpack() {
+	value, end, ok := dc.UnpackField(field, dgi.Dg.Bytes(), int(dgi.offset), validateRanges)
+	if !ok {
 		return nil, false
 	}
-
-	if validateRanges && !field.ValidateRanges(packedData) {
-		return nil, false
-	}
-
-	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
-	return packedData, true
+	dgi.offset = Dgsize_t(end)
+	return value, true
 }
 
 func (dgi *DatagramIterator) SkipDCField(field dc.DCField, lock bool) bool {
-	unpacker := dc.NewDCPacker()
-	defer dc.DeleteDCPacker(unpacker)
-
-	offset := dgi.Tell()
-
-	// We need data to skip, or else it'll assert an error.
-	vectorData := dgi.ReadRemainder()
-
-	dgi.Seek(offset)
-
-	unpacker.SetUnpackData(vectorData)
-	unpacker.BeginUnpack(field)
-	unpacker.UnpackSkip()
-	if !unpacker.EndUnpack() {
+	end, ok := dc.SkipField(field, dgi.Dg.Bytes(), int(dgi.offset))
+	if !ok {
 		return false
 	}
-
-	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
+	dgi.offset = Dgsize_t(end)
 	return true
 }
 
