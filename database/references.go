@@ -23,6 +23,7 @@ type Reference struct {
 	Field     dc.DCField
 	Target    *dc.DCClass
 	IsList    bool
+	Atomic bool
 }
 
 type ReferenceRegistry struct {
@@ -52,7 +53,7 @@ func LoadReferenceRegistry(rels []core.RelationshipConfig, dcf *dc.DCFile) (*Ref
 			return nil, fmt.Errorf("relationship %s.%s: field is not db-backed", rel.Class, rel.Field)
 		}
 
-		isList, err := referenceKind(field)
+		isList, atomic, err := referenceKind(field)
 		if err != nil {
 			return nil, fmt.Errorf("relationship %s.%s: %w", rel.Class, rel.Field, err)
 		}
@@ -63,6 +64,7 @@ func LoadReferenceRegistry(rels []core.RelationshipConfig, dcf *dc.DCFile) (*Ref
 			Field:     field,
 			Target:    target,
 			IsList:    isList,
+			Atomic:    atomic,
 		}
 		reg.byClass[rel.Class] = append(reg.byClass[rel.Class], ref)
 		reg.all = append(reg.all, ref)
@@ -71,20 +73,37 @@ func LoadReferenceRegistry(rels []core.RelationshipConfig, dcf *dc.DCFile) (*Ref
 	return reg, nil
 }
 
-// referenceKind reports whether a field is a scalar uint reference (false) or a
-// list of uint references (true), and errors for anything else.
-func referenceKind(field dc.DCField) (isList bool, err error) {
+func referenceKind(field dc.DCField) (isList bool, atomic bool, err error) {
 	switch field.PackType() {
 	case dc.PTInt, dc.PTUint, dc.PTInt64, dc.PTUint64:
-		return false, nil
+		return false, false, nil
 	case dc.PTArray:
-		switch field.GetNestedField(0).PackType() {
-		case dc.PTInt, dc.PTUint, dc.PTInt64, dc.PTUint64:
-			return true, nil
+		if isUintPackType(field.GetNestedField(0).PackType()) {
+			return true, false, nil
 		}
-		return false, fmt.Errorf("array element is not a uint (struct-list references are not supported)")
+		return false, false, fmt.Errorf("array element is not a uint (struct-list references are not supported)")
+	case dc.PTField:
+		if field.NumNestedFields() != 1 {
+			return false, false, fmt.Errorf("atomic field wraps %d values; only single-value atomics can be references", field.NumNestedFields())
+		}
+		inner := field.GetNestedField(0)
+		if isUintPackType(inner.PackType()) {
+			return false, true, nil
+		}
+		if inner.PackType() == dc.PTArray && isUintPackType(inner.GetNestedField(0).PackType()) {
+			return true, true, nil
+		}
+		return false, false, fmt.Errorf("atomic field does not wrap a uint or uint[]")
 	}
-	return false, fmt.Errorf("field is not a uint or uint[] reference")
+	return false, false, fmt.Errorf("field is not a uint or uint[] reference")
+}
+
+func isUintPackType(pt dc.DCPackType) bool {
+	switch pt {
+	case dc.PTInt, dc.PTUint, dc.PTInt64, dc.PTUint64:
+		return true
+	}
+	return false
 }
 
 func (r *ReferenceRegistry) Empty() bool { return r == nil || len(r.all) == 0 }

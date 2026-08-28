@@ -12,14 +12,21 @@ func referenceIndexName(ref Reference) string {
 
 func referenceIndexDDL(ref Reference) string {
 	name := referenceIndexName(ref)
+	listExpr := fmt.Sprintf("fields->'%s'", ref.FieldName)
+	scalarExpr := fmt.Sprintf("fields->>'%s'", ref.FieldName)
+	if ref.Atomic {
+		listExpr = fmt.Sprintf("fields->'%s'->0", ref.FieldName)
+		scalarExpr = fmt.Sprintf("fields->'%s'->>0", ref.FieldName)
+	}
+
 	if ref.IsList {
 		return fmt.Sprintf(
-			`CREATE INDEX IF NOT EXISTS "%s" ON objects USING GIN ((fields->'%s') jsonb_path_ops)`,
-			name, ref.FieldName)
+			`CREATE INDEX IF NOT EXISTS "%s" ON objects USING GIN ((%s) jsonb_path_ops)`,
+			name, listExpr)
 	}
 	return fmt.Sprintf(
-		`CREATE INDEX IF NOT EXISTS "%s" ON objects (((fields->>'%s')::bigint)) WHERE dclass = '%s'`,
-		name, ref.FieldName, ref.ClassName)
+		`CREATE INDEX IF NOT EXISTS "%s" ON objects (((%s)::bigint)) WHERE dclass = '%s'`,
+		name, scalarExpr, ref.ClassName)
 }
 
 func (b *PostgresBackend) ensureReferenceIndexes(reg *ReferenceRegistry) error {

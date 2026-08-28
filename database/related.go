@@ -1,6 +1,5 @@
 package database
 
-
 import (
 	"reflect"
 
@@ -54,7 +53,6 @@ func resolveRelationField(reg *ReferenceRegistry, parentClass, relationField, ta
 	if f == nil {
 		return "", nil, false, false
 	}
-	list, err := referenceKind(f)
 	if err != nil {
 		return "", nil, false, false
 	}
@@ -63,18 +61,19 @@ func resolveRelationField(reg *ReferenceRegistry, parentClass, relationField, ta
 
 func docChildDOIDs(value interface{}) []Doid_t {
 	var out []Doid_t
-	add := func(v interface{}) {
+	var walk func(v interface{})
+	walk = func(v interface{}) {
+		if rv := reflect.ValueOf(v); rv.IsValid() && (rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array) {
+			for i := 0; i < rv.Len(); i++ {
+				walk(rv.Index(i).Interface())
+			}
+			return
+		}
 		if id := toDoid(v); id != 0 {
 			out = append(out, id)
 		}
 	}
-	if rv := reflect.ValueOf(value); rv.IsValid() && (rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array) {
-		for i := 0; i < rv.Len(); i++ {
-			add(rv.Index(i).Interface())
-		}
-		return out
-	}
-	add(value)
+	walk(value)
 	return out
 }
 

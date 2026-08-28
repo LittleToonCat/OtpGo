@@ -16,7 +16,6 @@ import (
 	"github.com/lib/pq"
 )
 
-
 type PostgresGlobalsDoId struct {
 	Monotonic Doid_t   `json:"monotonic"`
 	Free      []Doid_t `json:"free"`
