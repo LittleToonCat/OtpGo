@@ -53,6 +53,7 @@ func resolveRelationField(reg *ReferenceRegistry, parentClass, relationField, ta
 	if f == nil {
 		return "", nil, false, false
 	}
+	list, _, err := referenceKind(f)
 	if err != nil {
 		return "", nil, false, false
 	}
