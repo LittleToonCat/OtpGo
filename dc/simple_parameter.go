@@ -166,12 +166,12 @@ func (sp *simpleParameter) GetDivisor() uint32 { return sp.divisor }
 func (sp *simpleParameter) AsField() field     { return sp }
 func (sp *simpleParameter) AsParameter() field { return sp }
 
-func (sp *simpleParameter) GetDefaultValue() Vector         { return getDefaultValue(&sp.fieldBase, sp) }
-func (sp *simpleParameter) ValidateRanges(data Vector) bool { return fieldValidateRanges(sp, data) }
-func (sp *simpleParameter) FormatData(data Vector, showFieldNames ...bool) string {
+func (sp *simpleParameter) GetDefaultValue() []byte         { return getDefaultValue(&sp.fieldBase, sp) }
+func (sp *simpleParameter) ValidateRanges(data []byte) bool { return fieldValidateRanges(sp, data) }
+func (sp *simpleParameter) FormatData(data []byte, showFieldNames ...bool) string {
 	return fieldFormatData(sp, data, variadicBoolDefaultTrue(showFieldNames))
 }
-func (sp *simpleParameter) ParseString(s string) Vector { return fieldParseString(sp, s) }
+func (sp *simpleParameter) ParseString(s string) []byte { return fieldParseString(sp, s) }
 
 func (sp *simpleParameter) MakeCopy() packerInterface {
 	cp := *sp

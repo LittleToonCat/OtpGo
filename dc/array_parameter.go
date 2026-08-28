@@ -76,12 +76,12 @@ func (ap *arrayParameter) GetElementType() packerInterface { return ap.elementTy
 func (ap *arrayParameter) AsField() field     { return ap }
 func (ap *arrayParameter) AsParameter() field { return ap }
 
-func (ap *arrayParameter) GetDefaultValue() Vector         { return getDefaultValue(&ap.fieldBase, ap) }
-func (ap *arrayParameter) ValidateRanges(data Vector) bool { return fieldValidateRanges(ap, data) }
-func (ap *arrayParameter) FormatData(data Vector, showFieldNames ...bool) string {
+func (ap *arrayParameter) GetDefaultValue() []byte         { return getDefaultValue(&ap.fieldBase, ap) }
+func (ap *arrayParameter) ValidateRanges(data []byte) bool { return fieldValidateRanges(ap, data) }
+func (ap *arrayParameter) FormatData(data []byte, showFieldNames ...bool) string {
 	return fieldFormatData(ap, data, variadicBoolDefaultTrue(showFieldNames))
 }
-func (ap *arrayParameter) ParseString(s string) Vector { return fieldParseString(ap, s) }
+func (ap *arrayParameter) ParseString(s string) []byte { return fieldParseString(ap, s) }
 
 func (ap *arrayParameter) GetArraySize() int { return ap.arraySize }
 

@@ -141,10 +141,6 @@ func (dgi *DatagramIterator) ReadBlob() []uint8 {
 	return dgi.ReadData(Dgsize_t(dgi.ReadUint16()))
 }
 
-func (dgi *DatagramIterator) ReadVector() dc.Vector {
-	return dc.Vector(dgi.ReadBlob())
-}
-
 func (dgi *DatagramIterator) ReadBlob32() []uint8 {
 	return dgi.ReadData(dgi.ReadSize())
 }
@@ -173,18 +169,13 @@ func (dgi *DatagramIterator) ReadRemainder() []uint8 {
 	return dgi.ReadData(sz)
 }
 
-func (dgi *DatagramIterator) ReadRemainderAsVector() dc.Vector {
-	return dc.Vector(dgi.ReadRemainder())
-}
-
 func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, lock bool) ([]byte, bool) {
 	unpacker := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(unpacker)
 
 	offset := dgi.Tell()
 
-	vectorData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector(vectorData)
+	vectorData := dgi.ReadRemainder()
 
 	dgi.Seek(offset)
 
@@ -192,7 +183,6 @@ func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, 
 	unpacker.BeginUnpack(field)
 
 	packedData := unpacker.UnpackLiteralValue()
-	defer dc.DeleteVector(packedData)
 
 	if !unpacker.EndUnpack() {
 		return nil, false
@@ -203,9 +193,8 @@ func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, 
 	}
 
 	dgi.Seek(offset + Dgsize_t(unpacker.GetNumUnpackedBytes()))
-	return []byte(packedData), true
+	return packedData, true
 }
-
 
 func (dgi *DatagramIterator) SkipDCField(field dc.DCField, lock bool) bool {
 	unpacker := dc.NewDCPacker()
@@ -214,8 +203,7 @@ func (dgi *DatagramIterator) SkipDCField(field dc.DCField, lock bool) bool {
 	offset := dgi.Tell()
 
 	// We need data to skip, or else it'll assert an error.
-	vectorData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector(vectorData)
+	vectorData := dgi.ReadRemainder()
 
 	dgi.Seek(offset)
 

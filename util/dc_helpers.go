@@ -8,9 +8,9 @@ func ValidateDCRanges(field dc.DCField, data []byte) bool {
 	return field.ValidateRanges(data)
 }
 
-func DumpVector(data dc.Vector) string {
+func DumpBytes(data []byte) string {
 	dg := NewDatagram()
-	dg.AddVector(data)
+	dg.AddData(data)
 	return dg.String()
 }
 

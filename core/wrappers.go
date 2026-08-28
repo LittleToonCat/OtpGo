@@ -429,7 +429,7 @@ func LuaHasKeyword(L *lua.LState) int {
 func LuaGetDefaultValue(L *lua.LState) int {
 	dcField := CheckDCField(L, 1)
 	dg := NewDatagram()
-	dg.AddVector(dcField.GetDefaultValue())
+	dg.AddData(dcField.GetDefaultValue())
 	L.Push(lua.LString(string(dg.Bytes())))
 	return 1
 }
@@ -497,8 +497,7 @@ func LuaDCPackerPackField(L *lua.LState) int {
 
 	if success {
 		packedData := packer.GetBytes()
-		dg.AddVector(packedData)
-		dc.DeleteVector(packedData)
+		dg.AddData(packedData)
 	}
 	packer.ClearData()
 
@@ -518,8 +517,7 @@ func LuaDCPackerPackFieldDefaultValue(L *lua.LState) int {
 
 	if success {
 		packedData := packer.GetBytes()
-		dg.AddVector(packedData)
-		dc.DeleteVector(packedData)
+		dg.AddData(packedData)
 	}
 	packer.ClearData()
 
@@ -543,8 +541,7 @@ func LuaDCPackerUnpackField(L *lua.LState) int {
 
 	offset := dgi.Tell()
 
-	vectorData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector(vectorData)
+	vectorData := dgi.ReadRemainder()
 
 	dgi.Seek(offset)
 
@@ -566,8 +563,7 @@ func LuaDCPackerSkipField(L *lua.LState) int {
 
 	offset := dgi.Tell()
 
-	vectorData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector(vectorData)
+	vectorData := dgi.ReadRemainder()
 
 	dgi.Seek(offset)
 

@@ -4,7 +4,7 @@ import "strings"
 
 func (p *dcPacker) ClearData() { p.clearData() }
 
-func (p *dcPacker) SetUnpackData(data Vector) { p.setUnpackData(data) }
+func (p *dcPacker) SetUnpackData(data []byte) { p.setUnpackData(data) }
 
 func (p *dcPacker) BeginPack(root DCField) { p.beginPack(root) }
 
@@ -63,9 +63,9 @@ func (p *dcPacker) UnpackUint64() uint64 { return p.unpackUint64() }
 
 func (p *dcPacker) UnpackString() string { return p.unpackString() }
 
-func (p *dcPacker) UnpackBlob() Vector { return p.unpackBlob() }
+func (p *dcPacker) UnpackBlob() []byte { return p.unpackBlob() }
 
-func (p *dcPacker) UnpackLiteralValue() Vector { return p.unpackLiteralValue() }
+func (p *dcPacker) UnpackLiteralValue() []byte { return p.unpackLiteralValue() }
 
 func (p *dcPacker) UnpackValidate() { p.unpackValidate() }
 
@@ -87,7 +87,7 @@ func (p *dcPacker) GetLength() int { return p.getLength() }
 
 func (p *dcPacker) GetString() string { return p.getString() }
 
-func (p *dcPacker) GetBytes() Vector { return append(Vector(nil), p.getData()...) }
+func (p *dcPacker) GetBytes() []byte { return append([]byte(nil), p.getData()...) }
 func (p *dcPacker) GetData() []byte  { return append([]byte(nil), p.getData()...) }
 
 func (p *dcPacker) GetUnpackLength() int { return p.getUnpackLength() }

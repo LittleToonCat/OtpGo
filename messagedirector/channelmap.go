@@ -14,7 +14,7 @@ var channelMap *ChannelMap
 type MDDatagram struct {
 	dg     *DatagramIterator
 	sender MDParticipant
-	sent []*Subscriber
+	sent   []*Subscriber
 }
 
 func NewMDDatagram(dg *DatagramIterator, sender MDParticipant) *MDDatagram {
@@ -361,7 +361,6 @@ func (r *RangeMap) remove(rng Range, sub *Subscriber, nested bool) {
 		}
 	}
 }
-
 
 // Each MD participant is represented as a subscriber within the MD; when a participant desires to listen to
 //

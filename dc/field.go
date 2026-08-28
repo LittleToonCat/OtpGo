@@ -11,7 +11,7 @@ type field interface {
 	SetClass(*dcClass)
 	IsBogusField() bool
 	HasDefaultValue() bool
-	GetDefaultValue() Vector
+	GetDefaultValue() []byte
 	HasKeyword(name string) bool
 	HasKeywordName(string) bool
 	GetNumKeywords() int
@@ -30,9 +30,9 @@ type field interface {
 	AsMolecularField() *molecularField
 	AsParameter() field
 
-	ValidateRanges(data Vector) bool
-	FormatData(data Vector, showFieldNames ...bool) string
-	ParseString(s string) Vector
+	ValidateRanges(data []byte) bool
+	FormatData(data []byte, showFieldNames ...bool) string
+	ParseString(s string) []byte
 }
 
 type fieldBase struct {

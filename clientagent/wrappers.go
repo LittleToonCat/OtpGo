@@ -181,7 +181,7 @@ func LuaCreateDatabaseObject(L *lua.LState) int {
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packedFields := map[string]dc.Vector{}
+	packedFields := map[string][]byte{}
 	// TODO: string dictionary sanity check
 	fields.ForEach(func(l1, data lua.LValue) {
 		name := string(l1.(lua.LString))
@@ -243,15 +243,14 @@ func LuaPackFieldToDatagram(L *lua.LState) int {
 	}
 
 	packedData := packer.GetBytes()
-	defer dc.DeleteVector(packedData)
 
 	if includeFieldId {
 		dg.AddUint16(uint16(field.GetNumber()))
 	}
 	if includeLength {
-		dg.AddUint16(uint16(packedData.Size()))
+		dg.AddUint16(uint16(len(packedData)))
 	}
-	dg.AddVector(packedData)
+	dg.AddData(packedData)
 	return 1
 }
 
@@ -331,10 +330,10 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 			return
 		}
 
-		packedValues := make([]dc.Vector, count)
+		packedValues := make([][]byte, count)
 		hasValue := map[string]bool{}
 		for i := uint16(0); i < count; i++ {
-			packedValues[i] = dgi.ReadVector()
+			packedValues[i] = dgi.ReadBlob()
 			hasValue[fields[i]] = dgi.ReadBool()
 			if !hasValue[fields[i]] {
 				client.log.Debugf("GetStoredValues: Data for field \"%s\" not found", fields[i])
@@ -359,7 +358,7 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 				data := packedValues[i]
 				// Validate that the data is correct
 				if !dcField.ValidateRanges(data) {
-					client.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpVector(data))
+					client.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpBytes(data))
 					continue
 				}
 
@@ -372,9 +371,6 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 		}
 
 		// Cleanup
-		for _, data := range packedValues {
-			dc.DeleteVector(data)
-		}
 
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, fieldTable)
 	}
@@ -426,10 +422,10 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 			return
 		}
 
-		packedValues := make([]dc.Vector, count)
+		packedValues := make([][]byte, count)
 		hasValue := map[string]bool{}
 		for i := uint16(0); i < count; i++ {
-			packedValues[i] = dgi.ReadVector()
+			packedValues[i] = dgi.ReadBlob()
 			hasValue[fields[i]] = dgi.ReadBool()
 			if !hasValue[fields[i]] {
 				client.log.Debugf("GetStoredValues: Data for field \"%s\" not found, will be replaced with default value", fields[i])
@@ -448,28 +444,20 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 			dcField := cls.GetFieldByName(field)
 			if dcField == nil {
 				client.log.Warnf("GetStoredValues: Field \"%s\" does not exist for class \"%s\"", field, clsName)
-				if found {
-					dc.DeleteVector(packedValues[i])
-				}
 				continue
 			}
 
-			var data dc.Vector
+			var data []byte
 			if found {
 				data = packedValues[i]
 				// Validate that the data is correct
 				if !dcField.ValidateRanges(data) {
-					client.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpVector(data))
-					dc.DeleteVector(data)
+					client.log.Errorf("GetStoredValues: Received invalid data for field \"%s\"!\n%s", field, DumpBytes(data))
 					continue
 				}
 			} else {
 				// Get default value instead.
-				value := dcField.GetDefaultValue()
-				data = dc.NewVector()
-				for i := int64(0); i < value.Size(); i++ {
-					data.Add(value.Get(int(i)))
-				}
+				data = dcField.GetDefaultValue()
 			}
 
 			unpacker.SetUnpackData(data)
@@ -481,7 +469,6 @@ func LuaGetAllRequiredFromDatabase(L *lua.LState) int {
 
 			resultTable.Append(fieldTable)
 
-			dc.DeleteVector(data)
 		}
 		client.ca.CallLuaFunction(callback, client, lua.LNumber(doId), lua.LTrue, resultTable)
 	}
@@ -535,15 +522,14 @@ func LuaQueryObjectFields(L *lua.LState) int {
 
 		fieldTable := client.ca.L.NewTable()
 
-		packedData := dgi.ReadRemainderAsVector()
-		defer dc.DeleteVector(packedData)
+		packedData := dgi.ReadRemainder()
 
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)
 
 		unpacker.SetUnpackData(packedData)
 		found := 0
-		for int64(unpacker.GetNumUnpackedBytes()) < packedData.Size() {
+		for unpacker.GetNumUnpackedBytes() < len(packedData) {
 			fieldId := unpacker.RawUnpackUint16()
 			field := cls.GetFieldByIndex(int(fieldId))
 			if field == nil {
@@ -614,15 +600,14 @@ func LuaQueryAllRequiredFields(L *lua.LState) int {
 
 		resultTable := client.ca.L.NewTable()
 
-		packedData := dgi.ReadRemainderAsVector()
-		defer dc.DeleteVector(packedData)
+		packedData := dgi.ReadRemainder()
 
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)
 
 		unpacker.SetUnpackData(packedData)
 		found := 0
-		for int64(unpacker.GetNumUnpackedBytes()) < packedData.Size() {
+		for unpacker.GetNumUnpackedBytes() < len(packedData) {
 			fieldId := unpacker.RawUnpackUint16()
 			field := cls.GetFieldByIndex(int(fieldId))
 			if field == nil {
@@ -675,7 +660,7 @@ func LuaSetDatabaseValues(L *lua.LState) int {
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packedFields := map[string]dc.Vector{}
+	packedFields := map[string][]byte{}
 	// TODO: string dictionary sanity check
 	fields.ForEach(func(l1, data lua.LValue) {
 		name := string(l1.(lua.LString))
@@ -907,9 +892,8 @@ func LuaSendActivateObject(L *lua.LState) int {
 	})
 	packedData := packer.GetBytes()
 	dg.AddUint16(length)
-	dg.AddVector(packedData)
+	dg.AddData(packedData)
 
-	dc.DeleteVector(packedData)
 	packer.ClearData()
 
 	client.RouteDatagram(dg)

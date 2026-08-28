@@ -52,12 +52,12 @@ func (sw *switchParameter) IsValid() bool { return true }
 func (sw *switchParameter) AsField() field     { return sw }
 func (sw *switchParameter) AsParameter() field { return sw }
 
-func (sw *switchParameter) GetDefaultValue() Vector         { return getDefaultValue(&sw.fieldBase, sw) }
-func (sw *switchParameter) ValidateRanges(data Vector) bool { return fieldValidateRanges(sw, data) }
-func (sw *switchParameter) FormatData(data Vector, showFieldNames ...bool) string {
+func (sw *switchParameter) GetDefaultValue() []byte         { return getDefaultValue(&sw.fieldBase, sw) }
+func (sw *switchParameter) ValidateRanges(data []byte) bool { return fieldValidateRanges(sw, data) }
+func (sw *switchParameter) FormatData(data []byte, showFieldNames ...bool) string {
 	return fieldFormatData(sw, data, variadicBoolDefaultTrue(showFieldNames))
 }
-func (sw *switchParameter) ParseString(s string) Vector { return fieldParseString(sw, s) }
+func (sw *switchParameter) ParseString(s string) []byte { return fieldParseString(sw, s) }
 func (sw *switchParameter) GetSwitch() *dcSwitch        { return sw.dswitch }
 
 func (sw *switchParameter) GetNestedField(int) packerInterface {

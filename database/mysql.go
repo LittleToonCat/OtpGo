@@ -55,13 +55,8 @@ func UnpackDataToArray(unpacker *dc.DCPacker, array *[]interface{}, log log.Entr
 	case dc.PTString:
 		*array = append(*array, unpacker.UnpackString())
 	case dc.PTBlob:
-		vector := unpacker.UnpackBlob()
-		data := []byte{}
-		for i := int64(0); i < vector.Size(); i++ {
-			data = append(data, vector.Get(int(i)))
-		}
+		data := unpacker.UnpackBlob()
 		*array = append(*array, data)
-		dc.DeleteVector(vector)
 	default:
 		// More nested fields, nest call this exact function.
 		nestedArray := []interface{}{}
@@ -93,13 +88,8 @@ func UnpackDataToDocument(unpacker *dc.DCPacker, name string, doc map[string]int
 	case dc.PTString:
 		doc[name] = unpacker.UnpackString()
 	case dc.PTBlob:
-		vector := unpacker.UnpackBlob()
-		data := []byte{}
-		for i := int64(0); i < vector.Size(); i++ {
-			data = append(data, vector.Get(int(i)))
-		}
+		data := unpacker.UnpackBlob()
 		doc[name] = data
-		dc.DeleteVector(vector)
 	default:
 		// If we reached here, that means it is a list
 		// of nested fields (e.g. an array type, an atomic field, a
@@ -431,12 +421,12 @@ func (b *MySQLBackend) AssignDoIdMonotonic() Doid_t {
 	return globalsDoId.Monotonic - 1
 }
 
-func (b *MySQLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCField]dc.Vector,
+func (b *MySQLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCField][]byte,
 	ctx uint32, sender Channel_t) {
 
 	var doc map[string]interface{}
 
-	defaults := map[dc.DCField]dc.Vector{}
+	defaults := map[dc.DCField][]byte{}
 
 	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
 		field := dclass.GetInheritedField(i)
@@ -449,14 +439,7 @@ func (b *MySQLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFie
 			if !ok {
 				// Use default value instead if there is any.
 				if field.HasDefaultValue() {
-					// HACK: Because GetDefaultValue returns a pointer which will
-					// become lost when accidentally deleted, we'd have to copy it.
-					// into a new blob instance.
-					value := field.GetDefaultValue()
-					data = dc.NewVector()
-					for i := int64(0); i < value.Size(); i++ {
-						data.Add(value.Get(int(i)))
-					}
+					data = field.GetDefaultValue()
 					defaults[field] = data
 				} else {
 					// Move on.
@@ -484,12 +467,6 @@ func (b *MySQLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFie
 				dg.AddUint8(1)
 				dg.AddDoid(INVALID_DOID)
 				b.db.RouteDatagram(dg)
-				for _, data := range datas {
-					dc.DeleteVector(data)
-				}
-				for _, data := range defaults {
-					dc.DeleteVector(data)
-				}
 			}
 		}
 	}
@@ -509,12 +486,6 @@ func (b *MySQLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFie
 		dg.AddUint8(1)
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
-		for _, data := range datas {
-			dc.DeleteVector(data)
-		}
-		for _, data := range defaults {
-			dc.DeleteVector(data)
-		}
 		return
 	}
 
@@ -528,12 +499,6 @@ func (b *MySQLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFie
 		dg.AddUint8(1)
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
-		for _, data := range datas {
-			dc.DeleteVector(data)
-		}
-		for _, data := range defaults {
-			dc.DeleteVector(data)
-		}
 		return
 	}
 
@@ -553,12 +518,6 @@ func (b *MySQLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFie
 		dg.AddUint8(1)
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
-		for _, data := range datas {
-			dc.DeleteVector(data)
-		}
-		for _, data := range defaults {
-			dc.DeleteVector(data)
-		}
 		return
 	}
 
@@ -572,13 +531,6 @@ func (b *MySQLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFie
 	dg.AddDoid(doId)
 	b.db.RouteDatagram(dg)
 
-	// Cleanup
-	for _, data := range datas {
-		dc.DeleteVector(data)
-	}
-	for _, data := range defaults {
-		dc.DeleteVector(data)
-	}
 }
 
 func (b *MySQLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
@@ -641,7 +593,7 @@ func (b *MySQLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packedData := map[string]dc.Vector{}
+	packedData := map[string][]byte{}
 	for _, field := range fields {
 		dcField := dclass.GetFieldByName(field)
 		if dcField == nil {
@@ -683,8 +635,8 @@ func (b *MySQLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 	dg.AddUint8(0) // Return code
 	for _, field := range fields {
 		if packedValue, ok := packedData[field]; ok {
-			dg.AddUint16(uint16(packedValue.Size()))
-			dg.AddVector(packedValue)
+			dg.AddUint16(uint16(len(packedValue)))
+			dg.AddData(packedValue)
 			dg.AddBool(true) // Found
 		} else {
 			dg.AddString("")
@@ -693,13 +645,9 @@ func (b *MySQLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32,
 	}
 	b.db.RouteDatagram(dg)
 
-	// Cleanup
-	for _, data := range packedData {
-		dc.DeleteVector(data)
-	}
 }
 
-func (b *MySQLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector) {
+func (b *MySQLBackend) SetStoredValues(doId Doid_t, packedValues map[string][]byte) {
 	queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -732,7 +680,7 @@ func (b *MySQLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 	defer dc.DeleteDCPacker(unpacker)
 
 	for field, value := range packedValues {
-		if value.Size() == 0 {
+		if len(value) == 0 {
 			delete(fieldsMap, field)
 			continue
 		}
@@ -750,15 +698,8 @@ func (b *MySQLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.V
 		UnpackDataToDocument(unpacker, field, fieldsMap, *b.db.log)
 		if !unpacker.EndUnpack() {
 			b.db.log.Errorf("Failed to unpack field \"%s\"! Update aborted.\n%s", field, DumpUnpacker(unpacker))
-			for _, data := range packedValues {
-				dc.DeleteVector(data)
-			}
 			return
 		}
-	}
-
-	for _, data := range packedValues {
-		dc.DeleteVector(data)
 	}
 
 	if len(fieldsMap) == 0 {

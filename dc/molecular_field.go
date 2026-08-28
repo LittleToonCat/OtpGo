@@ -22,12 +22,12 @@ func (mf *molecularField) AsField() field { return mf }
 
 func (mf *molecularField) AsMolecularField() *molecularField { return mf }
 
-func (mf *molecularField) GetDefaultValue() Vector         { return getDefaultValue(&mf.fieldBase, mf) }
-func (mf *molecularField) ValidateRanges(data Vector) bool { return fieldValidateRanges(mf, data) }
-func (mf *molecularField) FormatData(data Vector, showFieldNames ...bool) string {
+func (mf *molecularField) GetDefaultValue() []byte         { return getDefaultValue(&mf.fieldBase, mf) }
+func (mf *molecularField) ValidateRanges(data []byte) bool { return fieldValidateRanges(mf, data) }
+func (mf *molecularField) FormatData(data []byte, showFieldNames ...bool) string {
 	return fieldFormatData(mf, data, variadicBoolDefaultTrue(showFieldNames))
 }
-func (mf *molecularField) ParseString(s string) Vector { return fieldParseString(mf, s) }
+func (mf *molecularField) ParseString(s string) []byte { return fieldParseString(mf, s) }
 
 func (mf *molecularField) AddAtomic(atomic *atomicField) {
 	if !atomic.IsBogusField() {

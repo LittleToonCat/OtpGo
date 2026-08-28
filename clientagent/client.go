@@ -1150,7 +1150,7 @@ func (c *Client) handleHeartbeat() {
 	}
 }
 
-func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string]dc.Vector, callback func(doId Doid_t)) {
+func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string][]byte, callback func(doId Doid_t)) {
 	context := c.createContextMap.Set(c.context.Add(1), callback, true)
 	defer c.createContextMap.Unlock()
 
@@ -1163,9 +1163,8 @@ func (c *Client) createDatabaseObject(objectType uint16, packedValues map[string
 
 	for name, value := range packedValues {
 		dg.AddString(name)
-		dg.AddUint16(uint16(value.Size()))
-		dg.AddVector(value)
-		dc.DeleteVector(value)
+		dg.AddUint16(uint16(len(value)))
+		dg.AddData(value)
 	}
 	c.RouteDatagram(dg)
 }
@@ -1232,7 +1231,7 @@ func (c *Client) handleQueryFieldsResp(dgi *DatagramIterator) {
 	c.queryFieldsContextMap.Delete(context, false)
 }
 
-func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string]dc.Vector) {
+func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string][]byte) {
 	dg := NewDatagram()
 	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_SET_STORED_VALUES)
 	dg.AddDoid(doId)
@@ -1240,9 +1239,8 @@ func (c *Client) setDatabaseValues(doId Doid_t, packedValues map[string]dc.Vecto
 
 	for name, value := range packedValues {
 		dg.AddString(name)
-		dg.AddUint16(uint16(value.Size()))
-		dg.AddVector(value)
-		dc.DeleteVector(value)
+		dg.AddUint16(uint16(len(value)))
+		dg.AddData(value)
 	}
 
 	c.RouteDatagram(dg)
@@ -1317,11 +1315,10 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 		return
 	}
 
-	packedData := dgi.ReadRemainderAsVector()
-	defer dc.DeleteVector(packedData)
+	packedData := dgi.ReadRemainder()
 
 	if !dcField.ValidateRanges(packedData) {
-		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Got truncated update for field %s\n%s\n%s", dcField.GetName(), DumpVector(packedData), dgi), true)
+		c.sendDisconnect(CLIENT_DISCONNECT_TRUNCATED_DATAGRAM, fmt.Sprintf("Got truncated update for field %s\n%s\n%s", dcField.GetName(), DumpBytes(packedData), dgi), true)
 		return
 	}
 
@@ -1351,7 +1348,7 @@ func (c *Client) handleClientUpdateField(do Doid_t, field uint16, dgi *DatagramI
 	dg.AddServerHeader(Channel_t(do), c.channel, STATESERVER_OBJECT_UPDATE_FIELD)
 	dg.AddDoid(do)
 	dg.AddUint16(field)
-	dg.AddVector(packedData)
+	dg.AddData(packedData)
 
 	c.RouteDatagram(dg)
 }
@@ -1362,8 +1359,7 @@ func (c *Client) handleUpdateField(do Doid_t, dclass *dc.DCClass, dcField dc.DCF
 		// Call the Lua function instead of sending the
 		// built-in response.
 
-		packedData := dgi.ReadRemainderAsVector()
-		defer dc.DeleteVector(packedData)
+		packedData := dgi.ReadRemainder()
 
 		unpacker := dc.NewDCPacker()
 		defer dc.DeleteDCPacker(unpacker)

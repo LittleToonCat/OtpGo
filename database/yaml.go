@@ -126,7 +126,7 @@ func (b *YAMLBackend) AssignDoId() (Doid_t, error) {
 	return doId, nil
 }
 
-func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCField]dc.Vector,
+func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCField][]byte,
 	ctx uint32, sender Channel_t) {
 
 	obj := &YAMLObject{
@@ -135,7 +135,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 		Fields: yaml.MapSlice{},
 	}
 
-	defaults := map[dc.DCField]dc.Vector{}
+	defaults := map[dc.DCField][]byte{}
 
 	for i := 0; i < dclass.GetNumInheritedFields(); i++ {
 		field := dclass.GetInheritedField(i)
@@ -148,14 +148,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 			if !ok {
 				// Use default value instead if there is any.
 				if field.HasDefaultValue() {
-					// HACK: Because GetDefaultValue returns a pointer which will
-					// become lost when accidentally deleted, we'd have to copy it.
-					// into a new blob instance.
-					value := field.GetDefaultValue()
-					data = dc.NewVector()
-					for i := int64(0); i < value.Size(); i++ {
-						data.Add(value.Get(int(i)))
-					}
+					data = field.GetDefaultValue()
 					defaults[field] = data
 				} else {
 					// Move on.
@@ -166,7 +159,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 			// Format the data into a string and store it:
 			formattedString := field.FormatData(data, false)
 			if formattedString == "" {
-				b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field.GetName(), DumpVector(data))
+				b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field.GetName(), DumpBytes(data))
 				// Reply with an error code.
 				dg := NewDatagram()
 				dg.AddServerHeader(sender, b.db.control, DBSERVER_CREATE_STORED_OBJECT_RESP)
@@ -174,12 +167,6 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 				dg.AddUint8(1)
 				dg.AddDoid(INVALID_DOID)
 				b.db.RouteDatagram(dg)
-				for _, data := range datas {
-					dc.DeleteVector(data)
-				}
-				for _, data := range defaults {
-					dc.DeleteVector(data)
-				}
 				return
 			}
 			obj.Fields = append(obj.Fields, yaml.MapItem{field.GetName(), formattedString})
@@ -196,12 +183,6 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 		dg.AddUint8(1)
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
-		for _, data := range datas {
-			dc.DeleteVector(data)
-		}
-		for _, data := range defaults {
-			dc.DeleteVector(data)
-		}
 		return
 	}
 	obj.ID = doId
@@ -216,12 +197,6 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 		dg.AddUint8(1)
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
-		for _, data := range datas {
-			dc.DeleteVector(data)
-		}
-		for _, data := range defaults {
-			dc.DeleteVector(data)
-		}
 		return
 	}
 
@@ -235,12 +210,6 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 		dg.AddUint8(1)
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
-		for _, data := range datas {
-			dc.DeleteVector(data)
-		}
-		for _, data := range defaults {
-			dc.DeleteVector(data)
-		}
 		return
 	}
 
@@ -254,12 +223,6 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 		dg.AddUint8(1)
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
-		for _, data := range datas {
-			dc.DeleteVector(data)
-		}
-		for _, data := range defaults {
-			dc.DeleteVector(data)
-		}
 		return
 	}
 
@@ -275,12 +238,6 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 		dg.AddUint8(1)
 		dg.AddDoid(INVALID_DOID)
 		b.db.RouteDatagram(dg)
-		for _, data := range datas {
-			dc.DeleteVector(data)
-		}
-		for _, data := range defaults {
-			dc.DeleteVector(data)
-		}
 		return
 	}
 
@@ -294,13 +251,6 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 	dg.AddDoid(doId)
 	b.db.RouteDatagram(dg)
 
-	// Cleanup
-	for _, data := range datas {
-		dc.DeleteVector(data)
-	}
-	for _, data := range defaults {
-		dc.DeleteVector(data)
-	}
 }
 
 func (b *YAMLBackend) SendGetStoredValuesError(doId Doid_t, fields []string, ctx uint32, sender Channel_t) {
@@ -377,7 +327,7 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 	packer := dc.NewDCPacker()
 	defer dc.DeleteDCPacker(packer)
 
-	packedData := map[string]dc.Vector{}
+	packedData := map[string][]byte{}
 	for _, field := range fields {
 		dcField := dclass.GetFieldByName(field)
 		if dcField == nil {
@@ -398,9 +348,8 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 		}
 
 		parsedData := dcField.ParseString(value)
-		if parsedData.Size() == 0 {
+		if len(parsedData) == 0 {
 			b.db.log.Errorf("Failed to parse data for field \"%s\": %s", field, value)
-			dc.DeleteVector(parsedData)
 			continue
 		}
 
@@ -418,8 +367,8 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 	dg.AddUint8(0) // Return code
 	for _, field := range fields {
 		if packedValue, ok := packedData[field]; ok {
-			dg.AddUint16(uint16(packedValue.Size()))
-			dg.AddVector(packedValue)
+			dg.AddUint16(uint16(len(packedValue)))
+			dg.AddData(packedValue)
 			dg.AddBool(true) // Found
 		} else {
 			dg.AddString("")
@@ -428,14 +377,9 @@ func (b *YAMLBackend) GetStoredValues(doId Doid_t, fields []string, ctx uint32, 
 	}
 	b.db.RouteDatagram(dg)
 
-	// Cleanup
-	for _, data := range packedData {
-		dc.DeleteVector(data)
-	}
-
 }
 
-func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Vector) {
+func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string][]byte) {
 	if _, err := os.Stat(fmt.Sprintf(b.directory+"/%d.yaml", doId)); errors.Is(err, os.ErrNotExist) {
 		b.db.log.Errorf("SetStoredValues: File %d.yaml does not exist!", doId)
 		return
@@ -495,7 +439,7 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string]dc.Ve
 
 		formattedString := dcField.FormatData(value, false)
 		if formattedString == "" {
-			b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field, DumpVector(value))
+			b.db.log.Errorf("Failed to unpack field \"%s\"!\n%s", field, DumpBytes(value))
 			continue
 		}
 		objFields[field] = formattedString

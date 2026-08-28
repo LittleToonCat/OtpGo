@@ -21,12 +21,12 @@ func (af *atomicField) AsField() field { return af }
 
 func (af *atomicField) AsAtomicField() *atomicField { return af }
 
-func (af *atomicField) GetDefaultValue() Vector         { return getDefaultValue(&af.fieldBase, af) }
-func (af *atomicField) ValidateRanges(data Vector) bool { return fieldValidateRanges(af, data) }
-func (af *atomicField) FormatData(data Vector, showFieldNames ...bool) string {
+func (af *atomicField) GetDefaultValue() []byte         { return getDefaultValue(&af.fieldBase, af) }
+func (af *atomicField) ValidateRanges(data []byte) bool { return fieldValidateRanges(af, data) }
+func (af *atomicField) FormatData(data []byte, showFieldNames ...bool) string {
 	return fieldFormatData(af, data, variadicBoolDefaultTrue(showFieldNames))
 }
-func (af *atomicField) ParseString(s string) Vector { return fieldParseString(af, s) }
+func (af *atomicField) ParseString(s string) []byte { return fieldParseString(af, s) }
 
 func (af *atomicField) AddElement(element packerInterface) {
 	af.elements = append(af.elements, element)

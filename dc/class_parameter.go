@@ -48,12 +48,12 @@ func (cp *classParameter) IsValid() bool { return !cp.dclass.IsBogusClass() }
 func (cp *classParameter) AsField() field     { return cp }
 func (cp *classParameter) AsParameter() field { return cp }
 
-func (cp *classParameter) GetDefaultValue() Vector         { return getDefaultValue(&cp.fieldBase, cp) }
-func (cp *classParameter) ValidateRanges(data Vector) bool { return fieldValidateRanges(cp, data) }
-func (cp *classParameter) FormatData(data Vector, showFieldNames ...bool) string {
+func (cp *classParameter) GetDefaultValue() []byte         { return getDefaultValue(&cp.fieldBase, cp) }
+func (cp *classParameter) ValidateRanges(data []byte) bool { return fieldValidateRanges(cp, data) }
+func (cp *classParameter) FormatData(data []byte, showFieldNames ...bool) string {
 	return fieldFormatData(cp, data, variadicBoolDefaultTrue(showFieldNames))
 }
-func (cp *classParameter) ParseString(s string) Vector { return fieldParseString(cp, s) }
+func (cp *classParameter) ParseString(s string) []byte { return fieldParseString(cp, s) }
 
 func (cp *classParameter) GetWrappedClass() *dcClass { return cp.dclass }
 
