@@ -2,9 +2,7 @@
 
 package stateserver
 
-import (
-	"otpgo/core"
-)
+import "otpgo/core"
 
 func NewStateServer(config core.Role) bool {
 	return false

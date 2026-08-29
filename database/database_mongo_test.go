@@ -1,4 +1,4 @@
-//go:build !no_dbserver
+//go:build !no_dbserver && !no_mongodb
 
 package database
 

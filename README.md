@@ -18,6 +18,8 @@ This project will build all the components by default (Message Director is mandi
 
 For example: running `go build -tags no_stateserver,no_dbserver,no_eventlogger,no_luarole` will build only the Client Agent.
 
+You can also use it to omit certain backends used by the Database Server, for example: running `go build -tags no_mongodb` will not build the MongoDB backend, leaving the others available.
+
 The compatible build tags is as follows:
 
 `no_clientagent` omits the Client Agent
@@ -29,6 +31,14 @@ The compatible build tags is as follows:
 `no_eventlogger` omits the Event Logger
 
 `no_luarole` omits the ability to create  game-specific roles using Lua.
+
+`no_mongodb` omits the MongoDB backend.
+
+`no_yaml` omits the YAML backend.
+
+`no_mysql` omits the MySQL backend.
+
+`no_postgres` omits the PostgreSQL backend.
 
 ## Projects using OtpGo ##
 [Mewtwo](https://gitlab.com/sunrisemmos/Mewtwo) ([Sunrise Games'](https://sunrise.games/) Toontown servers)
