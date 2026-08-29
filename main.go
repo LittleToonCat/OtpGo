@@ -155,17 +155,33 @@ Revision: %s
 	for _, role := range core.Config.Roles {
 		switch role.Type {
 		case "clientagent":
-			clientagent.NewClientAgent(role)
+			if ok := clientagent.NewClientAgent(role); !ok {
+				mainLog.Warn("Client Agent has not been compiled in this build.  To include, remove the \"no_clientagent\" build tag. ignoring.")
+			}
 		case "database":
-			database.NewDatabaseServer(role)
+			if ok := database.NewDatabaseServer(role); !ok {
+				mainLog.Warn("Database Server has not been compiled in this build.  To include, remove the \"no_dbserver\" build tag. ignoring.")
+			}
 		case "dbss":
-			stateserver.NewDatabaseStateServer(role)
+			if ok := stateserver.NewDatabaseStateServer(role); !ok {
+				mainLog.Warn("Database State Server has not been compiled in this build.  To include, remove the \"no_stateserver\" build tag. ignoring.")
+			}
 		case "eventlogger":
-			eventlogger.StartEventLogger(role)
+			if ok := eventlogger.StartEventLogger(role); !ok {
+				mainLog.Warn("Event Logger has not been compiled in this build.  To include, remove the \"no_eventlogger\" build tag. ignoring.")
+			}
 		case "lua":
-			luarole.NewLuaRole(role)
+			if ok := luarole.NewLuaRole(role); !ok {
+				message := "Lua roles %s has not been compiled in this build.  To include, remove the \"no_luarole\" build tag. ignoring."
+				if len(role.Name) > 0 {
+					message = fmt.Sprintf(message, fmt.Sprintf("(For role \"%s\")", role.Name))
+				}
+				mainLog.Warn(message)
+			}
 		case "stateserver":
-			stateserver.NewStateServer(role)
+			if ok := stateserver.NewStateServer(role); !ok {
+				mainLog.Warn("State Server has not been compiled in this build.  To include, remove the \"no_stateserver\" build tag. ignoring.")
+			}
 		}
 	}
 

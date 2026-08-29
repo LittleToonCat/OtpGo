@@ -1,3 +1,5 @@
+//go:build !no_dbserver
+
 package database
 
 // ReferenceRegistry holds the configured relationships between db-backed fields
@@ -23,7 +25,7 @@ type Reference struct {
 	Field     dc.DCField
 	Target    *dc.DCClass
 	IsList    bool
-	Atomic bool
+	Atomic    bool
 }
 
 type ReferenceRegistry struct {

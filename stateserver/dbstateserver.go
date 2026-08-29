@@ -1,3 +1,5 @@
+//go:build !no_stateserver
+
 package stateserver
 
 import (
@@ -55,7 +57,7 @@ type DatabaseStateServer struct {
 	contextToQueryAll    map[uint32]*LoadingObject
 }
 
-func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
+func NewDatabaseStateServer(config core.Role) bool {
 	dbss := &DatabaseStateServer{
 		loading:              map[Doid_t]*LoadingObject{},
 		context:              0,
@@ -71,7 +73,7 @@ func NewDatabaseStateServer(config core.Role) *DatabaseStateServer {
 
 	dbss.SubscribeRange(dbss.config.Ranges)
 
-	return dbss
+	return true
 }
 
 func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, do Doid_t, sender Channel_t) {

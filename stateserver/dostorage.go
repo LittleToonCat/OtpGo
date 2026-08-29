@@ -1,3 +1,5 @@
+//go:build !no_stateserver
+
 // A storage for preallocated DistributedObjects.
 package stateserver
 

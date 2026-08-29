@@ -1,3 +1,5 @@
+//go:build !no_stateserver
+
 package stateserver
 
 import (
@@ -23,7 +25,7 @@ type StateServer struct {
 	doStore  *DOStorage
 }
 
-func NewStateServer(config core.Role) *StateServer {
+func NewStateServer(config core.Role) bool {
 	ss := &StateServer{}
 	ss.InitStateServer(config, fmt.Sprintf("StateServer (%d)", config.Control), "StateServer", fmt.Sprintf("%d", config.Control))
 
@@ -37,7 +39,7 @@ func NewStateServer(config core.Role) *StateServer {
 
 	ss.registerObjects(config.Objects)
 
-	return ss
+	return true
 }
 
 func (s *StateServer) InitStateServer(config core.Role, logName string, logModName string, logId string) {

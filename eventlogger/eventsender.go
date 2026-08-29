@@ -96,3 +96,10 @@ func StartEventSender(address string) {
 	senderLog.Debug("Started.")
 
 }
+
+func init() {
+	senderLog = log.WithFields(log.Fields{
+		"name":    "EventSender",
+		"modName": "EventSender",
+	})
+}

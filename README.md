@@ -12,6 +12,24 @@ This project uses [GopherLua](https://github.com/yuin/gopher-lua) to implement a
 
 The entire documentation and unit tests is pretty much a TODO right now, but it'll get it done eventually so please, pardon our dust.
 
+## Build Tags
+
+This project will build all the components by default (Message Director is manditory and will always be included), but can be omitted by the build by supplying build tags to your `go build` command.
+
+For example: running `go build -tags no_stateserver,no_dbserver,no_eventlogger,no_luarole` will build only the Client Agent.
+
+The compatible build tags is as follows:
+
+`no_clientagent` omits the Client Agent
+
+`no_stateserver` omits the State Server (and Database-State Server)
+
+`no_dbserver` omits the Database Server and its backends
+
+`no_eventlogger` omits the Event Logger
+
+`no_luarole` omits the ability to create  game-specific roles using Lua.
+
 ## Projects using OtpGo ##
 [Mewtwo](https://gitlab.com/sunrisemmos/Mewtwo) ([Sunrise Games'](https://sunrise.games/) Toontown servers)
 

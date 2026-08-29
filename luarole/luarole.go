@@ -1,3 +1,5 @@
+//go:build !no_luarole
+
 package luarole
 
 import (
@@ -49,7 +51,7 @@ type LuaRole struct {
 	processQueue chan bool
 }
 
-func NewLuaRole(config core.Role) *LuaRole {
+func NewLuaRole(config core.Role) bool {
 	var name string
 	if len(config.Name) > 0 {
 		name = config.Name
@@ -90,13 +92,11 @@ func NewLuaRole(config core.Role) *LuaRole {
 	role.log.Infof("Running Lua script: %s", role.config.Lua_File)
 	if err := role.L.DoFile(role.config.Lua_File); err != nil {
 		role.log.Fatal(err.Error())
-		return nil
 	}
 
 	// Santity check to make sure certian global functions exists:
 	if _, ok := role.L.GetGlobal("handleDatagram").(*lua.LFunction); !ok {
 		role.log.Fatal("Missing \"handleDatagram\" function in Lua script.")
-		return nil
 	}
 
 	// Call the init function if there's any:
@@ -108,12 +108,11 @@ func NewLuaRole(config core.Role) *LuaRole {
 		}, NewLuaParticipant(role.L, role))
 		if err != nil {
 			role.log.Fatal(err.Error())
-			return nil
 		}
 	}
 
 	go role.queueLoop()
-	return role
+	return true
 }
 
 func (l *LuaRole) getEntryFromQueue() LuaQueueEntry {

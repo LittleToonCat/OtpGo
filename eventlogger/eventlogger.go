@@ -1,3 +1,5 @@
+//go:build !no_eventlogger
+
 package eventlogger
 
 import (
@@ -19,7 +21,7 @@ var EventLoggerLog *log.Entry
 var logfile *os.File
 var server *net.UDPConn
 
-func StartEventLogger(config core.Role) {
+func StartEventLogger(config core.Role) bool {
 	if config.Output == "" {
 		config.Output = "events-%Y%m%d-%H%M%S.log"
 	}
@@ -43,6 +45,8 @@ func StartEventLogger(config core.Role) {
 
 	handleInterrupts()
 	go listen()
+
+	return true
 }
 
 func createLog(config core.Role) {
@@ -165,10 +169,5 @@ func init() {
 	EventLoggerLog = log.WithFields(log.Fields{
 		"name":    "EventLogger",
 		"modName": "EventLogger",
-	})
-
-	senderLog = log.WithFields(log.Fields{
-		"name":    "EventSender",
-		"modName": "EventSender",
 	})
 }

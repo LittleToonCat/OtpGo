@@ -1,3 +1,5 @@
+//go:build !no_clientagent
+
 package clientagent
 
 import (
@@ -76,7 +78,7 @@ func (c *ChannelTracker) free(ch Channel_t) {
 	c.unused = append(c.unused, ch)
 }
 
-func NewClientAgent(config core.Role) *ClientAgent {
+func NewClientAgent(config core.Role) bool {
 	ca := &ClientAgent{
 		config:   config,
 		database: config.Database,
@@ -92,7 +94,6 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	ca.rng = messagedirector.Range{Min: Channel_t(config.Channels.Min), Max: Channel_t(config.Channels.Max)}
 	if ca.rng.Size() <= 0 {
 		ca.log.Fatal("Failed to instantiate CA: invalid channel range")
-		return nil
 	}
 
 	if ca.config.Tuning.Interest_Timeout == 0 {
@@ -129,7 +130,6 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	ca.log.Infof("Running Lua script: %s", ca.config.Lua_File)
 	if err := ca.L.DoFile(ca.config.Lua_File); err != nil {
 		ca.log.Fatal(err.Error())
-		return nil
 	}
 
 	// Santity check to make sure certian global functions exists:
@@ -137,7 +137,6 @@ func NewClientAgent(config core.Role) *ClientAgent {
 		ca.receiveDatagramFunc = function
 	} else {
 		ca.log.Fatal("Missing \"receiveDatagram\" function in Lua script.")
-		return nil
 	}
 
 	ca.Handler = ca
@@ -153,7 +152,7 @@ func NewClientAgent(config core.Role) *ClientAgent {
 	}()
 	go ca.queueLoop()
 	go ca.Start(config.Bind, errChan, config.Proxy)
-	return ca
+	return true
 }
 
 func (c *ClientAgent) getEntryFromQueue() LuaQueueEntry {

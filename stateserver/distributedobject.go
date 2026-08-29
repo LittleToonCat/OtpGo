@@ -1,3 +1,5 @@
+//go:build !no_stateserver
+
 package stateserver
 
 import (

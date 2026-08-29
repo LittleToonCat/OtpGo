@@ -1,3 +1,5 @@
+//go:build !no_luarole
+
 package luarole
 
 import (

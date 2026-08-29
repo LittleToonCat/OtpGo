@@ -1,3 +1,5 @@
+//go:build !no_dbserver
+
 package database
 
 import (
@@ -69,7 +71,7 @@ type DatabaseServer struct {
 	processQueue chan bool
 }
 
-func NewDatabaseServer(config core.Role) *DatabaseServer {
+func NewDatabaseServer(config core.Role) bool {
 	db := &DatabaseServer{
 		config:       config,
 		control:      Channel_t(config.Control),
@@ -126,7 +128,7 @@ func NewDatabaseServer(config core.Role) *DatabaseServer {
 
 	go db.queueLoop()
 
-	return db
+	return true
 }
 
 func (d *DatabaseServer) createBackend(config core.Role) (bool, DatabaseBackend, error) {
