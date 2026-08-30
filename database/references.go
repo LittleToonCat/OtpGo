@@ -12,6 +12,8 @@ package database
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"otpgo/core"
 	"otpgo/dc"
@@ -22,10 +24,27 @@ import (
 type Reference struct {
 	ClassName string
 	FieldName string
+	ElemIndex int
 	Field     dc.DCField
 	Target    *dc.DCClass
 	IsList    bool
 	Atomic    bool
+}
+
+func splitFieldIndex(spec string) (field string, index int, err error) {
+	open := strings.IndexByte(spec, '[')
+	if open < 0 {
+		return spec, -1, nil
+	}
+	if !strings.HasSuffix(spec, "]") || open == 0 {
+		return "", 0, fmt.Errorf("malformed field index in %q", spec)
+	}
+	idxStr := spec[open+1 : len(spec)-1]
+	idx, convErr := strconv.Atoi(idxStr)
+	if convErr != nil || idx < 0 {
+		return "", 0, fmt.Errorf("invalid field index %q in %q", idxStr, spec)
+	}
+	return spec[:open], idx, nil
 }
 
 type ReferenceRegistry struct {
@@ -47,22 +66,27 @@ func LoadReferenceRegistry(rels []core.RelationshipConfig, dcf *dc.DCFile) (*Ref
 		if target == nil {
 			return nil, fmt.Errorf("relationship %s.%s: target class %q does not exist", rel.Class, rel.Field, rel.Target)
 		}
-		field := cls.GetFieldByName(rel.Field)
+		fieldName, elemIndex, err := splitFieldIndex(rel.Field)
+		if err != nil {
+			return nil, fmt.Errorf("relationship %s.%s: %w", rel.Class, rel.Field, err)
+		}
+		field := cls.GetFieldByName(fieldName)
 		if field == nil {
-			return nil, fmt.Errorf("relationship: field %q does not exist on class %q", rel.Field, rel.Class)
+			return nil, fmt.Errorf("relationship: field %q does not exist on class %q", fieldName, rel.Class)
 		}
 		if !field.IsDb() {
-			return nil, fmt.Errorf("relationship %s.%s: field is not db-backed", rel.Class, rel.Field)
+			return nil, fmt.Errorf("relationship %s.%s: field is not db-backed", rel.Class, fieldName)
 		}
 
-		isList, atomic, err := referenceKind(field)
+		isList, atomic, err := referenceKind(field, elemIndex)
 		if err != nil {
 			return nil, fmt.Errorf("relationship %s.%s: %w", rel.Class, rel.Field, err)
 		}
 
 		ref := Reference{
 			ClassName: rel.Class,
-			FieldName: rel.Field,
+			FieldName: fieldName,
+			ElemIndex: elemIndex,
 			Field:     field,
 			Target:    target,
 			IsList:    isList,
@@ -75,29 +99,67 @@ func LoadReferenceRegistry(rels []core.RelationshipConfig, dcf *dc.DCFile) (*Ref
 	return reg, nil
 }
 
-func referenceKind(field dc.DCField) (isList bool, atomic bool, err error) {
+func referenceKind(field dc.DCField, elemIndex int) (isList bool, atomic bool, err error) {
 	switch field.PackType() {
 	case dc.PTInt, dc.PTUint, dc.PTInt64, dc.PTUint64:
+		if elemIndex >= 0 {
+			return false, false, fmt.Errorf("element index [%d] given but field is a scalar", elemIndex)
+		}
 		return false, false, nil
 	case dc.PTArray:
-		if isUintPackType(field.GetNestedField(0).PackType()) {
-			return true, false, nil
+		elem := field.GetNestedField(0)
+		var subPack dc.DCPackType
+		if elemIndex >= 0 && elemIndex < elem.NumNestedFields() {
+			subPack = elem.GetNestedField(elemIndex).PackType()
 		}
-		return false, false, fmt.Errorf("array element is not a uint (struct-list references are not supported)")
+		if err := checkListElement(elem.PackType(), elem.NumNestedFields(), subPack, elemIndex); err != nil {
+			return false, false, err
+		}
+		return true, false, nil
 	case dc.PTField:
 		if field.NumNestedFields() != 1 {
 			return false, false, fmt.Errorf("atomic field wraps %d values; only single-value atomics can be references", field.NumNestedFields())
 		}
 		inner := field.GetNestedField(0)
+		if inner.PackType() == dc.PTArray {
+			elem := inner.GetNestedField(0)
+			var subPack dc.DCPackType
+			if elemIndex >= 0 && elemIndex < elem.NumNestedFields() {
+				subPack = elem.GetNestedField(elemIndex).PackType()
+			}
+			if err := checkListElement(elem.PackType(), elem.NumNestedFields(), subPack, elemIndex); err != nil {
+				return false, false, err
+			}
+			return true, true, nil
+		}
+		if elemIndex >= 0 {
+			return false, false, fmt.Errorf("element index [%d] given but atomic field does not wrap an array", elemIndex)
+		}
 		if isUintPackType(inner.PackType()) {
 			return false, true, nil
-		}
-		if inner.PackType() == dc.PTArray && isUintPackType(inner.GetNestedField(0).PackType()) {
-			return true, true, nil
 		}
 		return false, false, fmt.Errorf("atomic field does not wrap a uint or uint[]")
 	}
 	return false, false, fmt.Errorf("field is not a uint or uint[] reference")
+}
+
+func checkListElement(elemPack dc.DCPackType, numSub int, subPack dc.DCPackType, elemIndex int) error {
+	if elemIndex < 0 {
+		if isUintPackType(elemPack) {
+			return nil
+		}
+		return fmt.Errorf("array element is not a uint; specify an element index (e.g. field[0]) for struct-list references")
+	}
+	if elemPack != dc.PTClass && elemPack != dc.PTField {
+		return fmt.Errorf("element index [%d] given but array element is not a struct", elemIndex)
+	}
+	if elemIndex >= numSub {
+		return fmt.Errorf("element index [%d] out of range; struct element has %d sub-field(s)", elemIndex, numSub)
+	}
+	if !isUintPackType(subPack) {
+		return fmt.Errorf("struct sub-field %d is not a uint", elemIndex)
+	}
+	return nil
 }
 
 func isUintPackType(pt dc.DCPackType) bool {
@@ -138,12 +200,43 @@ func (r *ReferenceRegistry) ExtractDOIDs(ref Reference, packed []byte) ([]Doid_t
 	p.BeginUnpack(ref.Field)
 
 	var out []Doid_t
-	collectDOIDs(p, &out)
+	if ref.ElemIndex >= 0 {
+		collectIndexedDOIDs(p, ref.ElemIndex, &out)
+	} else {
+		collectDOIDs(p, &out)
+	}
 
 	if !p.EndUnpack() {
 		return nil, fmt.Errorf("failed to unpack reference field %s.%s", ref.ClassName, ref.FieldName)
 	}
 	return out, nil
+}
+
+func collectIndexedDOIDs(p *dc.DCPacker, idx int, out *[]Doid_t) {
+	if p.GetPackType() == dc.PTField {
+		p.Push()
+		for p.MoreNestedFields() {
+			collectIndexedDOIDs(p, idx, out)
+		}
+		p.Pop()
+		return
+	}
+
+	p.Push()
+	for p.MoreNestedFields() {
+		p.Push()
+		for i := 0; p.MoreNestedFields(); i++ {
+			if i == idx {
+				if v := p.UnpackUint(); v != 0 {
+					*out = append(*out, Doid_t(v))
+				}
+			} else {
+				p.UnpackSkip()
+			}
+		}
+		p.Pop()
+	}
+	p.Pop()
 }
 
 func collectDOIDs(p *dc.DCPacker, out *[]Doid_t) {

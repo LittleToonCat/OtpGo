@@ -26,7 +26,7 @@ type relatedChildPacked struct {
 	values map[string][]byte
 }
 
-func resolveRelationField(reg *ReferenceRegistry, parentClass, relationField, targetClass string) (name string, field dc.DCField, isList bool, ok bool) {
+func resolveRelationField(reg *ReferenceRegistry, parentClass, relationField, targetClass string) (name string, field dc.DCField, isList bool, elemIndex int, ok bool) {
 	if relationField == "" {
 		var match Reference
 		n := 0
@@ -37,33 +37,58 @@ func resolveRelationField(reg *ReferenceRegistry, parentClass, relationField, ta
 			}
 		}
 		if n != 1 {
-			return "", nil, false, false
+			return "", nil, false, -1, false
 		}
-		return match.FieldName, match.Field, match.IsList, true
+		return match.FieldName, match.Field, match.IsList, match.ElemIndex, true
+	}
+
+	fieldName, idx, err := splitFieldIndex(relationField)
+	if err != nil {
+		return "", nil, false, -1, false
 	}
 
 	for _, ref := range reg.For(parentClass) {
-		if ref.FieldName == relationField {
-			return ref.FieldName, ref.Field, ref.IsList, true
+		if ref.FieldName == fieldName {
+			return ref.FieldName, ref.Field, ref.IsList, ref.ElemIndex, true
 		}
 	}
 	cls := core.DC.GetClassByName(parentClass)
 	if cls == nil {
-		return "", nil, false, false
+		return "", nil, false, -1, false
 	}
-	f := cls.GetFieldByName(relationField)
+	f := cls.GetFieldByName(fieldName)
 	if f == nil {
-		return "", nil, false, false
+		return "", nil, false, -1, false
 	}
-	list, _, err := referenceKind(f)
+	list, _, err := referenceKind(f, idx)
 	if err != nil {
-		return "", nil, false, false
+		return "", nil, false, -1, false
 	}
-	return relationField, f, list, true
+	return fieldName, f, list, idx, true
 }
 
-func docChildDOIDs(value interface{}) []Doid_t {
+func docChildDOIDs(value interface{}, elemIndex int) []Doid_t {
 	var out []Doid_t
+
+	if elemIndex >= 0 {
+		rv := reflect.ValueOf(value)
+		if !rv.IsValid() || (rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array) {
+			return nil
+		}
+		for i := 0; i < rv.Len(); i++ {
+			el := reflect.ValueOf(rv.Index(i).Interface())
+			if !el.IsValid() || (el.Kind() != reflect.Slice && el.Kind() != reflect.Array) {
+				continue
+			}
+			if elemIndex < el.Len() {
+				if id := toDoid(el.Index(elemIndex).Interface()); id != 0 {
+					out = append(out, id)
+				}
+			}
+		}
+		return out
+	}
+
 	var walk func(v interface{})
 	walk = func(v interface{}) {
 		if rv := reflect.ValueOf(v); rv.IsValid() && (rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array) {
@@ -142,13 +167,13 @@ func packDocFieldsJSON(logger *log.Entry, clsName string, fieldNames []string, d
 }
 
 func (d *DatabaseServer) relatedChildDOIDs(req GetRelatedRequest, parentClass string, parentDoc map[string]interface{}) (ids []Doid_t, code uint8) {
-	name, _, _, ok := resolveRelationField(d.references, parentClass, req.RelationField, req.TargetClass)
+	name, _, _, elemIndex, ok := resolveRelationField(d.references, parentClass, req.RelationField, req.TargetClass)
 	if !ok {
 		d.log.Warnf("GET_RELATED(%d): no relationship from %s to %s (field %q)",
 			req.ParentDoId, parentClass, req.TargetClass, req.RelationField)
 		return nil, 2
 	}
-	return docChildDOIDs(parentDoc[name]), 0
+	return docChildDOIDs(parentDoc[name], elemIndex), 0
 }
 
 func (d *DatabaseServer) sendGetRelatedResp(sender Channel_t, ctx uint32, code uint8,

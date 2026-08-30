@@ -115,7 +115,6 @@ roles:
       # Optional. Declares which db-backed fields hold references (DOIDs) to other
       # stored objects.
       #relationships:
-      #    - {class: Account, field: ESTATE_ID,     target: DistributedEstate}
       #    - {class: Account, field: ACCOUNT_AV_SET, target: DistributedToon}
 
       # Optionally reject a create/update that points a reference

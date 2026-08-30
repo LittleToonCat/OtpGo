@@ -20,6 +20,9 @@ func referenceIndexDDL(ref Reference) string {
 		listExpr = fmt.Sprintf("fields->'%s'->0", ref.FieldName)
 		scalarExpr = fmt.Sprintf("fields->'%s'->>0", ref.FieldName)
 	}
+	if ref.ElemIndex >= 0 {
+		listExpr = fmt.Sprintf("jsonb_path_query_array(%s, '$[*][%d]')", listExpr, ref.ElemIndex)
+	}
 
 	if ref.IsList {
 		return fmt.Sprintf(
