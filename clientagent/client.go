@@ -84,6 +84,7 @@ type Client struct {
 	context               atomic.Uint32
 	createContextMap      *MutexMap[uint32, func(doId Doid_t)]
 	getContextMap         *MutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)]
+	getRelatedContextMap  *MutexMap[uint32, func(dgi *DatagramIterator)]
 	queryFieldsContextMap *MutexMap[uint32, func(dgi *DatagramIterator)]
 
 	queue     []Datagram
@@ -126,6 +127,7 @@ func NewClient(config core.Role, ca *ClientAgent, conn gonet.Conn) *Client {
 		stopChan:              make(chan bool),
 		createContextMap:      NewMutexMap[uint32, func(doId Doid_t)](),
 		getContextMap:         NewMutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)](),
+		getRelatedContextMap:  NewMutexMap[uint32, func(dgi *DatagramIterator)](),
 		queryFieldsContextMap: NewMutexMap[uint32, func(dgi *DatagramIterator)](),
 		authenticated:         false,
 		visibleObjects:        NewMutexMap[Doid_t, VisibleObject](),
@@ -848,6 +850,8 @@ func (c *Client) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		c.handleGetStoredValuesResp(dgi)
 	case STATESERVER_OBJECT_QUERY_FIELDS_RESP:
 		c.handleQueryFieldsResp(dgi)
+	case DBSERVER_GET_RELATED_RESP:
+		c.handleGetRelatedDatabaseValuesResp(dgi)
 	default:
 		if luaFunc, ok := c.ca.L.GetGlobal("handleDatagram").(*lua.LFunction); ok {
 			c.ca.CallLuaFunction(luaFunc, c,
@@ -1216,6 +1220,40 @@ func (c *Client) handleGetStoredValuesResp(dgi *DatagramIterator) {
 
 	callback(doId, dgi)
 	c.getContextMap.Delete(context, false)
+}
+
+func (c *Client) getRelatedDatabaseValues(parentDoId Doid_t, parentFields []string, relationField string, targetClass string, targetFields []string, callback func(dgi *DatagramIterator)) {
+	context := c.getRelatedContextMap.Set(c.context.Add(1), callback, true)
+	defer c.getRelatedContextMap.Unlock()
+
+	dg := NewDatagram()
+	dg.AddServerHeader(c.ca.database, c.channel, DBSERVER_GET_RELATED)
+	dg.AddUint32(context)
+	dg.AddDoid(parentDoId)
+	dg.AddUint16(uint16(len(parentFields)))
+	for _, name := range parentFields {
+		dg.AddString(name)
+	}
+	dg.AddString(relationField)
+	dg.AddString(targetClass)
+	dg.AddUint16(uint16(len(targetFields)))
+	for _, name := range targetFields {
+		dg.AddString(name)
+	}
+	c.RouteDatagram(dg)
+}
+
+func (c *Client) handleGetRelatedDatabaseValuesResp(dgi *DatagramIterator) {
+	context := dgi.ReadUint32()
+	callback, ok := c.getRelatedContextMap.Get(context)
+
+	if !ok {
+		c.log.Warnf("Got GetRelatedResp with missing context %d", context)
+		return
+	}
+
+	callback(dgi)
+	c.getRelatedContextMap.Delete(context, false)
 }
 
 func (c *Client) handleQueryFieldsResp(dgi *DatagramIterator) {

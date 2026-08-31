@@ -41,10 +41,11 @@ type LuaRole struct {
 	// a float64 type) may cause some problems.
 	sender Channel_t
 
-	context          atomic.Uint32
-	createContextMap *MutexMap[uint32, func(doId Doid_t)]
-	getContextMap    *MutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)]
-	queryContextMap  *MutexMap[uint32, func(dgi *DatagramIterator)]
+	context              atomic.Uint32
+	createContextMap     *MutexMap[uint32, func(doId Doid_t)]
+	getContextMap        *MutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)]
+	getRelatedContextMap *MutexMap[uint32, func(dgi *DatagramIterator)]
+	queryContextMap      *MutexMap[uint32, func(dgi *DatagramIterator)]
 
 	L            *lua.LState
 	LQueue       []LuaQueueEntry
@@ -65,12 +66,13 @@ func NewLuaRole(config core.Role) bool {
 			"name":    name,
 			"modName": name,
 		}),
-		createContextMap: NewMutexMap[uint32, func(doId Doid_t)](),
-		getContextMap:    NewMutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)](),
-		queryContextMap:  NewMutexMap[uint32, func(dgi *DatagramIterator)](),
-		L:                lua.NewState(),
-		LQueue:           []LuaQueueEntry{},
-		processQueue:     make(chan bool),
+		createContextMap:     NewMutexMap[uint32, func(doId Doid_t)](),
+		getContextMap:        NewMutexMap[uint32, func(doId Doid_t, dgi *DatagramIterator)](),
+		getRelatedContextMap: NewMutexMap[uint32, func(dgi *DatagramIterator)](),
+		queryContextMap:      NewMutexMap[uint32, func(dgi *DatagramIterator)](),
+		L:                    lua.NewState(),
+		LQueue:               []LuaQueueEntry{},
+		processQueue:         make(chan bool),
 	}
 
 	role.Init(role)
@@ -184,6 +186,8 @@ func (l *LuaRole) HandleDatagram(dg Datagram, dgi *DatagramIterator) {
 		l.handleCreateDatabaseResp(context, code, doId)
 	case DBSERVER_GET_STORED_VALUES_RESP:
 		l.handleGetStoredValuesResp(dgi)
+	case DBSERVER_GET_RELATED_RESP:
+		l.handleGetRelatedDatabaseValuesResp(dgi)
 	default:
 		// Let Lua handle it.
 		l.CallLuaFunction(l.L.GetGlobal("handleDatagram"), sender,
@@ -259,7 +263,40 @@ func (l *LuaRole) handleGetStoredValuesResp(dgi *DatagramIterator) {
 	callback(doId, dgi)
 
 	l.getContextMap.Delete(context, false)
+}
 
+func (l *LuaRole) getRelatedDatabaseValues(dbChannel Channel_t, from Channel_t, parentDoId Doid_t, parentFields []string, relationField string, targetClass string, targetFields []string, callback func(dgi *DatagramIterator)) {
+	context := l.getRelatedContextMap.Set(l.context.Add(1), callback, true)
+	defer l.getRelatedContextMap.Unlock()
+
+	dg := NewDatagram()
+	dg.AddServerHeader(dbChannel, from, DBSERVER_GET_RELATED)
+	dg.AddUint32(context)
+	dg.AddDoid(parentDoId)
+	dg.AddUint16(uint16(len(parentFields)))
+	for _, name := range parentFields {
+		dg.AddString(name)
+	}
+	dg.AddString(relationField)
+	dg.AddString(targetClass)
+	dg.AddUint16(uint16(len(targetFields)))
+	for _, name := range targetFields {
+		dg.AddString(name)
+	}
+	l.RouteDatagram(dg)
+}
+
+func (l *LuaRole) handleGetRelatedDatabaseValuesResp(dgi *DatagramIterator) {
+	context := dgi.ReadUint32()
+	callback, ok := l.getRelatedContextMap.Get(context)
+
+	if !ok {
+		l.log.Warnf("Got GetStoredResp with missing context %d", context)
+		return
+	}
+
+	callback(dgi)
+	l.getRelatedContextMap.Delete(context, false)
 }
 
 func (l *LuaRole) handleQueryFieldsResp(dgi *DatagramIterator) {

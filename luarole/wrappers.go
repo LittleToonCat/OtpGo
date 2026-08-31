@@ -69,6 +69,7 @@ var ParticipantMethods = map[string]lua.LGFunction{
 	"writeServerEvent":             LuaWriteServerEvent,
 	"createDatabaseObject":         LuaCreateDatabaseObject,
 	"getDatabaseValues":            LuaGetDatabaseValues,
+	"getRelatedDatabaseValues":     LuaGetRelateDatabaseValues,
 	"packFieldToDatagram":          LuaPackFieldToDatagram,
 	"doLater":                      LuaDoLater,
 }
@@ -376,6 +377,180 @@ func LuaGetDatabaseValues(L *lua.LState) int {
 	}
 
 	participant.getDatabaseValues(dbChannel, doId, fields, from, callbackFunc)
+	return 1
+}
+
+func LuaGetRelateDatabaseValues(L *lua.LState) int {
+	participant := CheckParticipant(L, 1)
+	dbChannel := Channel_t(L.CheckNumber(2))
+	from := Channel_t(L.CheckNumber(3))
+
+	var parentDoId Doid_t
+	var parentClsName string
+	var parentFieldsTable *lua.LTable
+	var parentRelationField string
+	var targetClsName string
+	var targetFieldsTable *lua.LTable
+	var callbackFunc *lua.LFunction
+
+	if L.GetTop() == 9 {
+		// participant:getRelatedDatabaseValues(dbChannel, from, parentId, "parentName", {"parentFieldsTable"}, "targetName", {"targetFieldsTable"})
+		parentDoId = Doid_t(L.CheckInt(4))
+		parentClsName = L.CheckString(5)
+		parentFieldsTable = L.CheckTable(6)
+		parentRelationField = parentFieldsTable.RawGetInt(1).String()
+		targetClsName = L.CheckString(7)
+		targetFieldsTable = L.CheckTable(8)
+		callbackFunc = L.CheckFunction(9)
+	} else {
+		// participant:getRelatedDatabaseValues(dbChannel, from, parentId, "parentName", {"parentFieldsTable"}, "relationField" "targetName", {"targetFieldsTable"})
+		parentDoId = Doid_t(L.CheckInt(4))
+		parentClsName = L.CheckString(5)
+		parentFieldsTable = L.CheckTable(6)
+		parentRelationField = L.CheckString(7)
+		targetClsName = L.CheckString(8)
+		targetFieldsTable = L.CheckTable(9)
+		callbackFunc = L.CheckFunction(10)
+	}
+
+	senderContext := participant.sender
+
+	parentCls := core.DC.GetClassByName(parentClsName)
+	if parentCls == nil {
+		L.ArgError(3, "Parent Class not found.")
+		return 0
+	}
+
+	targetCls := core.DC.GetClassByName(targetClsName)
+	if targetCls == nil {
+		L.ArgError(5, "Target Class not found.")
+		return 0
+	}
+
+	parentFields := make([]string, 0)
+	parentFieldsTable.ForEach(func(_, l2 lua.LValue) {
+		fieldName := l2.(lua.LString)
+		parentFields = append(parentFields, string(fieldName))
+	})
+
+	targetFields := make([]string, 0)
+	targetFieldsTable.ForEach(func(_, l2 lua.LValue) {
+		fieldName := l2.(lua.LString)
+		targetFields = append(targetFields, string(fieldName))
+	})
+
+	participant.getRelatedDatabaseValues(dbChannel, from, parentDoId, parentFields, parentRelationField, targetClsName, targetFields, func(dgi *DatagramIterator) {
+		code := dgi.ReadUint8()
+		if code != 0 {
+			participant.CallLuaFunction(callbackFunc, senderContext, lua.LFalse)
+		}
+
+		parentFieldCount := dgi.ReadUint16()
+		parentFields := make([]string, parentFieldCount)
+		for i := range parentFieldCount {
+			parentFields[i] = dgi.ReadString()
+		}
+
+		packedParentValues := make([][]byte, parentFieldCount)
+		parentHasValue := map[string]bool{}
+		for i := range parentFieldCount {
+			packedParentValues[i] = dgi.ReadBlob()
+			parentHasValue[parentFields[i]] = dgi.ReadBool()
+			if !parentHasValue[parentFields[i]] {
+				participant.log.Debugf("GetRelatedValues: Data for field \"%s\" not found", parentFields[i])
+			}
+		}
+
+		childFieldCount := dgi.ReadUint16()
+		childFields := make([]string, childFieldCount)
+		for i := range childFieldCount {
+			childFields[i] = dgi.ReadString()
+		}
+
+		childPackedValueCount := dgi.ReadUint16()
+		childIds := make([]Doid_t, childPackedValueCount)
+		childIdToPackedValues := map[Doid_t][][]byte{}
+		childIdToHasValue := map[Doid_t]map[string]bool{}
+
+		for i := range childPackedValueCount {
+			childId := dgi.ReadDoid()
+			childIds[i] = childId
+			childIdToPackedValues[childId] = make([][]byte, childFieldCount)
+			for i := range childFieldCount {
+				childIdToPackedValues[childId][i] = dgi.ReadBlob()
+				if childIdToHasValue[childId] == nil {
+					childIdToHasValue[childId] = map[string]bool{}
+				}
+				childIdToHasValue[childId][childFields[i]] = dgi.ReadBool()
+			}
+
+		}
+
+		parentFieldTable := L.NewTable()
+		childIdsTable := L.NewTable()
+		childIdToFieldTable := L.NewTable()
+
+		for _, childId := range childIds {
+			childIdsTable.Append(lua.LNumber(childId))
+		}
+
+		unpacker := dc.NewDCPacker()
+		defer dc.DeleteDCPacker(unpacker)
+
+		for i := range parentFieldCount {
+			field := parentFields[i]
+			found := parentHasValue[field]
+
+			dcField := parentCls.GetFieldByName(field)
+			if dcField == nil {
+				participant.log.Warnf("GetRelatedValues: Field \"%s\" does not exist for parent class \"%s\"", field, parentClsName)
+				continue
+			}
+
+			if found {
+				data := packedParentValues[i]
+				// Validate that the data is correct
+				if !dcField.ValidateRanges(data) {
+					participant.log.Errorf("GetRelatedValues: Received invalid data for parent field \"%s\"!\n%s", field, DumpBytes(data))
+					continue
+				}
+
+				unpacker.SetUnpackData(data)
+				unpacker.BeginUnpack(dcField)
+				parentFieldTable.RawSetString(parentFields[i], core.UnpackDataToLuaValue(unpacker, L))
+				unpacker.EndUnpack()
+			}
+		}
+
+		for _, childId := range childIds {
+			fieldTable := L.NewTable()
+			for i := range childFieldCount {
+				field := childFields[i]
+				found := childIdToHasValue[childId][field]
+
+				dcField := targetCls.GetFieldByName(field)
+				if dcField == nil {
+					participant.log.Warnf("GetRelatedValues: Field \"%s\" does not exist for target class \"%s\"", field, targetClsName)
+					continue
+				}
+
+				if found {
+					data := childIdToPackedValues[childId][i]
+					if !dcField.ValidateRanges(data) {
+						participant.log.Errorf("GetRelatedValues: Received invalid data for target field \"%s\"!\n%s", field, DumpBytes(data))
+						continue
+					}
+
+					unpacker.SetUnpackData(data)
+					unpacker.BeginUnpack(dcField)
+					fieldTable.RawSetString(childFields[i], core.UnpackDataToLuaValue(unpacker, L))
+					unpacker.EndUnpack()
+				}
+				childIdToFieldTable.RawSetInt(int(childId), fieldTable)
+			}
+		}
+		participant.CallLuaFunction(callbackFunc, senderContext, lua.LTrue, parentFieldTable, childIdsTable, childIdToFieldTable)
+	})
 	return 1
 }
 
