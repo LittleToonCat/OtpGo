@@ -522,7 +522,7 @@ func (b *PostgresBackend) GetRelatedValues(req GetRelatedRequest, sender Channel
 		}
 	}
 
-	fieldName, _, _, elemIndex, ok := resolveRelationField(b.db.references, parentClass, req.RelationField, req.TargetClass)
+	fieldName, _, _, elemIndex, atomic, ok := resolveRelationField(b.db.references, parentClass, req.RelationField, req.TargetClass)
 	if !ok {
 		b.db.log.Warnf("GetRelatedValues(%d): no relationship from %s to %s (field %q)",
 			req.ParentDoId, parentClass, req.TargetClass, req.RelationField)
@@ -530,7 +530,7 @@ func (b *PostgresBackend) GetRelatedValues(req GetRelatedRequest, sender Channel
 		return
 	}
 
-	childIDs := docChildDOIDs(parentDoc[fieldName], elemIndex)
+	childIDs := docChildDOIDs(parentDoc[fieldName], elemIndex, atomic)
 
 	var children []relatedChildPacked
 	if len(childIDs) > 0 {
