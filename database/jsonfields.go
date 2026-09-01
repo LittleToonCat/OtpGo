@@ -88,8 +88,11 @@ func PackValue(packer *dc.DCPacker, value interface{}, log log.Entry) {
 
 	if value == nil {
 		switch packer.GetPackType() {
-		case dc.PTString, dc.PTBlob:
+		case dc.PTString:
 			packer.PackString("")
+			return
+		case dc.PTBlob:
+			packer.PackBlob([]byte{})
 			return
 		case dc.PTDouble:
 			packer.PackDouble(0)
@@ -189,9 +192,9 @@ func PackValue(packer *dc.DCPacker, value interface{}, log log.Entry) {
 			packer.PackString(string(binData))
 		} else if stringValue, ok := value.(string); ok {
 			if decoded, err := base64.StdEncoding.DecodeString(stringValue); err == nil {
-				packer.PackString(string(decoded))
+				packer.PackBlob(decoded)
 			} else {
-				packer.PackString(stringValue)
+				packer.PackBlob([]byte(stringValue))
 			}
 		}
 	default:

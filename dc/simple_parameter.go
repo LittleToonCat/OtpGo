@@ -1394,7 +1394,9 @@ func (sp *simpleParameter) UnpackBlob(data []byte, p *int, value *[]byte, packEr
 		*packError = true
 		return
 	}
-	*value = append([]byte(nil), data[*p:*p+blobSize]...)
+	blob := make([]byte, blobSize)
+	copy(blob, data[*p:*p+blobSize])
+	*value = blob
 	*p += blobSize
 }
 

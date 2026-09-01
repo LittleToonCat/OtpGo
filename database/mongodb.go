@@ -113,7 +113,51 @@ func UnpackDataToBsonDocument(unpacker *dc.DCPacker, name string, doc *bson.D, l
 	log.Debugf("Resulting Document: %v", *doc)
 }
 
+func bsonBytes(value interface{}) ([]byte, bool) {
+	switch v := value.(type) {
+	case primitive.Binary:
+		return v.Data, true
+	case []byte:
+		return v, true
+	case string:
+		return []byte(v), true
+	}
+	return nil, false
+}
+
+func isBsonNull(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+	_, isNull := value.(primitive.Null)
+	return isNull
+}
+
 func PackBsonValue(packer *dc.DCPacker, value interface{}) {
+	if isBsonNull(value) {
+		switch packer.GetPackType() {
+		case dc.PTInvalid:
+			return
+		case dc.PTString:
+			packer.PackString("")
+		case dc.PTBlob:
+			packer.PackBlob([]byte{})
+		case dc.PTDouble:
+			packer.PackDouble(0)
+		case dc.PTInt:
+			packer.PackInt(0)
+		case dc.PTUint:
+			packer.PackUint(0)
+		case dc.PTInt64:
+			packer.PackInt64(0)
+		case dc.PTUint64:
+			packer.PackUint64(0)
+		default:
+			packer.PackDefaultValue()
+		}
+		return
+	}
+
 	switch packer.GetPackType() {
 	case dc.PTInvalid:
 		// TODO: Error out
@@ -140,16 +184,16 @@ func PackBsonValue(packer *dc.DCPacker, value interface{}) {
 			packer.PackInt64(int64(double))
 		}
 	case dc.PTString:
-		if stringValue, ok := value.(string); ok {
-			packer.PackString(stringValue)
+		if data, ok := bsonBytes(value); ok {
+			packer.PackString(string(data))
 		}
 	case dc.PTBlob:
-		if binData, ok := value.(primitive.Binary); ok {
-			packer.PackString(string(binData.Data))
+		if data, ok := bsonBytes(value); ok {
+			packer.PackBlob(data)
 		}
 	default:
 		if binData, ok := value.(primitive.Binary); ok {
-			packer.PackString(string(binData.Data))
+			packer.PackBlob(binData.Data)
 			return
 		}
 		if array, ok := value.(bson.A); ok {
