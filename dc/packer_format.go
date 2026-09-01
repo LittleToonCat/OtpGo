@@ -31,7 +31,7 @@ func (p *dcPacker) unpackAndFormat(out *strings.Builder, showFieldNames bool) {
 	case PTString:
 		enquoteString(out, '"', p.unpackString())
 	case PTBlob:
-		outputHexString(out, p.unpackLiteralValue())
+		outputHexString(out, p.unpackBlob())
 	default:
 		var openCh, closeCh byte
 		switch packType {
