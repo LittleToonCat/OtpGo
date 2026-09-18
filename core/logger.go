@@ -18,6 +18,10 @@ var Log = NewLogger(os.Stderr)
 
 var DebugEnvrion = strings.Split(os.Getenv("DEBUG"), ",")
 
+func SetDebugEnvrion(envrion []string) {
+	DebugEnvrion = envrion
+}
+
 var bold = color.New(color.Bold)
 var grey = color.New(color.FgHiBlack)
 

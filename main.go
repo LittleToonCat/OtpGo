@@ -49,6 +49,16 @@ func main() {
       -L, --log       Specify a file to write log messages to.
       -l, --loglevel  Specify the minimum log level that should be logged;
                         Error and Fatal levels will always be logged.
+      -d, --debug     Show the debug message logs for components (seperated by commas);
+                        e.g. setting "MessageDirector,ClientAgent" will enable debug outputs from
+                        the Message Director and the Client Agent.  Distributed Object debugging
+                        can be set by passing over the name of the object class,
+                        (e.g. "DistributedAvatar","DistributedDistrict").
+
+                        Passing "*" will enable debug output from every component.
+
+                        (Can also be set with "DEBUG" environment variable, but using the argument
+                        will override anything set by this.)
 `)
 		os.Exit(1)
 	}
@@ -57,6 +67,7 @@ func main() {
 	loglevelPtr := pflag.StringP("loglevel", "l", "debug", "Specify minimum log level that should be logged.")
 	versionPtr := pflag.BoolP("version", "v", false, "Show the application version.")
 	helpPtr := pflag.BoolP("help", "h", false, "Show the application usage.")
+	debugPtr := pflag.StringSliceP("debug", "d", []string{}, "Show the debug message logs for components (seperated by commas)")
 
 	pflag.Parse()
 
@@ -100,6 +111,10 @@ Revision: %s
 
 		handler := core.NewMultiHandler(core.Log, core.NewLogger(logfile))
 		log.SetHandler(handler)
+	}
+
+	if len(*debugPtr) > 0 {
+		core.SetDebugEnvrion(*debugPtr)
 	}
 
 	var configPath, configName string
