@@ -74,7 +74,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 			}
 			if data, ok := dgi.ReadDCField(field, true); ok {
 				do.requiredFields[field] = data
-				do.log.Debugf("Stored REQUIRED field \"%s\": %s", field.GetName(), FormatFieldData(field, do.requiredFields[field]))
+				do.log.Debugf("Stored REQUIRED field \"%s\": %s", field.GetName(), field.FormatData(do.requiredFields[field]))
 			} else {
 				return false, nil, fmt.Errorf("received truncated data for REQUIRED field \"%s\"\n%x", field.GetName(), data)
 			}
@@ -98,7 +98,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 			}
 			if data, ok := dgi.ReadDCField(field, true); ok {
 				do.ramFields[field] = data
-				do.log.Debugf("Stored optional RAM field \"%s\": %s", field.GetName(), FormatFieldData(field, do.ramFields[field]))
+				do.log.Debugf("Stored optional RAM field \"%s\": %s", field.GetName(), field.FormatData(do.ramFields[field]))
 			} else {
 				return false, nil, fmt.Errorf("received truncated data for OTHER field \"%s\"\n%s", field.GetName(), dgi)
 			}
@@ -419,7 +419,7 @@ func (d *DistributedObject) wakeChildren() {
 
 func (d *DistributedObject) saveField(field dc.DCField, data []byte) bool {
 	if field.IsDb() && d.stateserver.database != INVALID_CHANNEL {
-		d.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.", field.GetName(), FormatFieldData(field, data), d.do)
+		d.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.", field.GetName(), field.FormatData(data), d.do)
 
 		dg := NewDatagram()
 		dg.AddServerHeader(d.stateserver.database, Channel_t(d.do), DBSERVER_SET_STORED_VALUES)
@@ -433,11 +433,11 @@ func (d *DistributedObject) saveField(field dc.DCField, data []byte) bool {
 	}
 
 	if field.IsRequired() {
-		d.log.Debugf("Storing REQUIRED field \"%s\": %s", field.GetName(), FormatFieldData(field, data))
+		d.log.Debugf("Storing REQUIRED field \"%s\": %s", field.GetName(), field.FormatData(data))
 		d.requiredFields[field] = data
 		return true
 	} else if field.IsRam() {
-		d.log.Debugf("Storing RAM field \"%s\": %s", field.GetName(), FormatFieldData(field, data))
+		d.log.Debugf("Storing RAM field \"%s\": %s", field.GetName(), field.FormatData(data))
 		d.ramFields[field] = data
 		return true
 	}
@@ -488,7 +488,7 @@ func (d *DistributedObject) handleMultipleUpdates(dgi *DatagramIterator, count u
 
 func (d *DistributedObject) finishHandleUpdate(field dc.DCField, data []byte, sender Channel_t) {
 	// Print out the human formatted data
-	d.log.Debugf("Handling update for field \"%s\": %s", field.GetName(), FormatFieldData(field, data))
+	d.log.Debugf("Handling update for field \"%s\": %s", field.GetName(), field.FormatData(data))
 
 	molecular := field.AsMolecularField()
 	if molecular != nil {

@@ -4,18 +4,10 @@ import (
 	"otpgo/dc"
 )
 
-func ValidateDCRanges(field dc.DCField, data []byte) bool {
-	return field.ValidateRanges(data)
-}
-
 func DumpBytes(data []byte) string {
 	dg := NewDatagram()
 	dg.AddData(data)
 	return dg.String()
-}
-
-func FormatFieldData(field dc.DCField, data []byte) string {
-	return field.FormatData(data)
 }
 
 func DumpUnpacker(unpacker *dc.DCPacker) string {

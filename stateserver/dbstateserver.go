@@ -254,11 +254,11 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 		if found {
 			data := packedValues[i]
 			// Validate that the data is correct
-			if !ValidateDCRanges(dcField, data) {
+			if !dcField.ValidateRanges(data) {
 				s.log.Errorf("Received invalid update data for field \"%s\"!\n%x", field, data)
 				continue
 			}
-			s.log.Debugf("Got data for field \"%s\": %s", fields[i], FormatFieldData(dcField, data))
+			s.log.Debugf("Got data for field \"%s\": %s", fields[i], dcField.FormatData(data))
 			obj.fieldUpdates[dcField] = data
 		} else {
 			s.log.Debugf("Data for field \"%s\" not found", fields[i])
@@ -281,7 +281,7 @@ func (s *DatabaseStateServer) initObjectFromDbValues(obj *LoadingObject, dgi *Da
 			} else {
 				// Use the default value.
 				obj.requiredFields[dcField] = []byte(dcField.GetDefaultValue())
-				s.log.Debugf("Using default value required for field \"%s\" %s", dcField.GetName(), FormatFieldData(dcField, obj.requiredFields[dcField]))
+				s.log.Debugf("Using default value required for field \"%s\" %s", dcField.GetName(), dcField.FormatData(obj.requiredFields[dcField]))
 			}
 		} else if dcField.IsRam() {
 			if data, ok := obj.fieldUpdates[dcField]; ok {
@@ -386,7 +386,7 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 		return
 	}
 
-	s.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.\n%s", field.GetName(), FormatFieldData(field, data), do, dgi)
+	s.log.Debugf("Forwarding update for field \"%s\": %s of object id %d to database.\n%s", field.GetName(), field.FormatData(data), do, dgi)
 
 	dg := NewDatagram()
 	dg.AddServerHeader(s.database, Channel_t(do), DBSERVER_SET_STORED_VALUES)
