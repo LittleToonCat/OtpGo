@@ -169,7 +169,7 @@ func (dgi *DatagramIterator) ReadRemainder() []uint8 {
 	return dgi.ReadData(sz)
 }
 
-func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, lock bool) ([]byte, bool) {
+func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool) ([]byte, bool) {
 	value, end, ok := dc.UnpackField(field, dgi.Dg.Bytes(), int(dgi.offset), validateRanges)
 	if !ok {
 		return nil, false
@@ -178,7 +178,7 @@ func (dgi *DatagramIterator) ReadDCField(field dc.DCField, validateRanges bool, 
 	return value, true
 }
 
-func (dgi *DatagramIterator) SkipDCField(field dc.DCField, lock bool) bool {
+func (dgi *DatagramIterator) SkipDCField(field dc.DCField) bool {
 	end, ok := dc.SkipField(field, dgi.Dg.Bytes(), int(dgi.offset))
 	if !ok {
 		return false

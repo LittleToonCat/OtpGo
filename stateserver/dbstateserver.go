@@ -123,7 +123,7 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, do Doid_t, s
 			continue
 		}
 		if dcField.IsRequired() {
-			dgi.SkipDCField(dcField, false)
+			dgi.SkipDCField(dcField)
 		}
 	}
 
@@ -139,11 +139,11 @@ func (s *DatabaseStateServer) handleActivate(dgi *DatagramIterator, do Doid_t, s
 
 			if !(dcField.IsRequired() || dcField.IsRam()) {
 				s.log.Errorf("Recieved NON-RAM field \"%s\" within an OTHER section", dcField.GetName())
-				dgi.SkipDCField(dcField, false)
+				dgi.SkipDCField(dcField)
 				continue
 			}
 
-			data, ok := dgi.ReadDCField(dcField, true, false)
+			data, ok := dgi.ReadDCField(dcField, true)
 			if !ok {
 				s.log.Errorf("Received invalid update data for field \"%s\"!", dcField.GetName())
 				continue
@@ -379,7 +379,7 @@ func (s *DatabaseStateServer) handleOneUpdate(dgi *DatagramIterator) {
 		return
 	}
 
-	data, ok := dgi.ReadDCField(field, true, true)
+	data, ok := dgi.ReadDCField(field, true)
 
 	if !ok || dgi.RemainingSize() > 0 {
 		s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.GetName(), dgi)
@@ -427,7 +427,7 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 
 		if !field.IsDb() {
 			// Skip the data.
-			if !dgi.SkipDCField(field, false) {
+			if !dgi.SkipDCField(field) {
 				// ..and even that could fail.
 				s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.GetName(), dgi)
 				return
@@ -435,7 +435,7 @@ func (s *DatabaseStateServer) handleMultipleUpdates(dgi *DatagramIterator) {
 			continue
 		}
 
-		data, ok := dgi.ReadDCField(field, true, false)
+		data, ok := dgi.ReadDCField(field, true)
 		if !ok {
 			s.log.Errorf("Received invalid update data for field \"%s\"!\n%s", field.GetName(), dgi)
 			return

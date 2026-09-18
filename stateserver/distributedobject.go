@@ -57,14 +57,6 @@ func NewDistributedObjectWithData(ss *StateServer, doid Doid_t, parent Doid_t,
 	do.wakeChildren()
 	do.Unlock()
 
-	// if dgs, ok := messagedirector.ReplayPool[Channel_t(doid)]; ok {
-	// 	for _, dg := range dgs {
-	// 		dgi := NewDatagramIterator(&dg)
-	// 		dgi.SeekPayload()
-	// 		go do.HandleDatagram(dg, dgi)
-	// 	}
-	// }
-
 	return do
 }
 
@@ -80,7 +72,7 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 			if field.AsMolecularField() != nil {
 				continue
 			}
-			if data, ok := dgi.ReadDCField(field, true, false); ok {
+			if data, ok := dgi.ReadDCField(field, true); ok {
 				do.requiredFields[field] = data
 				do.log.Debugf("Stored REQUIRED field \"%s\": %s", field.GetName(), FormatFieldData(field, do.requiredFields[field]))
 			} else {
@@ -101,10 +93,10 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 
 			if !field.IsRam() {
 				do.log.Errorf("Received non-RAM field %s within an OTHER section!", field.GetName())
-				dgi.SkipDCField(field, false)
+				dgi.SkipDCField(field)
 				continue
 			}
-			if data, ok := dgi.ReadDCField(field, true, false); ok {
+			if data, ok := dgi.ReadDCField(field, true); ok {
 				do.ramFields[field] = data
 				do.log.Debugf("Stored optional RAM field \"%s\": %s", field.GetName(), FormatFieldData(field, do.ramFields[field]))
 			} else {
@@ -130,19 +122,9 @@ func NewDistributedObject(ss *StateServer, doid Doid_t, parent Doid_t,
 	if strings.HasSuffix(dclass.GetName(), "District") {
 		// It's a District object, automatically assign the airecv channel to the sender of the
 		// generate message.
-		dgi.SeekPayload()
-		sender := dgi.ReadChannel()
+		sender := dgi.Sender()
 		do.handleAiChange(sender, sender, true)
 	}
-
-	// Replay datagrams we may have missed while generating
-	// if dgs, ok := messagedirector.ReplayPool[Channel_t(doid)]; ok {
-	// 	for _, dg := range dgs {
-	// 		dgi := NewDatagramIterator(&dg)
-	// 		dgi.SeekPayload()
-	// 		go do.HandleDatagram(dg, dgi)
-	// 	}
-	// }
 
 	return true, do, nil
 }
@@ -471,7 +453,7 @@ func (d *DistributedObject) handleOneUpdate(dgi *DatagramIterator, sender Channe
 	}
 
 	offset := dgi.Tell()
-	data, ok := dgi.ReadDCField(field, true, true)
+	data, ok := dgi.ReadDCField(field, true)
 	if !ok || dgi.RemainingSize() > 0 {
 		dgi.Seek(offset)
 		d.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%x", field.GetName(), dgi, dgi.ReadRemainder())
@@ -492,7 +474,7 @@ func (d *DistributedObject) handleMultipleUpdates(dgi *DatagramIterator, count u
 		}
 
 		offset := dgi.Tell()
-		data, ok := dgi.ReadDCField(field, true, true)
+		data, ok := dgi.ReadDCField(field, true)
 		if !ok {
 			dgi.Seek(offset)
 			d.log.Errorf("Received invalid update data for field \"%s\"!\n%s\n%x", field.GetName(), dgi, dgi.ReadRemainder())
@@ -518,7 +500,7 @@ func (d *DistributedObject) finishHandleUpdate(field dc.DCField, data []byte, se
 		count := molecular.GetNumAtomics()
 		for n := 0; n < count; n++ {
 			atomic := molecular.GetAtomic(n).AsField()
-			atomicData, ok := dgi.ReadDCField(atomic, true, false)
+			atomicData, ok := dgi.ReadDCField(atomic, true)
 			if !ok {
 				d.log.Errorf("Failed to read atomic field \"%s\" of molecular field \"%s\".", atomic.GetName(), molecular.GetName())
 				return
