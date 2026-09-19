@@ -171,7 +171,7 @@ func (b *YAMLBackend) CreateStoredObject(dclass *dc.DCClass, datas map[dc.DCFiel
 				b.db.RouteDatagram(dg)
 				return
 			}
-			obj.Fields = append(obj.Fields, yaml.MapItem{field.GetName(), formattedString})
+			obj.Fields = append(obj.Fields, yaml.MapItem{Key: field.GetName(), Value: formattedString})
 		}
 	}
 
@@ -457,7 +457,7 @@ func (b *YAMLBackend) SetStoredValues(doId Doid_t, packedValues map[string][]byt
 			}
 
 			if value, ok := objFields[field.GetName()]; ok {
-				obj.Fields = append(obj.Fields, yaml.MapItem{field.GetName(), value})
+				obj.Fields = append(obj.Fields, yaml.MapItem{Key: field.GetName(), Value: value})
 			}
 		}
 	}
