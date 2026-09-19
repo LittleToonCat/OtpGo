@@ -13,10 +13,10 @@ import (
 
 	"github.com/apex/log"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
 type Globals struct {
@@ -30,9 +30,9 @@ type GlobalsDoId struct {
 }
 
 type StoredObject struct {
-	ID     Doid_t      `bson:"_id"`
-	Class  string      `bson:"dclass"`
-	Fields primitive.D `bson:"fields"`
+	ID     Doid_t `bson:"_id"`
+	Class  string `bson:"dclass"`
+	Fields bson.D `bson:"fields"`
 }
 
 type MongoBackend struct {
@@ -81,20 +81,20 @@ func UnpackDataToBsonDocument(unpacker *dc.DCPacker, name string, doc *bson.D, l
 	case dc.PTInvalid:
 		log.Errorf("UnpackDataToBsonDocument: PTInvalid reached!\n%s", DumpUnpacker(unpacker))
 	case dc.PTDouble:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackDouble()})
+		*doc = append(*doc, bson.E{Key: name, Value: unpacker.UnpackDouble()})
 	case dc.PTInt:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackInt()})
+		*doc = append(*doc, bson.E{Key: name, Value: unpacker.UnpackInt()})
 	case dc.PTUint:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackUint()})
+		*doc = append(*doc, bson.E{Key: name, Value: unpacker.UnpackUint()})
 	case dc.PTInt64:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackInt64()})
+		*doc = append(*doc, bson.E{Key: name, Value: unpacker.UnpackInt64()})
 	case dc.PTUint64:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackUint64()})
+		*doc = append(*doc, bson.E{Key: name, Value: unpacker.UnpackUint64()})
 	case dc.PTString:
-		*doc = append(*doc, bson.E{name, unpacker.UnpackString()})
+		*doc = append(*doc, bson.E{Key: name, Value: unpacker.UnpackString()})
 	case dc.PTBlob:
 		data := unpacker.UnpackBlob()
-		*doc = append(*doc, bson.E{name, data})
+		*doc = append(*doc, bson.E{Key: name, Value: data})
 	default:
 		// If we reached here, that means it is a list
 		// of nested fields (e.g. an array type, an atomic field, a
@@ -107,7 +107,7 @@ func UnpackDataToBsonDocument(unpacker *dc.DCPacker, name string, doc *bson.D, l
 			UnpackDataToBsonArray(unpacker, &array, log)
 		}
 		unpacker.Pop()
-		*doc = append(*doc, bson.E{name, array})
+		*doc = append(*doc, bson.E{Key: name, Value: array})
 	}
 
 	log.Debugf("Resulting Document: %v", *doc)
@@ -115,7 +115,7 @@ func UnpackDataToBsonDocument(unpacker *dc.DCPacker, name string, doc *bson.D, l
 
 func bsonBytes(value interface{}) ([]byte, bool) {
 	switch v := value.(type) {
-	case primitive.Binary:
+	case bson.Binary:
 		return v.Data, true
 	case []byte:
 		return v, true
@@ -129,7 +129,7 @@ func isBsonNull(value interface{}) bool {
 	if value == nil {
 		return true
 	}
-	_, isNull := value.(primitive.Null)
+	_, isNull := value.(bson.Null)
 	return isNull
 }
 
@@ -192,7 +192,7 @@ func PackBsonValue(packer *dc.DCPacker, value interface{}) {
 			packer.PackBlob(data)
 		}
 	default:
-		if binData, ok := value.(primitive.Binary); ok {
+		if binData, ok := value.(bson.Binary); ok {
 			packer.PackBlob(binData.Data)
 			return
 		}
@@ -233,13 +233,20 @@ func PackBsonValue(packer *dc.DCPacker, value interface{}) {
 }
 
 func NewMongoBackend(db *DatabaseServer, config Config) (bool, *MongoBackend, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(config.Server))
+	client, err := mongo.Connect(options.Client().ApplyURI(config.Server))
 	if err != nil {
 		return false, nil, err
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		return false, nil, err
+	}
+
+	db.log.Infof("Successfully connected to Mongo server: %s", config.Server)
 
 	backend := &MongoBackend{
 		db:      db,
@@ -250,7 +257,7 @@ func NewMongoBackend(db *DatabaseServer, config Config) (bool, *MongoBackend, er
 
 	// Create globals collection if it doesn't exist already.
 	var result Globals
-	err = backend.globals.FindOne(context.Background(), bson.D{{"_id", "GLOBALS"}}).Decode(&result)
+	err = backend.globals.FindOne(context.Background(), bson.D{{Key: "_id", Value: "GLOBALS"}}).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			global := Globals{
@@ -285,9 +292,9 @@ func (b *MongoBackend) AssignDoId() Doid_t {
 }
 
 func (b *MongoBackend) AssignDoIdMonotonic() Doid_t {
-	filter := bson.D{{"_id", "GLOBALS"},
-		{"doid.monotonic", bson.D{{"$gte", b.db.min}}},
-		{"doid.monotonic", bson.D{{"$lte", b.db.max}}}}
+	filter := bson.D{{Key: "_id", Value: "GLOBALS"},
+		{Key: "doid.monotonic", Value: bson.D{{Key: "$gte", Value: b.db.min}}},
+		{Key: "doid.monotonic", Value: bson.D{{Key: "$lte", Value: b.db.max}}}}
 
 	update := bson.M{"$inc": bson.M{"doid.monotonic": 1}}
 
