@@ -3,7 +3,7 @@ package util
 import (
 	"fmt"
 
-	"github.com/yuin/gopher-lua"
+	lua "github.com/yuin/gopher-lua"
 )
 
 // Util wrappers for Lua.
@@ -99,11 +99,16 @@ func NewLuaInt64(L *lua.LState, i int64) *lua.LUserData {
 }
 
 func CheckInt64(L *lua.LState, n int) int64 {
-	ud := L.CheckUserData(n)
-	if i, ok := ud.Value.(int64); ok {
-		return i
+	val := L.CheckAny(n)
+	if ud, ok := val.(*lua.LUserData); ok {
+		if i, ok := ud.Value.(int64); ok {
+			return i
+		}
 	}
-	L.ArgError(n, "Int64 expected")
+	if num, ok := val.(*lua.LNumber); ok {
+		return int64(*num)
+	}
+	L.ArgError(n, "Int64 object or number expected")
 	return 0
 }
 
@@ -126,11 +131,16 @@ func NewLuaUint64(L *lua.LState, i uint64) *lua.LUserData {
 }
 
 func CheckUint64(L *lua.LState, n int) uint64 {
-	ud := L.CheckUserData(n)
-	if i, ok := ud.Value.(uint64); ok {
-		return i
+	val := L.CheckAny(n)
+	if ud, ok := val.(*lua.LUserData); ok {
+		if i, ok := ud.Value.(uint64); ok {
+			return i
+		}
 	}
-	L.ArgError(n, "Uint64 expected")
+	if num, ok := val.(*lua.LNumber); ok {
+		return uint64(*num)
+	}
+	L.ArgError(n, "Uint64 object or number expected")
 	return 0
 }
 

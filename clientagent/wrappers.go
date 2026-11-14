@@ -950,7 +950,17 @@ func LuaHandleRemoveInterest(L *lua.LState) int {
 
 func LuaSubscribeChannel(L *lua.LState) int {
 	client := CheckClient(L, 1)
-	channel := Channel_t(L.CheckInt(2))
+
+	var channel Channel_t
+	if L.GetTop() == 2 {
+		// client:subscribeChannel(channel)
+		channel = Channel_t(CheckUint64(L, 2))
+	} else {
+		// client:subscribeChannel(high, low)
+		account := L.CheckInt(2)
+		avatar := L.CheckInt(3)
+		channel = Channel_t(account)<<32 | Channel_t(avatar)
+	}
 	client.SubscribeChannel(channel)
 	return 1
 }
@@ -961,7 +971,7 @@ func LuaSetChannel(L *lua.LState) int {
 	var channel Channel_t
 	if L.GetTop() == 2 {
 		// client:setChannel(channel)
-		channel = Channel_t(L.CheckInt64(2))
+		channel = Channel_t(CheckUint64(L, 2))
 	} else {
 		// client:setChannel(accountId, avatarId)
 		account := L.CheckInt(2)
