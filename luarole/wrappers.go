@@ -688,10 +688,10 @@ func LuaSetDatabaseValues(L *lua.LState) int {
 func LuaWriteServerEvent(L *lua.LState) int {
 	eventType := L.CheckString(2)
 	serverName := L.CheckString(3)
-	channel := L.CheckInt64(4)
+	channel := CheckUint64(L, 4)
 	description := L.CheckString(5)
 
-	event := eventlogger.NewLoggedEvent(eventType, serverName, strconv.FormatInt(channel, 10), description)
+	event := eventlogger.NewLoggedEvent(eventType, serverName, strconv.FormatUint(channel, 10), description)
 	event.Send()
 
 	return 1
