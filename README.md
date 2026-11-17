@@ -48,4 +48,3 @@ The compatible build tags is as follows:
 [Gyarados](https://gitlab.com/sunrisemmos/pirates/game) ([Sunrise Games'](https://sunrise.games/) Pirates of the Caribbean Online servers)
 
 [Clefairy](https://github.com/PixieHollowRE/game-server) ([Sunrise Games'](https://sunrise.games/) Pixie Hollow servers)
-
