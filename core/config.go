@@ -14,8 +14,8 @@ var Hash uint32
 var StopChan chan bool // For test purposes
 
 type Uberdog struct {
-	Id        util.Doid_t
-	Class     *dc.DCClass
+	Id    util.Doid_t
+	Class *dc.DCClass
 }
 
 var Uberdogs []Uberdog
@@ -32,11 +32,12 @@ type Role struct {
 	Name string
 
 	// CLIENT
-	Bind    string
-	Proxy   bool
-	Version string
-	DC_Hash int
-	Tuning  struct {
+	Bind           string
+	Proxy          bool
+	Websocket_Bind string
+	Version        string
+	DC_Hash        int
+	Tuning         struct {
 		Interest_Timeout int
 	}
 	Lua_File string
@@ -83,7 +84,7 @@ type Role struct {
 		// YAML BACKEND
 		Directory string
 	}
-	Relationships []RelationshipConfig
+	Relationships                 []RelationshipConfig
 	Enforce_Referential_Integrity bool
 	// Forwarding system to keep game-specific messages out of the database code.
 	Forwarding []struct {

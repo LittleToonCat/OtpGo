@@ -69,6 +69,11 @@ roles:
       # or the "send-proxy" option (not recommended).
       #proxy: true
 
+      # "websocket_bind" is optional. When set, the CA additionally accepts
+      # clients over WebSocket (binary frames) at this address. Datagram framing
+      # is identical to the TCP bind, which keeps working as normal.
+      #websocket_bind: 0.0.0.0:7200
+
       # TLS is an optional section (though it should ALWAYS be used in production)
       # It enables SSL/TLS, allowing you to configure a number of TLS options.
       tls:

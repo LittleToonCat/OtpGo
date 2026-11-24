@@ -40,6 +40,8 @@ The compatible build tags is as follows:
 
 `no_postgres` omits the PostgreSQL backend.
 
+`no_websocket` omits WebSocket support from the Client Agent.
+
 ## Projects using OtpGo ##
 [Mewtwo](https://gitlab.com/sunrisemmos/Mewtwo) ([Sunrise Games'](https://sunrise.games/) Toontown servers)
 

@@ -25,6 +25,7 @@ import (
 )
 
 type ChannelTracker struct {
+	mu     sync.Mutex
 	next   Channel_t
 	max    Channel_t
 	unused []Channel_t
@@ -61,6 +62,8 @@ func NewChannelTracker(min Channel_t, max Channel_t, log *log.Entry) *ChannelTra
 }
 
 func (c *ChannelTracker) alloc() Channel_t {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	var ch Channel_t
 	if c.next <= c.max {
 		c.next++
@@ -75,6 +78,8 @@ func (c *ChannelTracker) alloc() Channel_t {
 }
 
 func (c *ChannelTracker) free(ch Channel_t) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.unused = append(c.unused, ch)
 }
 
@@ -152,6 +157,9 @@ func NewClientAgent(config core.Role) bool {
 	}()
 	go ca.queueLoop()
 	go ca.Start(config.Bind, errChan, config.Proxy)
+	if config.Websocket_Bind != "" {
+		ca.startWebsocket(config.Websocket_Bind)
+	}
 	return true
 }
 
