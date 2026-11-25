@@ -74,6 +74,12 @@ roles:
       # is identical to the TCP bind, which keeps working as normal.
       #websocket_bind: 0.0.0.0:7200
 
+      # "websocket_proxy" makes the websocket listener take the client address from
+      # the first of these headers sent by an HTTP reverse proxy (Caddy, nginx,
+      # Cloudflare, etc.) that holds an IP: CF-Connecting-IP, X-Real-IP,
+      # X-Forwarded-For, X-Forwarded-Host.
+      #websocket_proxy: true
+
       # TLS is an optional section (though it should ALWAYS be used in production)
       # It enables SSL/TLS, allowing you to configure a number of TLS options.
       tls:

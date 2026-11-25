@@ -7,7 +7,9 @@ import (
 	"errors"
 	gonet "net"
 	"net/http"
+	"net/netip"
 	"otpgo/core"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -32,6 +34,28 @@ func tcpAddrFromString(addr string) *gonet.TCPAddr {
 		return resolved
 	}
 	return &gonet.TCPAddr{IP: gonet.IPv4zero}
+}
+
+var forwardedHeaders = []string{"CF-Connecting-IP", "X-Real-IP", "X-Forwarded-For", "X-Forwarded-Host"}
+
+func forwardedAddr(r *http.Request) *gonet.TCPAddr {
+	candidates := make([]string, 0, len(forwardedHeaders))
+	for _, header := range forwardedHeaders {
+		candidates = append(candidates, strings.TrimSpace(strings.Split(r.Header.Get(header), ",")[0]))
+	}
+	for _, value := range candidates {
+		if value == "" {
+			continue
+		}
+		if ap, err := netip.ParseAddrPort(value); err == nil {
+			return gonet.TCPAddrFromAddrPort(ap)
+		}
+		host := strings.TrimSuffix(strings.TrimPrefix(value, "["), "]")
+		if addr, err := netip.ParseAddr(host); err == nil {
+			return gonet.TCPAddrFromAddrPort(netip.AddrPortFrom(addr, 0))
+		}
+	}
+	return tcpAddrFromString(r.RemoteAddr)
 }
 
 func (c *ClientAgent) startWebsocket(bind string) {
@@ -65,10 +89,15 @@ func (c *ClientAgent) handleWebsocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	remote := tcpAddrFromString(r.RemoteAddr)
+	if c.config.Websocket_Proxy {
+		remote = forwardedAddr(r)
+	}
+
 	local := tcpAddrFromString(r.Context().Value(http.LocalAddrContextKey).(gonet.Addr).String())
 	conn := &websocketConn{
 		Conn:   websocket.NetConn(context.Background(), ws, websocket.MessageBinary),
-		remote: tcpAddrFromString(r.RemoteAddr),
+		remote: remote,
 		local:  local,
 	}
 	c.HandleConnect(conn)

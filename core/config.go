@@ -32,12 +32,13 @@ type Role struct {
 	Name string
 
 	// CLIENT
-	Bind           string
-	Proxy          bool
-	Websocket_Bind string
-	Version        string
-	DC_Hash        int
-	Tuning         struct {
+	Bind            string
+	Proxy           bool
+	Websocket_Bind  string
+	Websocket_Proxy bool
+	Version         string
+	DC_Hash         int
+	Tuning          struct {
 		Interest_Timeout int
 	}
 	Lua_File string
